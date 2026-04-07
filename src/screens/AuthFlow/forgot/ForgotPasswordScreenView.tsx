@@ -9,16 +9,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Image,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import BackgroundImg from '../../../assets/image/Background.png';
+import AnimatedScreen from '../../../components/AnimatedScreen';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import BackButtonSVG from '../../../assets/icon/BackButton.svg';
 import { colors, fonts } from '../../../helpers/styles';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 interface ForgotPasswordScreenViewProps {
   onBack: () => void;
@@ -33,78 +32,60 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({ onB
 
   return (
     <View style={styles.container}>
-      {/* Background */}
-      <View style={StyleSheet.absoluteFillObject}>
-        <Image
-          source={BackgroundImg}
-          style={{ width: width, height: height }}
-          resizeMode="cover"
-        />
-      </View>
-
       <View style={styles.topRightVector}>
-        <VectorSVG width={width * 0.4} height={width * 0.4} />
+        <VectorSVG width={150} height={160} />
       </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
+        style={styles.flex}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Header Area */}
-          <View style={styles.header}>
-            <TouchableOpacity style={styles.backButton} onPress={onBack}>
-              <BackButtonSVG width={30} height={30} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Logo Area */}
-          <View style={styles.logoContainer}>
-            <LogoSVG width={100} height={100} />
-            <View style={styles.titleContainer}>
-              <Text style={styles.titleBachat}>Bachat</Text>
-              <Text style={styles.titleBazaar}> Bazaar</Text>
+          <AnimatedScreen>
+            <View style={styles.header}>
+              <TouchableOpacity style={styles.backButton} onPress={onBack}>
+                <BackButtonSVG width={30} height={30} />
+              </TouchableOpacity>
             </View>
-            <Text style={styles.subtitleSmall}>Discover Local Deals Near You</Text>
-          </View>
 
-          {/* Main Card */}
-          <View style={styles.card}>
-            <Text style={styles.heading}>Set a new password</Text>
-            <Text style={styles.description}>
-              Create a new password. Ensure it differs from previous ones for security
-            </Text>
+            <View style={styles.logoContainer}>
+              <LogoSVG width={100} height={100} />
+              <View style={styles.titleContainer}>
+                <Text style={styles.titleBachat}>Bachat</Text>
+                <Text style={styles.titleBazaar}> Bazaar</Text>
+              </View>
+              <Text style={styles.subtitleSmall}>Discover Local Deals Near You</Text>
+            </View>
 
-            {/* Inputs */}
-            <View style={styles.inputSection}>
-              {/* Password Field */}
+            <View style={styles.card}>
+              <Text style={styles.heading}>Set a new password</Text>
+              <Text style={styles.description}>
+                Create a new password. Ensure it differs from previous ones for security
+              </Text>
+
               <Text style={styles.fieldLabel}>Password</Text>
               <View style={styles.passwordInputContainer}>
                 <TextInput
-                  style={[styles.inputField, { paddingRight: 40 }]}
+                  style={[styles.inputField, styles.inputWithIcon]}
                   placeholder="••••••••••••"
                   secureTextEntry={secureText}
                   value={password}
                   onChangeText={setPassword}
                   placeholderTextColor={colors.lighterGray}
                 />
-                <TouchableOpacity
-                  style={styles.eyeBtn}
-                  onPress={() => setSecureText(!secureText)}
-                >
+                <TouchableOpacity style={styles.eyeBtn} onPress={() => setSecureText(!secureText)}>
                   <MaterialCommunityIcons
                     name={secureText ? 'eye-off-outline' : 'eye-outline'}
                     size={22}
-                    color="#BBB"
+                    color={colors.lighterGray}
                   />
                 </TouchableOpacity>
               </View>
 
-              {/* Confirm Password Field */}
               <Text style={styles.fieldLabel}>Confirm Password</Text>
               <View style={styles.passwordInputContainer}>
                 <TextInput
-                  style={[styles.inputField, { paddingRight: 40 }]}
+                  style={[styles.inputField, styles.inputWithIcon]}
                   placeholder="••••••••••••"
                   secureTextEntry={secureConfirmText}
                   value={confirmPassword}
@@ -118,22 +99,19 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({ onB
                   <MaterialCommunityIcons
                     name={secureConfirmText ? 'eye-off-outline' : 'eye-outline'}
                     size={22}
-                    color="#BBB"
+                    color={colors.lighterGray}
                   />
                 </TouchableOpacity>
               </View>
 
-
+              <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => onSubmit(password, confirmPassword)}
+              >
+                <Text style={styles.actionButtonText}>Set up Your password</Text>
+              </TouchableOpacity>
             </View>
-
-            {/* Action Button */}
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => onSubmit(password, confirmPassword)}
-            >
-              <Text style={styles.actionButtonText}>Set up Your password</Text>
-            </TouchableOpacity>
-          </View>
+          </AnimatedScreen>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -145,12 +123,21 @@ export default ForgotPasswordScreenView;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.white,
+  },
+  flex: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
     alignItems: 'center',
     paddingBottom: 40,
+  },
+  topRightVector: {
+    position: 'absolute',
+    top: 36,
+    right: 0,
+    opacity: 0.55,
   },
   header: {
     width: '100%',
@@ -162,11 +149,11 @@ const styles = StyleSheet.create({
     width: 45,
     height: 45,
     borderRadius: 22.5,
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    backgroundColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: colors.primaryBorder,
   },
   logoContainer: {
     alignItems: 'center',
@@ -180,52 +167,51 @@ const styles = StyleSheet.create({
   titleBachat: {
     fontSize: 26,
     fontFamily: fonts.BOLD,
-    color: '#FF8C42',
+    color: colors.primary,
   },
   titleBazaar: {
     fontSize: 26,
     fontFamily: fonts.BOLD,
-    color: '#4CAF50',
+    color: colors.primary,
   },
   subtitleSmall: {
     fontSize: 16,
-    color: '#333',
+    color: colors.text,
     marginTop: 2,
     fontFamily: fonts.BOLD,
   },
   card: {
     width: width * 0.9,
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backgroundColor: colors.white,
     borderRadius: 35,
     padding: 25,
     paddingVertical: 32,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 20,
-    elevation: 10,
+    elevation: 8,
     marginTop: 10,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
   },
   heading: {
     fontSize: 24,
     fontFamily: fonts.BOLD,
-    color: '#333',
+    color: colors.text,
     marginBottom: 10,
   },
   description: {
     fontSize: 16,
     fontFamily: fonts.BOLD,
-    color: '#999',
+    color: colors.mutedText,
     marginBottom: 25,
     lineHeight: 22,
-  },
-  inputSection: {
-    width: '100%',
   },
   fieldLabel: {
     fontSize: 16,
     fontFamily: fonts.BOLD,
-    color: '#333',
+    color: colors.text,
     marginBottom: 8,
     marginLeft: 5,
     marginTop: 10,
@@ -233,62 +219,40 @@ const styles = StyleSheet.create({
   passwordInputContainer: {
     width: '100%',
     height: 58,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.white,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: '#E8E8E8',
+    borderColor: colors.primaryBorder,
     paddingLeft: 15,
     paddingRight: 5,
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 5,
   },
-  eyeBtn: {
-    padding: 10,
-  },
   inputField: {
     flex: 1,
     fontSize: 18,
-    color: '#333',
+    color: colors.text,
     fontFamily: fonts.BOLD,
   },
-  dashedBorder: {
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#D0D0D0',
+  inputWithIcon: {
+    paddingRight: 40,
   },
-  placeholderBox: {
-    width: '100%',
-    height: 55,
-    marginTop: 30,
-    borderRadius: 15,
-    opacity: 0.5,
+  eyeBtn: {
+    padding: 10,
   },
   actionButton: {
     width: '100%',
     height: 60,
-    backgroundColor: '#E0A361',
+    backgroundColor: colors.primary,
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#E0A361',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    marginTop: 20,
+    marginTop: 22,
   },
   actionButtonText: {
-    fontSize: 20,
+    fontSize: 18,
     fontFamily: fonts.BOLD,
-    color: '#fff',
-  },
-  topRightVector: {
-    position: 'absolute',
-    top: 40,
-    right: 0,
-    width: 150,
-    height: 200,
-    overflow: 'visible',
+    color: colors.white,
   },
 });

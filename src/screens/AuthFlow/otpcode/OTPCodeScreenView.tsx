@@ -9,9 +9,8 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Image,
 } from 'react-native';
-import BackgroundImg from '../../../assets/image/Background.png';
+import AnimatedScreen from '../../../components/AnimatedScreen';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
@@ -23,45 +22,40 @@ interface OTPCodeScreenViewProps {
   setOtp: (otp: string[]) => void;
   onVerify: () => void;
   onResend: () => void;
+  phoneNumber?: string;
+  isVerifying?: boolean;
+  isResending?: boolean;
 }
 
-const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({ otp, setOtp, onVerify, onResend }) => {
-  const inputRefs = [
-    useRef<TextInput>(null),
-    useRef<TextInput>(null),
-    useRef<TextInput>(null),
-    useRef<TextInput>(null),
-    useRef<TextInput>(null),
-  ];
+const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({
+  otp,
+  setOtp,
+  onVerify,
+  onResend,
+  phoneNumber,
+  isVerifying = false,
+  isResending = false,
+}) => {
+  const inputRefs = useRef<Array<TextInput | null>>([]);
 
   const handleOtpChange = (value: string, index: number) => {
     const newOtp = [...otp];
-    newOtp[index] = value;
+    newOtp[index] = value.replace(/[^0-9]/g, '');
     setOtp(newOtp);
 
-    // Auto-focus logic
-    if (value && index < 4) {
-      inputRefs[index + 1].current?.focus();
+    if (value && index < otp.length - 1) {
+      inputRefs.current[index + 1]?.focus();
     }
   };
 
   const handleKeyPress = (e: any, index: number) => {
     if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs[index - 1].current?.focus();
+      inputRefs.current[index - 1]?.focus();
     }
   };
 
   return (
     <View style={styles.container}>
-      {/* Background */}
-      <View style={StyleSheet.absoluteFillObject}>
-        <Image
-          source={BackgroundImg}
-          style={{ width: width, height: height }}
-          resizeMode="cover"
-        />
-      </View>
-
       <View style={styles.topRightVector}>
         <VectorSVG width={width * 0.4} height={width * 0.4} />
       </View>
@@ -71,57 +65,62 @@ const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({ otp, setOtp, onVe
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Logo Area */}
-          <View style={styles.logoContainer}>
-            <LogoSVG width={100} height={100} />
-            <View style={styles.titleContainer}>
-              <Text style={styles.titleBachat}>Bachat</Text>
-              <Text style={styles.titleBazaar}> Bazaar</Text>
-            </View>
-            <Text style={styles.subtitleSmall}>Discover Local Deals Near You</Text>
-          </View>
-
-          {/* Main Card */}
-          <View style={styles.card}>
-            <Text style={styles.heading}>Check your phone</Text>
-            <Text style={styles.subtitle}>
-              We sent a otp to <Text style={styles.boldText}>876578932</Text>
-            </Text>
-            <Text style={styles.description}>
-              enter 5 digit code that mentioned in the phone
-            </Text>
-
-            {/* OTP Inputs */}
-            <View style={styles.otpContainer}>
-              {otp.map((digit, index) => (
-                <TextInput
-                  key={index}
-                  ref={inputRefs[index]}
-                  style={styles.otpInput}
-                  keyboardType="number-pad"
-                  maxLength={1}
-                  value={digit}
-                  onChangeText={(value) => handleOtpChange(value, index)}
-                  onKeyPress={(e) => handleKeyPress(e, index)}
-                />
-              ))}
+          <AnimatedScreen>
+            <View style={styles.logoContainer}>
+              <LogoSVG width={100} height={100} />
+              <View style={styles.titleContainer}>
+                <Text style={styles.titleBachat}>Bachat</Text>
+                <Text style={styles.titleBazaar}> Bazaar</Text>
+              </View>
+              <Text style={styles.subtitleSmall}>Discover Local Deals Near You</Text>
             </View>
 
-            {/* Action Button */}
-            <TouchableOpacity style={styles.actionButton} onPress={onVerify}>
-              <Text style={styles.actionButtonText}>Verify Code</Text>
-            </TouchableOpacity>
+            <View style={styles.card}>
+              <Text style={styles.heading}>Check your phone</Text>
+              <Text style={styles.subtitle}>
+                We sent a otp to <Text style={styles.boldText}>{phoneNumber || '876578932'}</Text>
+              </Text>
+              <Text style={styles.description}>
+                enter 6 digit code that mentioned in the phone
+              </Text>
 
+              <View style={styles.otpContainer}>
+                {otp.map((digit, index) => (
+                  <TextInput
+                    key={index}
+                    ref={ref => {
+                      inputRefs.current[index] = ref;
+                    }}
+                    style={styles.otpInput}
+                    keyboardType="number-pad"
+                    maxLength={1}
+                    value={digit}
+                    onChangeText={value => handleOtpChange(value, index)}
+                    onKeyPress={e => handleKeyPress(e, index)}
+                  />
+                ))}
+              </View>
 
-
-            {/* Resend Link */}
-            <View style={styles.resendContainer}>
-              <Text style={styles.resendText}>Haven't got the email yet? </Text>
-              <TouchableOpacity onPress={onResend}>
-                <Text style={styles.resendLink}>Resend otp</Text>
+              <TouchableOpacity
+                style={[styles.actionButton, isVerifying && styles.actionButtonDisabled]}
+                onPress={onVerify}
+                disabled={isVerifying}
+              >
+                <Text style={styles.actionButtonText}>
+                  {isVerifying ? 'Verifying...' : 'Verify Code'}
+                </Text>
               </TouchableOpacity>
+
+              <View style={styles.resendContainer}>
+                <Text style={styles.resendText}>Haven't got the email yet? </Text>
+                <TouchableOpacity onPress={onResend} disabled={isResending}>
+                  <Text style={styles.resendLink}>
+                    {isResending ? 'Sending...' : 'Resend otp'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
+          </AnimatedScreen>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -133,7 +132,7 @@ export default OTPCodeScreenView;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 1)',
+    backgroundColor: colors.white,
   },
   scrollContent: {
     flexGrow: 1,
@@ -152,52 +151,54 @@ const styles = StyleSheet.create({
   titleBachat: {
     fontSize: 26,
     fontFamily: fonts.BOLD,
-    color: '#FF8C42',
+    color: colors.primary,
   },
   titleBazaar: {
     fontSize: 26,
     fontFamily: fonts.BOLD,
-    color: '#4CAF50',
+    color: colors.primary,
   },
   subtitleSmall: {
     fontSize: 16,
-    color: '#333',
+    color: colors.text,
     marginTop: 2,
     fontFamily: fonts.BOLD,
   },
   card: {
     width: width * 0.9,
-    backgroundColor: 'rgba(255, 255, 255, 1)',
+    backgroundColor: colors.white,
     borderRadius: 35,
     padding: 25,
     paddingVertical: 32,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 20,
-    elevation: 10,
+    elevation: 8,
     marginTop: 10,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
   },
   heading: {
     fontSize: 24,
     fontFamily: fonts.BOLD,
-    color: '#333',
+    color: colors.text,
     marginBottom: 10,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: colors.mutedText,
     marginBottom: 5,
     fontFamily: fonts.BOLD,
   },
   boldText: {
-    color: '#333',
+    color: colors.text,
     fontFamily: fonts.BOLD,
   },
   description: {
     fontSize: 16,
     fontFamily: fonts.BOLD,
-    color: '#999',
+    color: colors.lighterGray,
     marginBottom: 30,
     lineHeight: 22,
   },
@@ -205,49 +206,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 30,
+    gap: 8,
   },
   otpInput: {
-    width: 55,
+    width: 46,
     height: 60,
-    backgroundColor: '#FFF',
+    backgroundColor: colors.white,
     borderWidth: 1.5,
-    borderColor: '#E0A361',
+    borderColor: colors.primaryBorder,
     borderRadius: 15,
     textAlign: 'center',
     fontSize: 22,
     fontFamily: fonts.BOLD,
-    color: '#333',
+    color: colors.primary,
   },
   actionButton: {
     width: '100%',
     height: 60,
-    backgroundColor: '#E0A361',
+    backgroundColor: colors.primary,
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#E0A361',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.18,
     shadowRadius: 8,
     elevation: 8,
     marginTop: 5,
+  },
+  actionButtonDisabled: {
+    opacity: 0.75,
   },
   actionButtonText: {
     fontSize: 20,
     fontFamily: fonts.BOLD,
     color: '#fff',
-  },
-  dashedBorder: {
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: '#D0D0D0',
-  },
-  placeholderBox: {
-    width: '100%',
-    height: 55,
-    marginTop: 25,
-    borderRadius: 15,
-    opacity: 0.5,
   },
   resendContainer: {
     flexDirection: 'row',
@@ -256,14 +249,13 @@ const styles = StyleSheet.create({
   },
   resendText: {
     fontSize: 14,
-    color: '#999',
+    color: colors.mutedText,
     fontFamily: fonts.BOLD,
   },
   resendLink: {
     fontSize: 14,
-    color: '#E0A361',
+    color: colors.primary,
     fontFamily: fonts.BOLD,
-    textDecorationLine: 'underline',
   },
   topRightVector: {
     position: 'absolute',
@@ -272,5 +264,6 @@ const styles = StyleSheet.create({
     width: 150,
     height: 200,
     overflow: 'visible',
+    opacity: 0.55,
   },
 });

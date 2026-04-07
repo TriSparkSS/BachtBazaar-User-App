@@ -1,12 +1,80 @@
-import React, { PropsWithChildren, createContext, useMemo } from 'react';
+import React, {
+  PropsWithChildren,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
+import { authStorage } from '../services/authStorage';
+import { PendingAuthState, UserProfile } from '../types/auth';
 
-type AppContextValue = Record<string, unknown>;
+type AppContextValue = {
+  authToken: string | null;
+  currentUser: UserProfile | null;
+  isBootstrapping: boolean;
+  pendingAuth: PendingAuthState | null;
+  setPendingAuth: (value: PendingAuthState | null) => void;
+  setSession: (token: string, user: UserProfile) => Promise<void>;
+  clearSession: () => Promise<void>;
+};
 
-export const AppContext = createContext<AppContextValue>({});
+const defaultValue: AppContextValue = {
+  authToken: null,
+  currentUser: null,
+  isBootstrapping: true,
+  pendingAuth: null,
+  setPendingAuth: () => undefined,
+  setSession: async () => undefined,
+  clearSession: async () => undefined,
+};
+
+export const AppContext = createContext<AppContextValue>(defaultValue);
 
 export const AppProvider = ({ children }: PropsWithChildren) => {
-  const value = useMemo<AppContextValue>(() => ({}), []);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [pendingAuth, setPendingAuth] = useState<PendingAuthState | null>(null);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
+
+  useEffect(() => {
+    const bootstrap = async () => {
+      try {
+        const session = await authStorage.getSession();
+        setAuthToken(session.token ?? null);
+        setCurrentUser(session.user);
+      } finally {
+        setIsBootstrapping(false);
+      }
+    };
+
+    bootstrap();
+  }, []);
+
+  const value = useMemo<AppContextValue>(
+    () => ({
+      authToken,
+      currentUser,
+      isBootstrapping,
+      pendingAuth,
+      setPendingAuth,
+      setSession: async (token, user) => {
+        await authStorage.setSession(token, user);
+        setAuthToken(token);
+        setCurrentUser(user);
+        setPendingAuth(null);
+      },
+      clearSession: async () => {
+        await authStorage.clearSession();
+        setAuthToken(null);
+        setCurrentUser(null);
+        setPendingAuth(null);
+      },
+    }),
+    [authToken, currentUser, isBootstrapping, pendingAuth],
+  );
+
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 
-
+export const useAppContext = () => useContext(AppContext);

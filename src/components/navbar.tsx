@@ -3,31 +3,41 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-nativ
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors, fonts } from '../helpers/styles';
 
-const Navbar = () => {
+interface NavbarProps {
+  onMenuPress?: () => void;
+  title?: string;
+  subtitle?: string;
+}
+
+const Navbar: React.FC<NavbarProps> = ({
+  onMenuPress,
+  title = 'Bacht Bazaar',
+  subtitle = 'Work - Mohan Sharn',
+}) => {
   return (
     <>
-      {/* Top Bar / Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity style={styles.iconButton} onPress={onMenuPress}>
             <MaterialCommunityIcons name="menu" size={28} color={colors.darkGray} />
           </TouchableOpacity>
           <View style={styles.titleSection}>
-            <Text style={styles.locationTitle}>Bacht Bazaar</Text>
+            <Text style={styles.locationTitle}>{title}</Text>
             <View style={styles.locationSubRow}>
-              <MaterialCommunityIcons name="map-marker" size={14} color={colors.orange} />
-              <Text style={styles.locationSubtext}>Work - Mohan Sharn</Text>
+              <MaterialCommunityIcons name="map-marker" size={14} color={colors.primary} />
+              <Text style={styles.locationSubtext} numberOfLines={1}>
+                {subtitle}
+              </Text>
               <MaterialCommunityIcons name="chevron-down" size={16} color={colors.darkGray} />
             </View>
           </View>
         </View>
 
         <TouchableOpacity style={styles.iconButton}>
-          <MaterialCommunityIcons name="bell-outline" size={28} color="#FF5A5F" />
+          <MaterialCommunityIcons name="bell-outline" size={28} color={colors.primary} />
         </TouchableOpacity>
       </View>
 
-      {/* Search Bar Row */}
       <View style={styles.searchRow}>
         <View style={styles.searchContainer}>
           <MaterialCommunityIcons name="magnify" size={24} color={colors.lighterGray} />
@@ -38,7 +48,7 @@ const Navbar = () => {
           />
         </View>
         <TouchableOpacity style={styles.qrButton}>
-          <MaterialCommunityIcons name="qrcode-scan" size={24} color={colors.darkGray} />
+          <MaterialCommunityIcons name="qrcode-scan" size={22} color={colors.white} />
         </TouchableOpacity>
       </View>
     </>
@@ -60,14 +70,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    flex: 1,
   },
   titleSection: {
     justifyContent: 'center',
+    flexShrink: 1,
   },
   locationTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: colors.darkGray,
+    fontFamily: fonts.BOLD,
+    color: colors.text,
     lineHeight: 22,
   },
   locationSubRow: {
@@ -78,6 +90,9 @@ const styles = StyleSheet.create({
   locationSubtext: {
     fontSize: 13,
     color: colors.lightGray,
+    fontFamily: fonts.BOLD,
+    flexShrink: 1,
+    maxWidth: '88%',
   },
   iconButton: {
     padding: 4,
@@ -96,13 +111,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     paddingHorizontal: 16,
     paddingVertical: 12,
-    borderRadius: 30, // Fully rounded
+    borderRadius: 30,
     gap: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 5,
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
   },
   searchInput: {
     flex: 1,
@@ -116,5 +128,7 @@ const styles = StyleSheet.create({
     height: 45,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 14,
+    backgroundColor: colors.primary,
   },
 });

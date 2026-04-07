@@ -9,10 +9,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Image,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import BackgroundImg from '../../../assets/image/Background.png';
+import AnimatedScreen from '../../../components/AnimatedScreen';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
@@ -20,36 +19,46 @@ import { colors, fonts } from '../../../helpers/styles';
 const { width, height } = Dimensions.get('window');
 
 interface LoginScreenViewProps {
-  onLogin: (phone: string, password: string) => void;
-  onSignin: (phone: string, password: string) => void;
+  onLoginWithPassword: (phone: string, password: string) => void | Promise<void>;
+  onLoginWithOtp: (phone: string) => void | Promise<void>;
+  onSignupWithOtp: (phone: string) => void | Promise<void>;
   onForgotPassword: () => void;
+  onGooglePress: () => void;
+  onApplePress: () => void;
+  isSubmitting?: boolean;
 }
 
-const LoginScreenView: React.FC<LoginScreenViewProps> = ({ onLogin, onSignin, onForgotPassword }) => {
-  const [activeTab, setActiveTab] = useState<'login' | 'signin'>('signin');
+const LoginScreenView: React.FC<LoginScreenViewProps> = ({
+  onLoginWithPassword,
+  onLoginWithOtp,
+  onSignupWithOtp,
+  onForgotPassword,
+  onGooglePress,
+  onApplePress,
+  isSubmitting = false,
+}) => {
+  const [activeTab, setActiveTab] = useState<'login' | 'signin'>('login');
+  const [loginMethod, setLoginMethod] = useState<'otp' | 'password'>('otp');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
 
   const handleAction = () => {
-    if (activeTab === 'login') {
-      onLogin(phone, password);
-    } else {
-      onSignin(phone, password);
+    if (activeTab === 'signin') {
+      onSignupWithOtp(phone);
+      return;
     }
+
+    if (loginMethod === 'password') {
+      onLoginWithPassword(phone, password);
+      return;
+    }
+
+    onLoginWithOtp(phone);
   };
 
   return (
     <View style={styles.container}>
-      {/* Background */}
-      <View style={StyleSheet.absoluteFillObject}>
-        <Image
-          source={BackgroundImg}
-          style={{ width: width, height: height }}
-          resizeMode="cover"
-        />
-      </View>
-
       <View style={styles.topRightVector}>
         <VectorSVG width={width * 0.4} height={width * 0.4} />
       </View>
@@ -59,102 +68,130 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({ onLogin, onSignin, on
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {/* Logo Area */}
-          <View style={styles.logoContainer}>
-            <LogoSVG width={100} height={100} />
-            <View style={styles.titleContainer}>
-              <Text style={styles.titleBachat}>Bachat</Text>
-              <Text style={styles.titleBazaar}> Bazaar</Text>
-            </View>
-            <Text style={styles.subtitle}>Discover Local Deals Near You</Text>
-          </View>
-
-          {/* Main Card */}
-          <View style={styles.card}>
-            {/* Tabs */}
-            <View style={styles.tabContainer}>
-              <TouchableOpacity
-                style={[styles.tab, activeTab === 'login' && styles.activeTab]}
-                onPress={() => setActiveTab('login')}
-              >
-                <Text style={[styles.tabText, activeTab === 'login' && styles.activeTabText]}>
-                  Log in
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.tab, activeTab === 'signin' && styles.activeTab]}
-                onPress={() => setActiveTab('signin')}
-              >
-                <Text style={[styles.tabText, activeTab === 'signin' && styles.activeTabText]}>
-                  {activeTab === 'login' ? 'Sign in' : 'Sign up'}
-                </Text>
-              </TouchableOpacity>
+          <AnimatedScreen>
+            <View style={styles.logoContainer}>
+              <LogoSVG width={100} height={100} />
+              <View style={styles.titleContainer}>
+                <Text style={styles.titleBachat}>Bachat</Text>
+                <Text style={styles.titleBazaar}> Bazaar</Text>
+              </View>
+              <Text style={styles.subtitle}>Discover Local Deals Near You</Text>
             </View>
 
-            {/* Inputs */}
-            <View style={styles.inputSection}>
-              {/* Phone Input */}
-              <View style={styles.row}>
-                <View style={styles.countryCode}>
-                  <Text style={styles.countryCodeText}>IN +91</Text>
-                </View>
-                <View style={styles.phoneInputContainer}>
-                  <TextInput
-                    style={styles.inputField}
-                    placeholder="786543567"
-                    keyboardType="phone-pad"
-                    value={phone}
-                    onChangeText={setPhone}
-                    placeholderTextColor={colors.lighterGray}
-                  />
-                </View>
+            <View style={styles.card}>
+              <View style={styles.tabContainer}>
+                <TouchableOpacity
+                  style={[styles.tab, activeTab === 'login' && styles.activeTab]}
+                  onPress={() => {
+                    setActiveTab('login');
+                    setLoginMethod('otp');
+                  }}
+                >
+                  <Text style={[styles.tabText, activeTab === 'login' && styles.activeTabText]}>
+                    Log in
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.tab, activeTab === 'signin' && styles.activeTab]}
+                  onPress={() => {
+                    setActiveTab('signin');
+                    setLoginMethod('otp');
+                  }}
+                >
+                  <Text style={[styles.tabText, activeTab === 'signin' && styles.activeTabText]}>
+                    Sign up
+                  </Text>
+                </TouchableOpacity>
               </View>
 
-              {/* Password Input - Mode Switch: Only in Login Mode */}
-              {activeTab === 'login' && (
-                <>
-                  <Text style={styles.fieldLabel}>Password</Text>
-                  <View style={styles.passwordInputContainer}>
+              <View style={styles.inputSection}>
+                <View style={styles.row}>
+                  <View style={styles.countryCode}>
+                    <Text style={styles.countryCodeText}>IN +91</Text>
+                  </View>
+                  <View style={styles.phoneInputContainer}>
                     <TextInput
-                      style={[styles.inputField, { paddingRight: 40 }]}
-                      placeholder="••••••••••••"
-                      secureTextEntry={secureText}
-                      value={password}
-                      onChangeText={setPassword}
+                      style={styles.inputField}
+                      placeholder="786543567"
+                      keyboardType="phone-pad"
+                      value={phone}
+                      onChangeText={setPhone}
                       placeholderTextColor={colors.lighterGray}
+                      maxLength={10}
                     />
-                    <TouchableOpacity
-                      style={styles.eyeBtn}
-                      onPress={() => setSecureText(!secureText)}
-                    >
-                      <MaterialCommunityIcons
-                        name={secureText ? 'eye-off-outline' : 'eye-outline'}
-                        size={22}
-                        color="#BBB"
+                  </View>
+                </View>
+
+                {activeTab === 'login' && loginMethod === 'password' && (
+                  <>
+                    <Text style={styles.fieldLabel}>Password</Text>
+                    <View style={styles.passwordInputContainer}>
+                      <TextInput
+                        style={[styles.inputField, { paddingRight: 40 }]}
+                        placeholder="••••••••••••"
+                        secureTextEntry={secureText}
+                        value={password}
+                        onChangeText={setPassword}
+                        placeholderTextColor={colors.lighterGray}
                       />
-                    </TouchableOpacity>
-                  </View>
+                      <TouchableOpacity
+                        style={styles.eyeBtn}
+                        onPress={() => setSecureText(!secureText)}
+                      >
+                        <MaterialCommunityIcons
+                          name={secureText ? 'eye-off-outline' : 'eye-outline'}
+                          size={22}
+                          color={colors.lighterGray}
+                        />
+                      </TouchableOpacity>
+                    </View>
 
-                  {/* Footer Links - Login Mode Only */}
-                  <View style={styles.footerLinks}>
-                    <Text style={styles.wrongPassword}></Text>
-                    <TouchableOpacity onPress={onForgotPassword}>
-                      <Text style={styles.forgotPassword}>Forgot password?</Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
+                    <View style={styles.footerLinks}>
+                      <Text style={styles.wrongPassword}></Text>
+                      <TouchableOpacity onPress={onForgotPassword}>
+                        <Text style={styles.forgotPassword}>Forgot password?</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.actionButton, isSubmitting && styles.actionButtonDisabled]}
+                onPress={handleAction}
+                disabled={isSubmitting}
+              >
+                <Text style={styles.actionButtonText}>
+                  {isSubmitting
+                    ? activeTab === 'login' && loginMethod === 'password'
+                      ? 'Logging in...'
+                      : 'Sending OTP...'
+                    : activeTab === 'login' && loginMethod === 'password'
+                      ? 'Log in'
+                      : 'Send OTP'}
+                </Text>
+              </TouchableOpacity>
+
+              {activeTab === 'login' && loginMethod === 'otp' && (
+                <TouchableOpacity
+                  style={styles.secondaryButton}
+                  onPress={() => setLoginMethod('password')}
+                  disabled={isSubmitting}
+                >
+                  <Text style={styles.secondaryButtonText}>Log in with password</Text>
+                </TouchableOpacity>
               )}
-            </View>
 
-            {/* Action Button */}
-            <TouchableOpacity style={styles.actionButton} onPress={handleAction}>
-              <Text style={styles.actionButtonText}>
-                {activeTab === 'login' ? 'Log in with password' : 'Send OTP'}
-              </Text>
-            </TouchableOpacity>
+              {activeTab === 'login' && loginMethod === 'password' && (
+                <TouchableOpacity
+                  style={styles.secondaryGhostButton}
+                  onPress={() => setLoginMethod('otp')}
+                  disabled={isSubmitting}
+                >
+                  <Text style={styles.secondaryGhostButtonText}>Use OTP login</Text>
+                </TouchableOpacity>
+              )}
 
-            {/* Separator & Social Logins - Sign Up Mode Only */}
-            {activeTab === 'signin' && (
               <>
                 <View style={styles.separatorContainer}>
                   <View style={styles.separatorLine} />
@@ -163,18 +200,19 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({ onLogin, onSignin, on
                 </View>
 
                 <View style={styles.socialContainer}>
-                  <TouchableOpacity style={styles.socialButton}>
+                  <TouchableOpacity style={styles.socialButton} onPress={onApplePress}>
                     <MaterialCommunityIcons name="apple" size={28} color="#000" />
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.socialButton, styles.dashedBorder]}>
+                  <TouchableOpacity
+                    style={[styles.socialButton, styles.dashedBorder]}
+                    onPress={onGooglePress}
+                  >
                     <MaterialCommunityIcons name="google" size={24} color="#DB4437" />
                   </TouchableOpacity>
                 </View>
               </>
-            )}
-
-
-          </View>
+            </View>
+          </AnimatedScreen>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -186,7 +224,7 @@ export default LoginScreenView;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backgroundColor: colors.white,
   },
   scrollContent: {
     flexGrow: 1,
@@ -195,7 +233,7 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginTop: height * 0.08, // Increased top margin to match image
+    marginTop: height * 0.08,
     marginBottom: 20,
   },
   titleContainer: {
@@ -205,30 +243,32 @@ const styles = StyleSheet.create({
   titleBachat: {
     fontSize: 26,
     fontFamily: fonts.BOLD,
-    color: '#FF8C42', // Slightly more vibrant orange to match image logo
+    color: colors.primary,
   },
   titleBazaar: {
     fontSize: 26,
     fontFamily: fonts.BOLD,
-    color: '#4CAF50', // Better green to match image
+    color: colors.primary,
   },
   subtitle: {
     fontSize: 16,
-    color: '#333',
+    color: colors.text,
     fontFamily: fonts.BOLD,
   },
   card: {
     width: width * 0.9,
-    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    backgroundColor: colors.white,
     borderRadius: 35,
     padding: 25,
     paddingVertical: 32,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowRadius: 20,
-    elevation: 10,
+    elevation: 8,
     marginTop: 10,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
   },
   tabContainer: {
     flexDirection: 'row',
@@ -237,10 +277,10 @@ const styles = StyleSheet.create({
     marginBottom: 25,
     padding: 5,
     borderWidth: 1,
-    borderColor: '#F0F0F0',
+    borderColor: colors.primaryBorder,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.04,
     shadowRadius: 3,
     elevation: 2,
   },
@@ -251,165 +291,177 @@ const styles = StyleSheet.create({
     borderRadius: 15,
   },
   activeTab: {
-    backgroundColor: '#E0A361',
-    shadowColor: '#E0A361',
+    backgroundColor: colors.primary,
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 6,
-    elevation: 5,
+    elevation: 4,
   },
   tabText: {
-    fontSize: 18,
+    fontSize: 16,
+    color: colors.text,
     fontFamily: fonts.BOLD,
-    color: '#333',
   },
   activeTabText: {
-    color: '#fff',
+    color: colors.white,
   },
   inputSection: {
-    width: '100%',
+    marginBottom: 20,
   },
   row: {
     flexDirection: 'row',
-    marginBottom: 15,
+    alignItems: 'center',
+    gap: 10,
   },
   countryCode: {
-    width: 85,
-    height: 58,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: '#E8E8E8',
+    height: 50,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.white,
   },
   countryCodeText: {
-    fontSize: 18,
-    color: '#333',
+    color: colors.text,
     fontFamily: fonts.BOLD,
+    fontSize: 16,
   },
   phoneInputContainer: {
     flex: 1,
-    height: 58,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 18,
+    height: 50,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E8E8E8',
-    paddingHorizontal: 15,
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.white,
     justifyContent: 'center',
+    paddingHorizontal: 15,
+  },
+  fieldLabel: {
+    fontSize: 14,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+    marginTop: 18,
+    marginBottom: 8,
   },
   passwordInputContainer: {
     width: '100%',
-    height: 58,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 18,
+    height: 50,
+    backgroundColor: colors.white,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E8E8E8',
+    borderColor: colors.primaryBorder,
     paddingLeft: 15,
     paddingRight: 5,
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 5,
   },
-  fieldLabel: {
-    fontSize: 16,
-    fontFamily: fonts.BOLD,
-    color: '#333',
-    marginBottom: 8,
-    marginLeft: 5,
-    marginTop: 10,
-  },
   eyeBtn: {
     padding: 10,
   },
   inputField: {
     flex: 1,
-    fontSize: 18,
-    color: '#333',
+    fontSize: 16,
+    color: colors.text,
     fontFamily: fonts.BOLD,
   },
   footerLinks: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 5,
-    marginBottom: 20,
-    paddingHorizontal: 5,
+    marginTop: 8,
   },
   wrongPassword: {
-    color: '#BBB',
-    fontSize: 14,
-    fontFamily: fonts.BOLD,
+    color: colors.mutedText,
   },
   forgotPassword: {
-    color: '#E0A361',
-    fontSize: 15,
+    color: colors.primary,
+    fontSize: 13,
     fontFamily: fonts.BOLD,
   },
   actionButton: {
     width: '100%',
-    height: 60,
-    backgroundColor: '#E0A361',
-    borderRadius: 18,
+    height: 55,
+    backgroundColor: colors.primary,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#E0A361',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.18,
     shadowRadius: 8,
-    elevation: 8,
-    marginTop: 5,
+    elevation: 6,
+  },
+  actionButtonDisabled: {
+    opacity: 0.75,
+  },
+  secondaryButton: {
+    width: '100%',
+    height: 55,
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 14,
+  },
+  secondaryButtonText: {
+    fontSize: 18,
+    fontFamily: fonts.BOLD,
+    color: colors.white,
+  },
+  secondaryGhostButton: {
+    width: '100%',
+    height: 50,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 14,
+    backgroundColor: colors.primarySoft,
+  },
+  secondaryGhostButtonText: {
+    fontSize: 16,
+    fontFamily: fonts.BOLD,
+    color: colors.primary,
   },
   actionButtonText: {
-    fontSize: 20,
+    fontSize: 16,
+    color: colors.white,
     fontFamily: fonts.BOLD,
-    color: '#fff',
   },
   separatorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 25,
+    marginVertical: 18,
   },
   separatorLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#D0D0D0',
+    backgroundColor: colors.primaryBorder,
   },
   separatorText: {
-    marginHorizontal: 15,
-    color: '#999',
-    fontSize: 16,
+    marginHorizontal: 10,
+    color: colors.mutedText,
     fontFamily: fonts.BOLD,
   },
   socialContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 20,
+    gap: 14,
   },
   socialButton: {
-    width: 65,
-    height: 50,
-    backgroundColor: '#fff',
-    borderRadius: 15,
+    width: 58,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
   },
   dashedBorder: {
-    borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: '#D0D0D0',
-  },
-  placeholderBox: {
-    width: '100%',
-    height: 55,
-    marginTop: 30,
-    borderRadius: 15,
-    opacity: 0.5,
   },
   topRightVector: {
     position: 'absolute',
@@ -418,5 +470,6 @@ const styles = StyleSheet.create({
     width: 150,
     height: 200,
     overflow: 'visible',
+    opacity: 0.55,
   },
 });

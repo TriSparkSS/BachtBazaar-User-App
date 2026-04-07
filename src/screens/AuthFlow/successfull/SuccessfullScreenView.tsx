@@ -1,15 +1,14 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    Dimensions,
-    Image,
-    ScrollView,
+  Animated,
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Dimensions,
+  ScrollView,
 } from 'react-native';
-import LinearGradient from 'react-native-linear-gradient';
-import BackgroundImg from '../../../assets/image/Background.png';
+import AnimatedScreen from '../../../components/AnimatedScreen';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import TickSVG from '../../../assets/image/Tick.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
@@ -18,207 +17,272 @@ import { colors, fonts } from '../../../helpers/styles';
 const { width, height } = Dimensions.get('window');
 
 interface SuccessfullScreenViewProps {
-    onGoToDashboard: () => void;
-    onSetUpProfile: () => void;
+  onGoToDashboard: () => void;
+  onSetUpProfile: () => void;
+  isNewUser?: boolean;
 }
 
 const SuccessfullScreenView: React.FC<SuccessfullScreenViewProps> = ({
-    onGoToDashboard,
-    onSetUpProfile,
+  onGoToDashboard,
+  onSetUpProfile,
+  isNewUser = true,
 }) => {
-    return (
-        <View style={styles.container}>
-            {/* Background */}
-            <View style={StyleSheet.absoluteFillObject}>
-                <Image
-                    source={BackgroundImg}
-                    style={{ width: width, height: height }}
-                    resizeMode="cover"
-                />
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, {
+          toValue: -10,
+          duration: 1100,
+          useNativeDriver: true,
+        }),
+        Animated.timing(floatAnim, {
+          toValue: 0,
+          duration: 1100,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.06,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 900,
+          useNativeDriver: true,
+        }),
+      ]),
+    ).start();
+  }, [floatAnim, pulseAnim]);
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.topGlow} />
+      <View style={styles.bottomGlow} />
+      <View style={styles.topRightVector}>
+        <VectorSVG width={width * 0.4} height={width * 0.4} />
+      </View>
+      <View style={styles.bottomLeftVector}>
+        <VectorSVG width={118} height={118} />
+      </View>
+
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <AnimatedScreen>
+          <View style={styles.logoContainer}>
+            <LogoSVG width={100} height={100} />
+            <View style={styles.titleContainer}>
+              <Text style={styles.titleBachat}>Bachat</Text>
+              <Text style={styles.titleBazaar}> Bazaar</Text>
             </View>
+            <Text style={styles.subtitleSmall}>Discover Local Deals Near You</Text>
+          </View>
 
-            <View style={styles.topRightVector}>
-                <VectorSVG width={width * 0.4} height={width * 0.4} />
-            </View>
+          <View style={styles.card}>
+            <Animated.View
+              style={[
+                styles.checkmarkOuter,
+                {
+                  transform: [{ translateY: floatAnim }, { scale: pulseAnim }],
+                },
+              ]}
+            >
+              <View style={styles.checkmarkInner}>
+                <TickSVG width={50} height={50} />
+              </View>
+            </Animated.View>
 
-            <ScrollView contentContainerStyle={styles.scrollContent}>
-                {/* Logo Area */}
-                <View style={styles.logoContainer}>
-                    <LogoSVG width={100} height={100} />
-                    <View style={styles.titleContainer}>
-                        <Text style={styles.titleBachat}>Bachat</Text>
-                        <Text style={styles.titleBazaar}> Bazaar</Text>
-                    </View>
-                    <Text style={styles.subtitleSmall}>Discover Local Deals Near You</Text>
-                </View>
+            <Text style={styles.heading}>Successful</Text>
+            <Text style={styles.description}>
+              {isNewUser
+                ? 'Create a new password. Ensure it differs from previous ones for security'
+                : 'Your account is verified successfully.'}
+            </Text>
 
-                {/* Main Card */}
-                <View style={styles.card}>
-                    <View style={styles.checkmarkOuter}>
-                        <View style={styles.checkmarkInner}>
-                            <TickSVG width={50} height={50} />
-                        </View>
-                    </View>
+            <TouchableOpacity onPress={onGoToDashboard}>
+              <View style={styles.actionButton}>
+                <Text style={styles.actionButtonText}>Go to Dashboard</Text>
+                <Text style={styles.arrow}>→</Text>
+              </View>
+            </TouchableOpacity>
 
-                    <Text style={styles.heading}>Successful</Text>
-                    <Text style={styles.description}>
-                        Create a new password. Ensure it differs from previous ones for security
-                    </Text>
+            <Text style={styles.orText}>or</Text>
 
-                    {/* Action Buttons */}
-                    <TouchableOpacity onPress={onGoToDashboard}>
-                        <LinearGradient
-                            colors={['#E0A361', '#CF9150']}
-                            style={styles.actionButton}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                        >
-                            <Text style={styles.actionButtonText}>Go to Dashboard</Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
-
-                    <Text style={styles.orText}>or</Text>
-
-                    <TouchableOpacity onPress={onSetUpProfile}>
-                        <LinearGradient
-                            colors={['#E0A361', '#CF9150']}
-                            style={styles.actionButton}
-                            start={{ x: 0, y: 0 }}
-                            end={{ x: 1, y: 0 }}
-                        >
-                            <Text style={styles.actionButtonText}>Set up Your Profile</Text>
-                        </LinearGradient>
-                    </TouchableOpacity>
-                </View>
-            </ScrollView>
-        </View>
-    );
+            <TouchableOpacity onPress={onSetUpProfile}>
+              <View style={styles.actionButton}>
+                <Text style={styles.actionButtonText}>
+                  {isNewUser ? 'Set up Your Profile' : 'Update Your Profile'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </AnimatedScreen>
+      </ScrollView>
+    </View>
+  );
 };
 
 export default SuccessfullScreenView;
 
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    },
-    scrollContent: {
-        flexGrow: 1,
-        alignItems: 'center',
-        paddingBottom: 40,
-    },
-    logoContainer: {
-        alignItems: 'center',
-        marginTop: height * 0.08,
-        marginBottom: 20,
-    },
-    titleContainer: {
-        flexDirection: 'row',
-        marginTop: 5,
-    },
-    titleBachat: {
-        fontSize: 26,
-        fontFamily: fonts.BOLD,
-        color: '#FF8C42',
-    },
-    titleBazaar: {
-        fontSize: 26,
-        fontFamily: fonts.BOLD,
-        color: '#4CAF50',
-    },
-    subtitleSmall: {
-        fontSize: 16,
-        color: '#333',
-        marginTop: 2,
-        fontFamily: fonts.BOLD,
-    },
-    card: {
-        width: width * 0.9,
-        backgroundColor: 'rgba(255, 255, 255, 0.85)', // Glassmorphism-like translucency
-        borderRadius: 35,
-        padding: 25,
-        paddingVertical: 40,
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-        elevation: 5,
-        marginTop: 10,
-    },
-    checkmarkOuter: {
-        width: 120,
-        height: 120,
-        borderRadius: 60,
-        borderWidth: 2,
-        borderColor: '#E0A361',
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginBottom: 20,
-        backgroundColor: '#fff',
-        // Shadow for the circle
-        shadowColor: '#eaeaeaff',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.2,
-        shadowRadius: 10,
-        elevation: 4,
-    },
-    checkmarkInner: {
-        width: 100,
-        height: 100,
-        borderRadius: 50,
-        backgroundColor: '#ffffffff', // Light peach/gold background
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    heading: {
-        fontSize: 28,
-        fontFamily: fonts.BOLD,
-        color: '#1A1A1A',
-        marginBottom: 15,
-    },
-    description: {
-        fontSize: 16,
-        fontFamily: fonts.BOLD,
-        color: '#808080',
-        textAlign: 'center',
-        marginBottom: 35,
-        lineHeight: 22,
-        paddingHorizontal: 10,
-    },
-    actionButton: {
-        width: width * 0.75,
-        height: 60,
-        borderRadius: 18,
-        flexDirection: 'row',
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: '#E0A361',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-        elevation: 8,
-    },
-    actionButtonText: {
-        fontSize: 18,
-        fontFamily: fonts.BOLD,
-        color: '#fff',
-    },
-    buttonIcon: {
-        marginLeft: 10,
-    },
-    orText: {
-        fontSize: 20,
-        fontFamily: fonts.BOLD,
-        color: '#999',
-        marginVertical: 15,
-    },
-    topRightVector: {
-        position: 'absolute',
-        top: 40,
-        right: 0,
-        width: 150,
-        height: 200,
-        overflow: 'visible',
-    },
+  container: {
+    flex: 1,
+    backgroundColor: colors.white,
+  },
+  topGlow: {
+    position: 'absolute',
+    top: 120,
+    left: 22,
+    width: 170,
+    height: 170,
+    borderRadius: 85,
+    backgroundColor: 'rgba(232, 204, 255, 0.22)',
+  },
+  bottomGlow: {
+    position: 'absolute',
+    bottom: 80,
+    right: 18,
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: 'rgba(255, 206, 177, 0.22)',
+  },
+  scrollContent: {
+    flexGrow: 1,
+    alignItems: 'center',
+    paddingBottom: 40,
+  },
+  logoContainer: {
+    alignItems: 'center',
+    marginTop: height * 0.08,
+    marginBottom: 20,
+  },
+  titleContainer: {
+    flexDirection: 'row',
+    marginTop: 5,
+  },
+  titleBachat: {
+    fontSize: 26,
+    fontFamily: fonts.BOLD,
+    color: colors.primary,
+  },
+  titleBazaar: {
+    fontSize: 26,
+    fontFamily: fonts.BOLD,
+    color: colors.primary,
+  },
+  subtitleSmall: {
+    fontSize: 16,
+    color: colors.text,
+    marginTop: 2,
+    fontFamily: fonts.BOLD,
+  },
+  card: {
+    width: width * 0.9,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 35,
+    padding: 25,
+    paddingVertical: 40,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    elevation: 5,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+  },
+  checkmarkOuter: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    backgroundColor: '#fff',
+    shadowColor: '#eaeaeaff',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  checkmarkInner: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.primarySoft,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  heading: {
+    fontSize: 28,
+    fontFamily: fonts.BOLD,
+    color: colors.text,
+    marginBottom: 15,
+  },
+  description: {
+    fontSize: 16,
+    fontFamily: fonts.BOLD,
+    color: colors.mutedText,
+    textAlign: 'center',
+    marginBottom: 35,
+    lineHeight: 22,
+    paddingHorizontal: 10,
+  },
+  actionButton: {
+    width: width * 0.75,
+    height: 60,
+    borderRadius: 18,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 8,
+    backgroundColor: colors.primary,
+  },
+  actionButtonText: {
+    fontSize: 18,
+    fontFamily: fonts.BOLD,
+    color: '#fff',
+  },
+  arrow: {
+    marginLeft: 8,
+    fontSize: 20,
+    color: colors.white,
+    fontFamily: fonts.BOLD,
+  },
+  orText: {
+    fontSize: 20,
+    fontFamily: fonts.BOLD,
+    color: colors.lighterGray,
+    marginVertical: 15,
+  },
+  topRightVector: {
+    position: 'absolute',
+    top: 40,
+    right: 0,
+    width: 150,
+    height: 200,
+    overflow: 'visible',
+    opacity: 0.55,
+  },
+  bottomLeftVector: {
+    position: 'absolute',
+    bottom: 44,
+    left: -6,
+    opacity: 0.35,
+    transform: [{ rotate: '180deg' }],
+  },
 });
