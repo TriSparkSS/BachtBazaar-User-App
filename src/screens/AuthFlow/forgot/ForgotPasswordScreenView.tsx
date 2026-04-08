@@ -21,14 +21,25 @@ const { width } = Dimensions.get('window');
 
 interface ForgotPasswordScreenViewProps {
   onBack: () => void;
-  onSubmit: (password: string, confirm: string) => void;
+  onSubmit: (oldPassword: string, password: string, confirm: string) => void;
+  mode?: 'signup-password' | 'forgot-password' | 'change-password';
+  phoneNumber?: string;
 }
 
-const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({ onBack, onSubmit }) => {
+const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
+  onBack,
+  onSubmit,
+  mode = 'signup-password',
+  phoneNumber,
+}) => {
+  const [oldPassword, setOldPassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [secureOldText, setSecureOldText] = useState(true);
   const [secureText, setSecureText] = useState(true);
   const [secureConfirmText, setSecureConfirmText] = useState(true);
+  const isChangePassword = mode === 'change-password';
+  const isForgotPassword = mode === 'forgot-password';
 
   return (
     <View style={styles.container}>
@@ -58,10 +69,42 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({ onB
             </View>
 
             <View style={styles.card}>
-              <Text style={styles.heading}>Set a new password</Text>
-              <Text style={styles.description}>
-                Create a new password. Ensure it differs from previous ones for security
+              <Text style={styles.heading}>
+                {isChangePassword ? 'Change password' : 'Set a new password'}
               </Text>
+              <Text style={styles.description}>
+                {isChangePassword
+                  ? 'Enter your current password and set a new secure password.'
+                  : isForgotPassword
+                    ? `Verified ${phoneNumber || 'your number'}. Set your new password below.`
+                    : 'Create a new password. Ensure it differs from previous ones for security'}
+              </Text>
+
+              {isChangePassword && (
+                <>
+                  <Text style={styles.fieldLabel}>Old Password</Text>
+                  <View style={styles.passwordInputContainer}>
+                    <TextInput
+                      style={[styles.inputField, styles.inputWithIcon]}
+                      placeholder="••••••••••••"
+                      secureTextEntry={secureOldText}
+                      value={oldPassword}
+                      onChangeText={setOldPassword}
+                      placeholderTextColor={colors.lighterGray}
+                    />
+                    <TouchableOpacity
+                      style={styles.eyeBtn}
+                      onPress={() => setSecureOldText(!secureOldText)}
+                    >
+                      <MaterialCommunityIcons
+                        name={secureOldText ? 'eye-off-outline' : 'eye-outline'}
+                        size={22}
+                        color={colors.lighterGray}
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
 
               <Text style={styles.fieldLabel}>Password</Text>
               <View style={styles.passwordInputContainer}>
@@ -106,9 +149,11 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({ onB
 
               <TouchableOpacity
                 style={styles.actionButton}
-                onPress={() => onSubmit(password, confirmPassword)}
+                onPress={() => onSubmit(oldPassword, password, confirmPassword)}
               >
-                <Text style={styles.actionButtonText}>Set up Your password</Text>
+                <Text style={styles.actionButtonText}>
+                  {isChangePassword ? 'Update Password' : 'Set up Your password'}
+                </Text>
               </TouchableOpacity>
             </View>
           </AnimatedScreen>

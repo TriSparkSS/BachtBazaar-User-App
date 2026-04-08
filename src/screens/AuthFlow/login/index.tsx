@@ -23,7 +23,7 @@ const Login = () => {
 
   const navigateToOtp = async (
     phone: string,
-    mode: 'login' | 'signup',
+    mode: 'login' | 'signup' | 'forgot-password',
     exists: boolean,
   ) => {
     const normalizedPhone = normalizeIndianPhoneNumber(phone);
@@ -124,9 +124,29 @@ const Login = () => {
     }
   };
 
-  const handleForgotPassword = () => {
-    // @ts-ignore
-    navigation.navigate('Forgot');
+  const handleForgotPassword = async (phone: string) => {
+    if (!validateIndianPhoneInput(phone)) {
+      showAppAlert('Invalid number', 'Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const sendOtpResponse = await userAuthApi.sendOtp(phone);
+      console.log('[Auth] Forgot password send OTP response', sendOtpResponse);
+
+      if (!sendOtpResponse.exists) {
+        showAppAlert('Account not found', 'This mobile number is not registered. Please sign up first.');
+        return;
+      }
+
+      await navigateToOtp(phone, 'forgot-password', true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to start forgot password.';
+      showAppAlert('Forgot password failed', message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleGooglePress = () => {

@@ -18,6 +18,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import Geolocation from 'react-native-geolocation-service';
 import AnimatedScreen from '../../../../components/AnimatedScreen';
+import AppIcon, { AppIconName } from '../../../../components/AppIcon';
 import Navbar from '../../../../components/navbar';
 import { colors, fonts } from '../../../../helpers/styles';
 import { useAppContext } from '../../../../context/AppContext';
@@ -27,7 +28,7 @@ const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 3 - 8;
 
 type SidebarItem = {
-  icon: string;
+  icon: AppIconName;
   label: string;
   active?: boolean;
   tone?: 'danger';
@@ -38,41 +39,79 @@ type SidebarGroup = {
   items: SidebarItem[];
 };
 
+const sidebarIconPalette: Record<string, string> = {
+  Overview: '#F7DCA8',
+  Shop: '#D9E8FF',
+  Delivery: '#D8F1E4',
+  'Discover Product': '#E8E0FF',
+  'Local offers (Today`s)': '#FDE0EC',
+  'Bacht Wallet': '#FFF0C7',
+  'Saving Summery': '#DFF4FF',
+  'Bachar Target': '#E5DEFF',
+  'Tips & Tricks': '#EAF5FF',
+  'My coupons': '#FBE4FF',
+  'Saved Stores': '#DFF7EC',
+  'Saved Products': '#FFE8E1',
+  Password: '#F3E5FF',
+  'Edit Profile': '#E7F7D8',
+  Notification: '#E8F0FF',
+  'Delete account': '#FFE5E5',
+};
+
+const sidebarIconTint: Record<string, string> = {
+  Overview: '#8E5C00',
+  Shop: '#366FE0',
+  Delivery: '#2E8B57',
+  'Discover Product': '#6C4CCF',
+  'Local offers (Today`s)': '#C1487C',
+  'Bacht Wallet': '#A16B00',
+  'Saving Summery': '#1174A6',
+  'Bachar Target': '#6343D8',
+  'Tips & Tricks': '#2E6FB8',
+  'My coupons': '#A63DBA',
+  'Saved Stores': '#2D8B5F',
+  'Saved Products': '#C15A42',
+  Password: '#8A46CC',
+  'Edit Profile': '#5E9631',
+  Notification: '#4E73D8',
+  'Delete account': '#D84B4B',
+};
+
 const sidebarGroups: SidebarGroup[] = [
   {
     title: 'Home',
     items: [
-      { icon: 'view-dashboard-outline', label: 'Overview', active: true },
-      { icon: 'storefront-outline', label: 'Shop' },
-      { icon: 'bike-fast', label: 'Delivery' },
-      { icon: 'cube-outline', label: 'Discover Product' },
-      { icon: 'tag-outline', label: 'Local offers (Today`s)' },
+      { icon: 'overview', label: 'Overview', active: true },
+      { icon: 'shop', label: 'Shop' },
+      { icon: 'delivery', label: 'Delivery' },
+      { icon: 'discover-product', label: 'Discover Product' },
+      { icon: 'offers', label: 'Local offers (Today`s)' },
     ],
   },
   {
     title: 'Saving & Tools',
     items: [
-      { icon: 'wallet-outline', label: 'Bacht Wallet' },
-      { icon: 'chart-line', label: 'Saving Summery' },
+      { icon: 'wallet', label: 'Bacht Wallet' },
+      { icon: 'saving-summary', label: 'Saving Summery' },
       { icon: 'target', label: 'Bachar Target' },
     ],
   },
   {
     title: 'Utility & Features',
     items: [
-      { icon: 'truck-delivery-outline', label: 'Tips & Tricks' },
-      { icon: 'ticket-percent-outline', label: 'My coupons' },
-      { icon: 'bookmark-outline', label: 'Saved Stores' },
-      { icon: 'heart-outline', label: 'Saved Products' },
+      { icon: 'tips', label: 'Tips & Tricks' },
+      { icon: 'coupons', label: 'My coupons' },
+      { icon: 'saved-stores', label: 'Saved Stores' },
+      { icon: 'saved-products', label: 'Saved Products' },
     ],
   },
   {
     title: 'Setting',
     items: [
-      { icon: 'lock-outline', label: 'Password' },
-      { icon: 'account-edit-outline', label: 'Edit Profile' },
-      { icon: 'bell-outline', label: 'Notification' },
-      { icon: 'delete-outline', label: 'Delete account', tone: 'danger' },
+      { icon: 'password', label: 'Password' },
+      { icon: 'edit-profile', label: 'Edit Profile' },
+      { icon: 'notification', label: 'Notification' },
+      { icon: 'delete-account', label: 'Delete account', tone: 'danger' },
     ],
   },
 ];
@@ -88,18 +127,18 @@ const HomeScreenView = () => {
   );
 
   const quickActions = [
-    { icon: 'gift', label: 'Daily\nRewards', bgColor: '#EEF4FF', iconColor: '#366FE0' },
-    { icon: 'map-marker', label: 'Nearby\nCoupons', bgColor: '#F3E5F5', iconColor: '#9C27B0' },
-    { icon: 'qrcode-scan', label: 'Scan &\nSave', bgColor: '#E3F2FD', iconColor: '#2196F3' },
-    { icon: 'account-plus', label: 'Invite &\nEarn', bgColor: '#E8F5E9', iconColor: '#4CAF50' },
-    { icon: 'bookmark', label: 'Saved\nOffers', bgColor: '#EEF4FF', iconColor: '#366FE0' },
+    { icon: 'reward' as AppIconName, label: 'Daily\nRewards', bgColor: '#EEF4FF' },
+    { icon: 'nearby-coupons' as AppIconName, label: 'Nearby\nCoupons', bgColor: '#F3E5F5' },
+    { icon: 'scan-save' as AppIconName, label: 'Scan &\nSave', bgColor: '#E3F2FD' },
+    { icon: 'invite-earn' as AppIconName, label: 'Invite &\nEarn', bgColor: '#E8F5E9' },
+    { icon: 'saved-offers' as AppIconName, label: 'Saved\nOffers', bgColor: '#EEF4FF' },
   ];
 
   const categories = [
-    { id: 'Hot Deals', icon: 'fire', label: 'Hot Deals' },
-    { id: 'Jewelry', icon: 'diamond-stone', label: 'Jewelry' },
-    { id: 'Grocery', icon: 'cart', label: 'Grocery' },
-    { id: 'Food', icon: 'food', label: 'Food' },
+    { id: 'Hot Deals', icon: 'hot-deals' as AppIconName, label: 'Hot Deals' },
+    { id: 'Jewelry', icon: 'jewelry' as AppIconName, label: 'Jewelry' },
+    { id: 'Grocery', icon: 'grocery' as AppIconName, label: 'Grocery' },
+    { id: 'Food', icon: 'food' as AppIconName, label: 'Food' },
   ];
 
   const userName = useMemo(() => currentUser?.name?.trim() || 'Your name', [currentUser?.name]);
@@ -208,6 +247,21 @@ const HomeScreenView = () => {
     );
   };
 
+  const openChangePassword = () => {
+    setSidebarVisible(false);
+    navigation.dispatch(
+      CommonActions.navigate({
+        name: 'AuthFlow',
+        params: {
+          screen: 'Forgot',
+          params: {
+            flow: 'change-password',
+          },
+        },
+      }),
+    );
+  };
+
   const handleLogout = () => {
     showAppAlert('Logout', 'Do you want to logout from this account?', [
       { text: 'Cancel', style: 'cancel' },
@@ -284,7 +338,7 @@ const HomeScreenView = () => {
               {quickActions.map(action => (
                 <TouchableOpacity key={action.label} style={styles.quickActionItem}>
                   <View style={[styles.quickActionCircle, { backgroundColor: action.bgColor }]}>
-                    <MaterialCommunityIcons name={action.icon as never} size={30} color={action.iconColor} />
+                    <AppIcon name={action.icon} size={22} />
                   </View>
                   <Text style={styles.quickActionLabel}>{action.label}</Text>
                 </TouchableOpacity>
@@ -306,11 +360,7 @@ const HomeScreenView = () => {
                   ]}
                   onPress={() => setSelectedCategory(cat.id)}
                 >
-                  <MaterialCommunityIcons
-                    name={cat.icon as never}
-                    size={18}
-                    color={selectedCategory === cat.id ? colors.primary : colors.darkGray}
-                  />
+                  <AppIcon name={cat.icon} size={16} />
                   <Text
                     style={[
                       styles.categoryPillText,
@@ -443,10 +493,12 @@ const HomeScreenView = () => {
       >
         <View style={styles.modalRoot}>
           <AnimatedScreen style={styles.sidebarCard}>
+            <View style={styles.sidebarPatternTop} />
+            <View style={styles.sidebarPatternBottom} />
             <View style={styles.sidebarHeaderRow}>
               <View />
               <TouchableOpacity onPress={() => setSidebarVisible(false)}>
-                <MaterialCommunityIcons name="close" size={24} color={colors.text} />
+                <AppIcon name="close" size={18} />
               </TouchableOpacity>
             </View>
 
@@ -454,25 +506,30 @@ const HomeScreenView = () => {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.sidebarScrollContent}
             >
-
-              <View style={styles.sidebarProfileSection}>
-                <View style={styles.profileAvatar}>
-                  <Text style={styles.profileAvatarText}>{userName.charAt(0).toUpperCase()}</Text>
+              <View style={styles.sidebarProfileCard}>
+                <View style={styles.sidebarProfileSection}>
+                  <View style={styles.profileAvatar}>
+                    <Text style={styles.profileAvatarText}>{userName.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.profileInfo}>
+                    <Text style={styles.profileName}>{userName}</Text>
+                    <Text style={styles.profileLocation}>{sidebarLocation}</Text>
+                  </View>
                 </View>
-                <View style={styles.profileInfo}>
-                  <Text style={styles.profileName}>{userName}</Text>
-                  <Text style={styles.profileLocation}>{sidebarLocation}</Text>
+
+                <View style={styles.contactRow}>
+                  <View style={styles.contactIconBadge}>
+                    <AppIcon name="phone" size={13} />
+                  </View>
+                  <Text style={styles.contactText}>{displayPhone}</Text>
                 </View>
-              </View>
 
-              <View style={styles.contactRow}>
-                <MaterialCommunityIcons name="phone" size={16} color={colors.text} />
-                <Text style={styles.contactText}>{displayPhone}</Text>
-              </View>
-
-              <View style={styles.contactRow}>
-                <MaterialCommunityIcons name="map-marker" size={16} color={colors.text} />
-                <Text style={styles.contactText}>{sidebarLocation}</Text>
+                <View style={styles.contactRow}>
+                  <View style={styles.contactIconBadge}>
+                    <AppIcon name="location" size={13} />
+                  </View>
+                  <Text style={styles.contactText}>{sidebarLocation}</Text>
+                </View>
               </View>
 
               <View style={styles.sidebarDivider} />
@@ -508,19 +565,39 @@ const HomeScreenView = () => {
                       return null;
                     }
 
+                    const onPress =
+                      item.label === 'Edit Profile'
+                        ? openProfileSetup
+                        : item.label === 'Password'
+                          ? openChangePassword
+                          : undefined;
+
                     return (
                       <TouchableOpacity
                         key={item.label}
                         style={[styles.sidebarItem, item.active && styles.sidebarItemActive]}
-                        onPress={item.label === 'Edit Profile' ? openProfileSetup : undefined}
+                        onPress={onPress}
                       >
-                        <MaterialCommunityIcons
-                          name={item.icon as never}
-                          size={16}
-                          color={
-                            isDanger ? '#E45A5A' : item.active ? colors.white : colors.text
-                          }
-                        />
+                        <View
+                          style={[
+                            styles.sidebarItemIconWrap,
+                            {
+                              backgroundColor: item.active
+                                ? 'rgba(255,255,255,0.24)'
+                                : sidebarIconPalette[item.label] ?? '#EEF4FF',
+                            },
+                          ]}
+                        >
+                          <AppIcon
+                            name={item.icon}
+                            size={13}
+                            style={
+                              item.active
+                                ? styles.sidebarItemIconActive
+                                : { tintColor: sidebarIconTint[item.label] ?? colors.primary }
+                            }
+                          />
+                        </View>
                         <Text
                           style={[
                             styles.sidebarItemText,
@@ -537,7 +614,7 @@ const HomeScreenView = () => {
               ))}
 
               <TouchableOpacity style={styles.logoutRow} onPress={handleLogout}>
-                <MaterialCommunityIcons name="logout" size={18} color="#E45A5A" />
+                <AppIcon name="logout" size={16} />
                 <Text style={styles.logoutText}>Log Out</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -580,7 +657,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   countdownLeft: {
     flexDirection: 'row',
@@ -588,21 +665,21 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   countdownLabel: {
-    fontSize: 14,
+    fontSize: 12,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
   countdownTime: {
-    fontSize: 14,
+    fontSize: 12,
     color: colors.primary,
     fontFamily: fonts.BOLD,
   },
   banner: {
     marginHorizontal: 16,
-    borderRadius: 16,
-    padding: 24,
-    minHeight: 140,
-    marginBottom: 20,
+    borderRadius: 14,
+    padding: 18,
+    minHeight: 122,
+    marginBottom: 16,
     overflow: 'hidden',
   },
   bannerGradientFallback: {
@@ -612,15 +689,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bannerTextSection: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   bannerTitle: {
-    fontSize: 36,
+    fontSize: 28,
     fontFamily: fonts.BOLD,
     color: colors.white,
   },
   bannerSubtitle: {
-    fontSize: 18,
+    fontSize: 15,
     color: colors.white,
     opacity: 0.95,
     marginTop: 4,
@@ -631,13 +708,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(0,0,0,0.3)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 18,
     gap: 6,
   },
   bannerCountdownText: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.white,
     fontFamily: fonts.BOLD,
   },
@@ -647,41 +724,41 @@ const styles = StyleSheet.create({
     top: 20,
   },
   giftBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 7,
     opacity: 0.9,
   },
   quickActionsScroll: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   quickActionsContent: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    gap: 16,
+    gap: 12,
   },
   quickActionItem: {
     alignItems: 'center',
-    width: 72,
+    width: 66,
   },
   quickActionCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   quickActionLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.lightGray,
     textAlign: 'center',
     fontFamily: fonts.BOLD,
     marginTop: 4,
-    lineHeight: 14,
+    lineHeight: 13,
   },
   categoriesScroll: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   categoriesContent: {
     flexDirection: 'row',
@@ -691,9 +768,9 @@ const styles = StyleSheet.create({
   categoryPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 24,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.primaryBorder,
     backgroundColor: colors.white,
@@ -704,7 +781,7 @@ const styles = StyleSheet.create({
     borderColor: colors.primaryBorder,
   },
   categoryPillText: {
-    fontSize: 14,
+    fontSize: 12,
     color: colors.darkGray,
     fontFamily: fonts.BOLD,
   },
@@ -713,16 +790,16 @@ const styles = StyleSheet.create({
   },
   localOffersSection: {
     paddingHorizontal: 16,
-    marginTop: 10,
+    marginTop: 6,
   },
   localOffersHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   localOffersTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontFamily: fonts.BOLD,
     color: colors.text,
   },
@@ -731,7 +808,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   filterText: {
-    fontSize: 14,
+    fontSize: 12,
     color: colors.lighterGray,
     marginRight: 4,
     fontFamily: fonts.BOLD,
@@ -740,20 +817,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   controlsLabel: {
-    fontSize: 16,
+    fontSize: 14,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
   storeCard: {
     backgroundColor: colors.white,
-    borderRadius: 24,
-    padding: 16,
+    borderRadius: 20,
+    padding: 14,
     borderWidth: 1,
     borderColor: colors.primaryBorder,
-    marginBottom: 20,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.05,
@@ -763,12 +840,12 @@ const styles = StyleSheet.create({
   storeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   storeLogoCircle: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     overflow: 'hidden',
     marginRight: 12,
   },
@@ -784,7 +861,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   storeName: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: fonts.BOLD,
     color: colors.text,
   },
@@ -792,7 +869,7 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
   storeTagline: {
-    fontSize: 13,
+    fontSize: 11,
     color: colors.lighterGray,
     fontFamily: fonts.BOLD,
     marginTop: 2,
@@ -805,7 +882,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   ratingText: {
-    fontSize: 14,
+    fontSize: 12,
     color: colors.text,
     fontFamily: fonts.BOLD,
     marginLeft: 4,
@@ -840,19 +917,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   offersContent: {
-    gap: 12,
+    gap: 10,
     paddingRight: 4,
   },
   offerCard: {
     width: CARD_WIDTH,
     backgroundColor: '#F9FAFD',
-    borderRadius: 14,
+    borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E6ECF7',
   },
   offerImageContainer: {
-    height: 96,
+    height: 88,
     position: 'relative',
   },
   offerImage: {
@@ -874,15 +951,15 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
   },
   offerInfo: {
-    padding: 10,
+    padding: 8,
   },
   cardOfferTitle: {
-    fontSize: 13,
+    fontSize: 12,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
   cardOfferSubtitle: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.lightGray,
     fontFamily: fonts.BOLD,
     marginTop: 3,
@@ -901,30 +978,51 @@ const styles = StyleSheet.create({
   sidebarCard: {
     width: width * 0.78,
     maxWidth: 330,
-    backgroundColor: colors.white,
+    backgroundColor: 'rgba(255,255,255,0.97)',
     marginTop: 0,
     marginBottom: 0,
     marginLeft: 0,
-    borderTopRightRadius: 28,
-    borderBottomRightRadius: 28,
+    borderTopRightRadius: 32,
+    borderBottomRightRadius: 32,
     borderTopLeftRadius: 0,
     borderBottomLeftRadius: 0,
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 24,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 18,
+    borderWidth: 2,
+    borderColor: '#366FE0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.12,
+    shadowOpacity: 0.14,
     shadowRadius: 24,
     elevation: 12,
+    overflow: 'hidden',
+  },
+  sidebarPatternTop: {
+    position: 'absolute',
+    top: 44,
+    right: 14,
+    width: 82,
+    height: 82,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(54,111,224,0.14)',
+  },
+  sidebarPatternBottom: {
+    position: 'absolute',
+    bottom: 96,
+    left: -18,
+    width: 92,
+    height: 92,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(54,111,224,0.14)',
   },
   backdrop: {
     flex: 1,
   },
   sidebarScrollContent: {
-    paddingBottom: 16,
+    paddingBottom: 20,
   },
   sidebarHeaderRow: {
     flexDirection: 'row',
@@ -932,23 +1030,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
+  sidebarProfileCard: {
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderRadius: 18,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(54,111,224,0.12)',
+    marginBottom: 10,
+  },
   sidebarProfileSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   profileAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: colors.primarySoft,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFD9DC',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 10,
+    borderWidth: 2,
+    borderColor: colors.white,
   },
   profileAvatarText: {
-    fontSize: 20,
-    color: colors.primary,
+    fontSize: 18,
+    color: '#A94B57',
     fontFamily: fonts.BOLD,
   },
   profileInfo: {
@@ -960,7 +1069,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
   },
   profileLocation: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.lighterGray,
     fontFamily: fonts.BOLD,
     marginTop: 2,
@@ -968,24 +1077,33 @@ const styles = StyleSheet.create({
   contactRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
+    gap: 6,
+    marginBottom: 7,
+    minHeight: 32,
+  },
+  contactIconBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#EEF4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   contactText: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.text,
     fontFamily: fonts.BOLD,
     flex: 1,
   },
   sidebarDivider: {
     height: 1,
-    backgroundColor: colors.primaryBorder,
-    marginVertical: 12,
+    backgroundColor: 'rgba(54,111,224,0.14)',
+    marginVertical: 14,
   },
   completeCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.primarySoft,
+    backgroundColor: '#F4F8FF',
     borderRadius: 16,
     paddingHorizontal: 12,
     paddingVertical: 12,
@@ -1020,11 +1138,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 12,
-    backgroundColor: colors.white,
+    backgroundColor: colors.primary,
   },
   completeCardActionText: {
     fontSize: 11,
-    color: colors.primary,
+    color: colors.white,
     fontFamily: fonts.BOLD,
   },
   sidebarGroup: {
@@ -1034,27 +1152,43 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.lighterGray,
     fontFamily: fonts.BOLD,
-    marginBottom: 8,
+    marginBottom: 9,
+    marginLeft: 2,
   },
   sidebarItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    minHeight: 34,
+    minHeight: 38,
     paddingHorizontal: 10,
-    borderRadius: 10,
-    marginBottom: 4,
+    borderRadius: 12,
+    marginBottom: 6,
   },
   sidebarItemActive: {
-    backgroundColor: '#366FE0',
+    backgroundColor: '#D7A44E',
+    shadowColor: '#D7A44E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  sidebarItemIconWrap: {
+    width: 22,
+    height: 22,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sidebarItemText: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
   sidebarItemTextActive: {
     color: colors.white,
+  },
+  sidebarItemIconActive: {
+    tintColor: colors.white,
   },
   sidebarItemTextDanger: {
     color: '#E45A5A',
@@ -1062,13 +1196,13 @@ const styles = StyleSheet.create({
   logoutRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    marginTop: 4,
+    gap: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 9,
+    marginTop: 8,
   },
   logoutText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#E45A5A',
     fontFamily: fonts.BOLD,
   },

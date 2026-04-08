@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnimatedScreen from '../../../components/AnimatedScreen';
+import AppIcon from '../../../components/AppIcon';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
@@ -22,7 +23,7 @@ interface LoginScreenViewProps {
   onLoginWithPassword: (phone: string, password: string) => void | Promise<void>;
   onLoginWithOtp: (phone: string) => void | Promise<void>;
   onSignupWithOtp: (phone: string) => void | Promise<void>;
-  onForgotPassword: () => void;
+  onForgotPassword: (phone: string) => void | Promise<void>;
   onGooglePress: () => void;
   onApplePress: () => void;
   isSubmitting?: boolean;
@@ -148,7 +149,7 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
 
                     <View style={styles.footerLinks}>
                       <Text style={styles.wrongPassword}></Text>
-                      <TouchableOpacity onPress={onForgotPassword}>
+                      <TouchableOpacity onPress={() => onForgotPassword(phone)}>
                         <Text style={styles.forgotPassword}>Forgot password?</Text>
                       </TouchableOpacity>
                     </View>
@@ -201,13 +202,13 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
 
                 <View style={styles.socialContainer}>
                   <TouchableOpacity style={styles.socialButton} onPress={onApplePress}>
-                    <MaterialCommunityIcons name="apple" size={28} color="#000" />
+                    <AppIcon name="apple" size={20} />
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.socialButton, styles.dashedBorder]}
                     onPress={onGooglePress}
                   >
-                    <MaterialCommunityIcons name="google" size={24} color="#DB4437" />
+                    <AppIcon name="google" size={20} />
                   </TouchableOpacity>
                 </View>
               </>
@@ -229,53 +230,53 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     alignItems: 'center',
-    paddingBottom: 40,
+    paddingBottom: 28,
   },
   logoContainer: {
     alignItems: 'center',
-    marginTop: height * 0.08,
-    marginBottom: 20,
+    marginTop: height * 0.055,
+    marginBottom: 14,
   },
   titleContainer: {
     flexDirection: 'row',
-    marginTop: 5,
+    marginTop: 3,
   },
   titleBachat: {
-    fontSize: 26,
+    fontSize: 22,
     fontFamily: fonts.BOLD,
     color: colors.primary,
   },
   titleBazaar: {
-    fontSize: 26,
+    fontSize: 22,
     fontFamily: fonts.BOLD,
     color: colors.primary,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 13,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
   card: {
-    width: width * 0.9,
+    width: width * 0.88,
     backgroundColor: colors.white,
-    borderRadius: 35,
-    padding: 25,
-    paddingVertical: 32,
+    borderRadius: 28,
+    paddingHorizontal: 20,
+    paddingVertical: 24,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    elevation: 8,
-    marginTop: 10,
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 6,
+    marginTop: 6,
     borderWidth: 1,
     borderColor: colors.primaryBorder,
   },
   tabContainer: {
     flexDirection: 'row',
     backgroundColor: '#fff',
-    borderRadius: 20,
-    marginBottom: 25,
-    padding: 5,
+    borderRadius: 16,
+    marginBottom: 20,
+    padding: 4,
     borderWidth: 1,
     borderColor: colors.primaryBorder,
     shadowColor: '#000',
@@ -286,9 +287,9 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 11,
     alignItems: 'center',
-    borderRadius: 15,
+    borderRadius: 12,
   },
   activeTab: {
     backgroundColor: colors.primary,
@@ -299,7 +300,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   tabText: {
-    fontSize: 16,
+    fontSize: 14,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
@@ -307,19 +308,19 @@ const styles = StyleSheet.create({
     color: colors.white,
   },
   inputSection: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   countryCode: {
-    height: 50,
+    height: 46,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    borderRadius: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.primaryBorder,
     backgroundColor: colors.white,
@@ -327,44 +328,44 @@ const styles = StyleSheet.create({
   countryCodeText: {
     color: colors.text,
     fontFamily: fonts.BOLD,
-    fontSize: 16,
+    fontSize: 14,
   },
   phoneInputContainer: {
     flex: 1,
-    height: 50,
-    borderRadius: 14,
+    height: 46,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.primaryBorder,
     backgroundColor: colors.white,
     justifyContent: 'center',
-    paddingHorizontal: 15,
+    paddingHorizontal: 14,
   },
   fieldLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.text,
     fontFamily: fonts.BOLD,
-    marginTop: 18,
-    marginBottom: 8,
+    marginTop: 14,
+    marginBottom: 6,
   },
   passwordInputContainer: {
     width: '100%',
-    height: 50,
+    height: 46,
     backgroundColor: colors.white,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.primaryBorder,
-    paddingLeft: 15,
+    paddingLeft: 14,
     paddingRight: 5,
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 5,
   },
   eyeBtn: {
-    padding: 10,
+    padding: 8,
   },
   inputField: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 14,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
@@ -378,62 +379,62 @@ const styles = StyleSheet.create({
   },
   forgotPassword: {
     color: colors.primary,
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: fonts.BOLD,
   },
   actionButton: {
     width: '100%',
-    height: 55,
+    height: 50,
     backgroundColor: colors.primary,
-    borderRadius: 16,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOpacity: 0.14,
+    shadowRadius: 7,
+    elevation: 5,
   },
   actionButtonDisabled: {
     opacity: 0.75,
   },
   secondaryButton: {
     width: '100%',
-    height: 55,
+    height: 50,
     backgroundColor: colors.primary,
-    borderRadius: 16,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 14,
+    marginTop: 12,
   },
   secondaryButtonText: {
-    fontSize: 18,
+    fontSize: 15,
     fontFamily: fonts.BOLD,
     color: colors.white,
   },
   secondaryGhostButton: {
     width: '100%',
-    height: 50,
-    borderRadius: 16,
+    height: 46,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 14,
+    marginTop: 12,
     backgroundColor: colors.primarySoft,
   },
   secondaryGhostButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     fontFamily: fonts.BOLD,
     color: colors.primary,
   },
   actionButtonText: {
-    fontSize: 16,
+    fontSize: 15,
     color: colors.white,
     fontFamily: fonts.BOLD,
   },
   separatorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 18,
+    marginVertical: 14,
   },
   separatorLine: {
     flex: 1,
@@ -448,12 +449,12 @@ const styles = StyleSheet.create({
   socialContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 14,
+    gap: 12,
   },
   socialButton: {
-    width: 58,
-    height: 46,
-    borderRadius: 12,
+    width: 56,
+    height: 42,
+    borderRadius: 10,
     backgroundColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
@@ -465,7 +466,7 @@ const styles = StyleSheet.create({
   },
   topRightVector: {
     position: 'absolute',
-    top: 40,
+    top: 28,
     right: 0,
     width: 150,
     height: 200,

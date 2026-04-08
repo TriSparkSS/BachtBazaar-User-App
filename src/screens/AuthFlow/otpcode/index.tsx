@@ -45,16 +45,11 @@ const OTPCode = () => {
         mode: pendingAuth.mode,
       });
 
-      const response =
-        pendingAuth.mode === 'login'
-          ? await userAuthApi.loginWithOtp(firebaseToken)
-          : await userAuthApi.verifyOtp(firebaseToken);
-
-      console.log('[Auth] OTP API response', response);
-      await setSession(response.token, response.user);
-      clearPhoneVerificationState();
-
       if (pendingAuth.mode === 'login') {
+        const response = await userAuthApi.loginWithOtp(firebaseToken);
+        console.log('[Auth] OTP API response', response);
+        await setSession(response.token, response.user);
+        clearPhoneVerificationState();
         const root = navigation.getParent();
         if (root) {
           // @ts-ignore
@@ -63,9 +58,27 @@ const OTPCode = () => {
         return;
       }
 
+      if (pendingAuth.mode === 'forgot-password') {
+        console.log('[Auth] OTP verified for forgot password');
+        clearPhoneVerificationState();
+        // @ts-ignore
+        navigation.navigate('Forgot', {
+          flow: 'forgot-password',
+          firebaseToken,
+          phoneNumber: pendingAuth.normalizedPhone,
+        });
+        return;
+      }
+
+      const response = await userAuthApi.verifyOtp(firebaseToken);
+      console.log('[Auth] OTP API response', response);
+      await setSession(response.token, response.user);
+      clearPhoneVerificationState();
+
       // @ts-ignore
       navigation.navigate('Forgot', {
         userId: response.user._id,
+        sessionToken: response.token,
         flow: 'signup-password',
       });
     } catch (error) {
