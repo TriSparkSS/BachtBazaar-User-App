@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "921834163028",
+    "project_id": "bachatbazaar-17716",
+    "storage_bucket": "bachatbazaar-17716.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:921834163028:android:f8ae0dc2f5e2aabbdb56c1",
+        "android_client_info": {
+          "package_name": "com.bachatbazaar"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAHTzQhdH1UHSamXmxe38SHbMnSjX7DzUU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:921834163028:android:d946a482b32c9a5bdb56c1",
+        "android_client_info": {
+          "package_name": "com.bachatbazaaruser"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAHTzQhdH1UHSamXmxe38SHbMnSjX7DzUU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:921834163028:android:3dde45ec5c26288edb56c1",
+        "android_client_info": {
+          "package_name": "com.ecommers"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAHTzQhdH1UHSamXmxe38SHbMnSjX7DzUU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
