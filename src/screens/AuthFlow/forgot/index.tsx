@@ -5,6 +5,9 @@ import { userAuthApi } from '../../../services/userAuthApi';
 import { showAppAlert } from '../../../services/appAlert';
 import { useAppContext } from '../../../context/AppContext';
 
+const isPasswordValid = (value: string) =>
+    value.length >= 8 && /[A-Z]/.test(value) && /[!@#$%]/.test(value);
+
 const ForgotPassword = () => {
     const navigation = useNavigation();
     const route = useRoute();
@@ -31,8 +34,11 @@ const ForgotPassword = () => {
            return;
         }
 
-        if (password.trim().length < 6) {
-            showAppAlert('Error', 'Password must be at least 6 characters');
+        if (!isPasswordValid(password.trim())) {
+            showAppAlert(
+                'Weak password',
+                'Password must have 8+ characters, 1 uppercase letter, and 1 symbol (!@#$%).',
+            );
             return;
         }
 

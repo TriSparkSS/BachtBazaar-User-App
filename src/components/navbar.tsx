@@ -14,27 +14,31 @@ const Navbar: React.FC<NavbarProps> = ({
   title = 'Bacht Bazaar',
   subtitle = 'Work - Mohan Sharn',
 }) => {
+  const formattedSubtitle = subtitle.replace(/^Work\s*-\s*/i, '').trim();
+
   return (
     <>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <TouchableOpacity style={styles.iconButton} onPress={onMenuPress}>
-            <AppIcon name="menu" size={24} />
-          </TouchableOpacity>
           <View style={styles.titleSection}>
             <Text style={styles.locationTitle}>{title}</Text>
             <View style={styles.locationSubRow}>
-              <AppIcon name="location" size={12} />
+              <TouchableOpacity style={styles.inlineMenuButton} onPress={onMenuPress}>
+                <AppIcon name="menu" size={14} />
+              </TouchableOpacity>
               <Text style={styles.locationSubtext} numberOfLines={1}>
                 {subtitle}
               </Text>
+              <Text style={styles.chevronText}>⌄</Text>
             </View>
           </View>
         </View>
 
-        <TouchableOpacity style={styles.iconButton}>
-          <AppIcon name="bell" size={22} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.iconButton}>
+            <AppIcon name="bell" size={21} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.searchRow}>
@@ -62,39 +66,57 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 10,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
   headerLeft: {
+    flex: 1,
+  },
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    flex: 1,
+    marginLeft: 12,
   },
   titleSection: {
     justifyContent: 'center',
     flexShrink: 1,
   },
   locationTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontFamily: fonts.BOLD,
-    color: colors.text,
-    lineHeight: 20,
+    color: '#202843',
+    lineHeight: 22,
   },
   locationSubRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 4,
+    marginTop: 1,
   },
   locationSubtext: {
-    fontSize: 12,
-    color: colors.lightGray,
+    fontSize: 11,
+    color: '#4A5672',
     fontFamily: fonts.BOLD,
     flexShrink: 1,
-    maxWidth: '88%',
+    maxWidth: '84%',
+    lineHeight: 14,
+  },
+  chevronText: {
+    fontSize: 12,
+    color: '#202843',
+    fontFamily: fonts.BOLD,
+    marginTop: -1,
+  },
+  inlineMenuButton: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 2,
   },
   iconButton: {
-    padding: 3,
+    padding: 4,
   },
   searchRow: {
     flexDirection: 'row',

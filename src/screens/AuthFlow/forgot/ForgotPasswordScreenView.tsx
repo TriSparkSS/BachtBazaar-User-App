@@ -10,14 +10,18 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnimatedScreen from '../../../components/AnimatedScreen';
+import AppIcon from '../../../components/AppIcon';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import BackButtonSVG from '../../../assets/icon/BackButton.svg';
 import { colors, fonts } from '../../../helpers/styles';
 
 const { width } = Dimensions.get('window');
+
+const hasEightCharacters = (value: string) => value.length >= 8;
+const hasUppercaseLetter = (value: string) => /[A-Z]/.test(value);
+const hasSymbol = (value: string) => /[!@#$%]/.test(value);
 
 interface ForgotPasswordScreenViewProps {
   onBack: () => void;
@@ -40,6 +44,15 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
   const [secureConfirmText, setSecureConfirmText] = useState(true);
   const isChangePassword = mode === 'change-password';
   const isForgotPassword = mode === 'forgot-password';
+  const passwordChecks = [
+    { label: '8+ characters', met: hasEightCharacters(password) },
+    { label: '1 uppercase letter', met: hasUppercaseLetter(password) },
+    { label: '1 symbol (!@#$%)', met: hasSymbol(password) },
+    {
+      label: 'Passwords match',
+      met: confirmPassword.length > 0 && password.length > 0 && confirmPassword === password,
+    },
+  ];
 
   return (
     <View style={styles.container}>
@@ -96,11 +109,7 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
                       style={styles.eyeBtn}
                       onPress={() => setSecureOldText(!secureOldText)}
                     >
-                      <MaterialCommunityIcons
-                        name={secureOldText ? 'eye-off-outline' : 'eye-outline'}
-                        size={22}
-                        color={colors.lighterGray}
-                      />
+                      <AppIcon name={secureOldText ? 'eye-off' : 'eye'} size={18} />
                     </TouchableOpacity>
                   </View>
                 </>
@@ -117,11 +126,7 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
                   placeholderTextColor={colors.lighterGray}
                 />
                 <TouchableOpacity style={styles.eyeBtn} onPress={() => setSecureText(!secureText)}>
-                  <MaterialCommunityIcons
-                    name={secureText ? 'eye-off-outline' : 'eye-outline'}
-                    size={22}
-                    color={colors.lighterGray}
-                  />
+                  <AppIcon name={secureText ? 'eye-off' : 'eye'} size={18} />
                 </TouchableOpacity>
               </View>
 
@@ -139,12 +144,36 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
                   style={styles.eyeBtn}
                   onPress={() => setSecureConfirmText(!secureConfirmText)}
                 >
-                  <MaterialCommunityIcons
-                    name={secureConfirmText ? 'eye-off-outline' : 'eye-outline'}
-                    size={22}
-                    color={colors.lighterGray}
-                  />
+                  <AppIcon name={secureConfirmText ? 'eye-off' : 'eye'} size={18} />
                 </TouchableOpacity>
+              </View>
+
+              <View style={styles.requirementsWrap}>
+                {passwordChecks.map(check => (
+                  <View
+                    key={check.label}
+                    style={[styles.requirementItem, check.met && styles.requirementItemActive]}
+                  >
+                    <View
+                      style={[
+                        styles.requirementIndicator,
+                        check.met && styles.requirementIndicatorActive,
+                      ]}
+                    >
+                      {check.met && (
+                        <Text style={styles.requirementCheckmark}>✓</Text>
+                      )}
+                    </View>
+                    <Text
+                      style={[
+                        styles.requirementText,
+                        check.met && styles.requirementTextActive,
+                      ]}
+                    >
+                      {check.label}
+                    </Text>
+                  </View>
+                ))}
               </View>
 
               <TouchableOpacity
@@ -285,6 +314,57 @@ const styles = StyleSheet.create({
   },
   eyeBtn: {
     padding: 10,
+  },
+  requirementsWrap: {
+    marginTop: 8,
+    marginBottom: 6,
+    gap: 8,
+  },
+  requirementItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F6F8FB',
+    borderRadius: 12,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  requirementItemActive: {
+    backgroundColor: '#EDF7F1',
+    borderColor: '#B8E0C6',
+  },
+  requirementIndicator: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    borderColor: '#C2CAD7',
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  requirementIndicatorActive: {
+    borderColor: '#1E9E56',
+    backgroundColor: '#1E9E56',
+  },
+  requirementCheckmark: {
+    fontSize: 9,
+    lineHeight: 10,
+    color: colors.white,
+    fontFamily: fonts.BOLD,
+    textAlign: 'center',
+    includeFontPadding: false,
+    transform: [{ translateY: -0.5 }],
+  },
+  requirementText: {
+    fontSize: 15,
+    color: '#556070',
+    fontFamily: fonts.BOLD,
+  },
+  requirementTextActive: {
+    color: '#1F2E1F',
   },
   actionButton: {
     width: '100%',

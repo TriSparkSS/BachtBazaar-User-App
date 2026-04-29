@@ -139,11 +139,7 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
                         style={styles.eyeBtn}
                         onPress={() => setSecureText(!secureText)}
                       >
-                        <MaterialCommunityIcons
-                          name={secureText ? 'eye-off-outline' : 'eye-outline'}
-                          size={22}
-                          color={colors.lighterGray}
-                        />
+                        <AppIcon name={secureText ? 'eye-off' : 'eye'} size={18} />
                       </TouchableOpacity>
                     </View>
 

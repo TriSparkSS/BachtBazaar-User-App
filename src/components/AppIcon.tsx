@@ -8,6 +8,8 @@ export type AppIconName =
   | 'qr'
   | 'google'
   | 'apple'
+  | 'eye'
+  | 'eye-off'
   | 'close'
   | 'phone'
   | 'location'
@@ -45,6 +47,8 @@ const iconMap: Record<AppIconName, ImageSourcePropType> = {
   qr: require('../assets/icon/Image (1).png'),
   google: require('../assets/icon/google.png'),
   apple: require('../assets/icon/apple-logo-svgrepo-com 1.png'),
+  eye: require('../assets/icon/eye-outline.png'),
+  'eye-off': require('../assets/icon/eye-off-outline.png'),
   close: require('../assets/icon/icons8-cancel-50 2.png'),
   phone: require('../assets/icon/phone-receiver-silhouette 1.png'),
   location: require('../assets/icon/store 1.png'),

@@ -20,6 +20,7 @@ import Geolocation from 'react-native-geolocation-service';
 import AnimatedScreen from '../../../../components/AnimatedScreen';
 import AppIcon, { AppIconName } from '../../../../components/AppIcon';
 import Navbar from '../../../../components/navbar';
+import { API_BASE_URL } from '../../../../config/api';
 import { colors, fonts } from '../../../../helpers/styles';
 import { useAppContext } from '../../../../context/AppContext';
 import { showAppAlert } from '../../../../services/appAlert';
@@ -122,6 +123,8 @@ const HomeScreenView = () => {
   const [comparePrices, setComparePrices] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('Hot Deals');
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [isPhoneVisible, setIsPhoneVisible] = useState(false);
+  const [profileImageLoadError, setProfileImageLoadError] = useState(false);
   const [headerAddress, setHeaderAddress] = useState(
     currentUser?.address?.trim() ? `Work - ${currentUser.address.trim()}` : 'Work - Fetching location...',
   );
@@ -147,8 +150,22 @@ const HomeScreenView = () => {
     [currentUser?.address],
   );
   const isProfileComplete = Boolean(currentUser?.name?.trim() && currentUser?.address?.trim());
+  const maskedPhone = useMemo(() => {
+    const digits = currentUser?.phone?.replace(/\D/g, '') || '7876876543';
+    if (digits.length <= 4) {
+      return digits;
+    }
+
+    return `${digits.slice(0, 4)}${'*'.repeat(Math.max(0, digits.length - 4))}`;
+  }, [currentUser?.phone]);
   const displayPhone = currentUser?.phone ? `+91 ${currentUser.phone}` : '+91 786543567';
   const profileActionLabel = isProfileComplete ? 'Edit Profile' : 'Complete Profile';
+  const profileImageUri =
+    !profileImageLoadError && currentUser?.profileImage
+      ? currentUser.profileImage.startsWith('http')
+        ? currentUser.profileImage
+        : `${API_BASE_URL.replace(/\/api\/user\/?$/, '')}${currentUser.profileImage}`
+      : '';
 
   useEffect(() => {
     const requestLocationPermission = async () => {
@@ -509,7 +526,15 @@ const HomeScreenView = () => {
               <View style={styles.sidebarProfileCard}>
                 <View style={styles.sidebarProfileSection}>
                   <View style={styles.profileAvatar}>
-                    <Text style={styles.profileAvatarText}>{userName.charAt(0).toUpperCase()}</Text>
+                    {profileImageUri ? (
+                      <Image
+                        source={{ uri: profileImageUri }}
+                        style={styles.profileAvatarImage}
+                        onError={() => setProfileImageLoadError(true)}
+                      />
+                    ) : (
+                      <Text style={styles.profileAvatarText}>{userName.charAt(0).toUpperCase()}</Text>
+                    )}
                   </View>
                   <View style={styles.profileInfo}>
                     <Text style={styles.profileName}>{userName}</Text>
@@ -521,7 +546,15 @@ const HomeScreenView = () => {
                   <View style={styles.contactIconBadge}>
                     <AppIcon name="phone" size={13} />
                   </View>
-                  <Text style={styles.contactText}>{displayPhone}</Text>
+                  <Text style={styles.contactText}>
+                    {isPhoneVisible ? displayPhone : `+91 ${maskedPhone}`}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.contactToggleButton}
+                    onPress={() => setIsPhoneVisible(prev => !prev)}
+                  >
+                    <AppIcon name={isPhoneVisible ? 'eye' : 'eye-off'} size={16} />
+                  </TouchableOpacity>
                 </View>
 
                 <View style={styles.contactRow}>
@@ -1060,6 +1093,11 @@ const styles = StyleSheet.create({
     color: '#A94B57',
     fontFamily: fonts.BOLD,
   },
+  profileAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 24,
+  },
   profileInfo: {
     flex: 1,
   },
@@ -1094,6 +1132,14 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: fonts.BOLD,
     flex: 1,
+  },
+  contactToggleButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#EEF4FF',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sidebarDivider: {
     height: 1,
