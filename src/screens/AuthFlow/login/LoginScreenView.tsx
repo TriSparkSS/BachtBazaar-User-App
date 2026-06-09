@@ -10,7 +10,6 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnimatedScreen from '../../../components/AnimatedScreen';
 import AppIcon from '../../../components/AppIcon';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';

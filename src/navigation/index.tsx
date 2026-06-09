@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React from 'react';
 import { BackHandler } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef, StackActions } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';

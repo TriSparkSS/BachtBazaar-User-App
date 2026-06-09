@@ -227,7 +227,7 @@ const HomeScreenView = () => {
               const payload = await response.json();
               console.log('[Location] Reverse geocode response', payload);
               setHeaderAddress(formatAddress(payload));
-            } catch (error) {
+            } catch {
               setHeaderAddress(fallbackAddress);
             }
           },
@@ -240,7 +240,7 @@ const HomeScreenView = () => {
             maximumAge: 10000,
           },
         );
-      } catch (error) {
+      } catch {
         setHeaderAddress(fallbackAddress);
       }
     };

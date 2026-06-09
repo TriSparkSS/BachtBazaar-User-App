@@ -27,7 +27,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 <AppIcon name="menu" size={14} />
               </TouchableOpacity>
               <Text style={styles.locationSubtext} numberOfLines={1}>
-                {subtitle}
+                {formattedSubtitle}
               </Text>
               <Text style={styles.chevronText}>⌄</Text>
             </View>

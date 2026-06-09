@@ -20,3 +20,20 @@ buildscript {
 }
 
 apply plugin: "com.facebook.react.rootproject"
+
+subprojects { subproject ->
+    subproject.plugins.withId("com.android.library") {
+        def androidExt = subproject.extensions.findByName("android")
+
+        if (androidExt != null) {
+            androidExt.defaultConfig {
+                externalNativeBuild {
+                    cmake {
+                        arguments "-DANDROID_STL=c++_shared",
+                                "-DCMAKE_CXX_STANDARD_LIBRARIES=-lc++_shared -latomic -lm"
+                    }
+                }
+            }
+        }
+    }
+}
