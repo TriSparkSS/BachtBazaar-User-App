@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   TextInput,
   TouchableOpacity,
@@ -9,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import AnimatedScreen from '../../../components/AnimatedScreen';
 import AppIcon from '../../../components/AppIcon';
@@ -17,6 +19,15 @@ import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
 
 const { width, height } = Dimensions.get('window');
+
+const socialIcons = {
+  apple: {
+    uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAYAAABWzo5XAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAOdEVYdFNvZnR3YXJlAEZpZ21hnrGWYwAAAMFJREFUeAGllIENgjAQRb9OwAgdgRHYQDewI7CBjMAGuAkjqBMUJ4AN9BrPoM2dcPQnLyWlPI4eKbA+JdETHTLiiJF4Eh4Z6VkSiAIZ+UictmAnzFXEga/vxIUFjudjRQ+eH6Ck47d/M2Len5STJDkri/9RS6JglDSSpNpQzU/39jw62DIQkySaYIvTKrrBnlq7obVYI673kqiFfcMjZSqqNkgClFirOmqiAut/zAYLcZiPjTh6/uzYpSvem9ymD70AkrSHfARycLUAAAAASUVORK5CYII=',
+  },
+  google: {
+    uri: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABIAAAASCAYAAABWzo5XAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAOdEVYdFNvZnR3YXJlAEZpZ21hnrGWYwAAAgpJREFUeAG1lDtP21AUx8+5vlZI20hGqlAfUmU6tGuQqEQnnIYP4EoMZQL2qqRSF8QQJjqmXrpVzRYqVWrGSoXGSB2Q6OBvUC+V2gGwokACjnM4dh7kYWCB/+L7OPqd8z/3+gJckzBu8dA0tGa1tgQoZhEoHa4RgMvRjpSKNf59170StJ99tkJA6wSowcXZi0rKfztedrzumhiAzE3nWwAfLoN0qjN9T9WH4OeVhJC+PQ+QLGpiuZMyDYh5tqpRAJkJe88ZAdUrY3r945NKcJCIshCic9S8lZm0bW+4mj+GocWtR6DTbXUJ6srnxq970NibcINAZO7bow29TDKiESzCWADJub+g3G3Yt9/9c/uDshtVkwhi+yYEulurKVu2rYDOsEiJqf2d4WACUeCPHgdqtfhaAEwKuCZ1rCGfAOnheOvkYRqiJAOyeL9nDRFn2arRHreD283+oeZqoBY+HT+FL/XHniR1andh070oe3ajVumBgKzttVQusqZKv/im+txjSDjVmuh/mym90uMgL94f5buQCNSCcq+iUNOb8zkuv9ALYH98wy3utCNBur7w03wgK4kD00gcvuyGFX+u3VkeAEWw0vw6NywPV0g5eQTJ/69dCB5k7NWkOwLqVsa++ceNP+5OvbYkudzfx9hnZKZk6gEIg1As8lTj10BDQI8T7BBh+ffCVxtuSmcd2cNWBwpGUQAAAABJRU5ErkJggg==',
+  },
+} as const;
 
 interface LoginScreenViewProps {
   onLoginWithPassword: (phone: string, password: string) => void | Promise<void>;
@@ -42,6 +53,9 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [secureText, setSecureText] = useState(true);
+  const [focusedField, setFocusedField] = useState<
+    'phone' | 'password' | null
+  >(null);
 
   const handleAction = () => {
     if (activeTab === 'signin') {
@@ -57,156 +71,270 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
     onLoginWithOtp(phone);
   };
 
+  const isSigningUp = activeTab === 'signin';
+  const isPasswordLogin = activeTab === 'login' && loginMethod === 'password';
+  const actionLabel = isSigningUp
+    ? 'Create account with OTP'
+    : isPasswordLogin
+      ? 'Log in securely'
+      : 'Continue with OTP';
+
   return (
     <View style={styles.container}>
+      <View style={styles.heroWash} />
+      <View style={styles.topGlow} />
+      <View style={styles.bottomGlow} />
       <View style={styles.topRightVector}>
-        <VectorSVG width={width * 0.4} height={width * 0.4} />
+        <VectorSVG width={120} height={120} />
       </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContent}>
-          <AnimatedScreen>
-            <View style={styles.logoContainer}>
-              <LogoSVG width={100} height={100} />
-              <View style={styles.titleContainer}>
-                <Text style={styles.titleBachat}>Bachat</Text>
-                <Text style={styles.titleBazaar}> Bazaar</Text>
-              </View>
-              <Text style={styles.subtitle}>Discover Local Deals Near You</Text>
-            </View>
-
-            <View style={styles.card}>
-              <View style={styles.tabContainer}>
-                <TouchableOpacity
-                  style={[styles.tab, activeTab === 'login' && styles.activeTab]}
-                  onPress={() => {
-                    setActiveTab('login');
-                    setLoginMethod('otp');
-                  }}
-                >
-                  <Text style={[styles.tabText, activeTab === 'login' && styles.activeTabText]}>
-                    Log in
+        style={styles.keyboardAvoiding}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
+          <AnimatedScreen style={styles.animatedScreen}>
+            <View style={styles.animatedContent}>
+              <View style={styles.logoContainer}>
+                <View style={styles.brandPill}>
+                  <View style={styles.brandPillDot} />
+                  <Text style={styles.brandPillText}>
+                    LOCAL SAVINGS, MADE SIMPLE
                   </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.tab, activeTab === 'signin' && styles.activeTab]}
-                  onPress={() => {
-                    setActiveTab('signin');
-                    setLoginMethod('otp');
-                  }}
-                >
-                  <Text style={[styles.tabText, activeTab === 'signin' && styles.activeTabText]}>
-                    Sign up
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.inputSection}>
-                <View style={styles.row}>
-                  <View style={styles.countryCode}>
-                    <Text style={styles.countryCodeText}>IN +91</Text>
-                  </View>
-                  <View style={styles.phoneInputContainer}>
-                    <TextInput
-                      style={styles.inputField}
-                      placeholder="786543567"
-                      keyboardType="phone-pad"
-                      value={phone}
-                      onChangeText={setPhone}
-                      placeholderTextColor={colors.lighterGray}
-                      maxLength={10}
-                    />
-                  </View>
                 </View>
 
-                {activeTab === 'login' && loginMethod === 'password' && (
-                  <>
-                    <Text style={styles.fieldLabel}>Password</Text>
-                    <View style={styles.passwordInputContainer}>
-                      <TextInput
-                        style={[styles.inputField, { paddingRight: 40 }]}
-                        placeholder="••••••••••••"
-                        secureTextEntry={secureText}
-                        value={password}
-                        onChangeText={setPassword}
-                        placeholderTextColor={colors.lighterGray}
-                      />
-                      <TouchableOpacity
-                        style={styles.eyeBtn}
-                        onPress={() => setSecureText(!secureText)}
-                      >
-                        <AppIcon name={secureText ? 'eye-off' : 'eye'} size={18} />
-                      </TouchableOpacity>
-                    </View>
+                <View style={styles.logoHalo}>
+                  <LogoSVG width={86} height={86} />
+                </View>
 
-                    <View style={styles.footerLinks}>
-                      <Text style={styles.wrongPassword}></Text>
-                      <TouchableOpacity onPress={() => onForgotPassword(phone)}>
-                        <Text style={styles.forgotPassword}>Forgot password?</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                )}
+                <Text style={styles.title}>
+                  {isSigningUp ? 'Join Bachat Bazaar' : 'Welcome back'}
+                </Text>
+                <Text style={styles.subtitle}>
+                  {isSigningUp
+                    ? 'Create your account and start saving on everyday shopping.'
+                    : 'Your nearby deals and smarter savings are waiting for you.'}
+                </Text>
               </View>
 
-              <TouchableOpacity
-                style={[styles.actionButton, isSubmitting && styles.actionButtonDisabled]}
-                onPress={handleAction}
-                disabled={isSubmitting}
-              >
-                <Text style={styles.actionButtonText}>
-                  {isSubmitting
-                    ? activeTab === 'login' && loginMethod === 'password'
-                      ? 'Logging in...'
-                      : 'Sending OTP...'
-                    : activeTab === 'login' && loginMethod === 'password'
-                      ? 'Log in'
-                      : 'Send OTP'}
-                </Text>
-              </TouchableOpacity>
+              <View style={styles.card}>
+                <View style={styles.tabContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.tab,
+                      activeTab === 'login' && styles.activeTab,
+                    ]}
+                    onPress={() => {
+                      setActiveTab('login');
+                      setLoginMethod('otp');
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: activeTab === 'login' }}>
+                    <Text
+                      style={[
+                        styles.tabText,
+                        activeTab === 'login' && styles.activeTabText,
+                      ]}>
+                      Log in
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.tab,
+                      activeTab === 'signin' && styles.activeTab,
+                    ]}
+                    onPress={() => {
+                      setActiveTab('signin');
+                      setLoginMethod('otp');
+                    }}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: activeTab === 'signin' }}>
+                    <Text
+                      style={[
+                        styles.tabText,
+                        activeTab === 'signin' && styles.activeTabText,
+                      ]}>
+                      Sign up
+                    </Text>
+                  </TouchableOpacity>
+                </View>
 
-              {activeTab === 'login' && loginMethod === 'otp' && (
+                <View style={styles.formIntro}>
+                  <Text style={styles.formTitle}>
+                    {isSigningUp
+                      ? "Let's get you started"
+                      : 'Enter your details'}
+                  </Text>
+                  <Text style={styles.formHelper}>
+                    {isPasswordLogin
+                      ? 'Use your registered mobile number and password.'
+                      : "We'll send a one-time password to verify your number."}
+                  </Text>
+                </View>
+
+                <View style={styles.inputSection}>
+                  <Text style={styles.fieldLabel}>Mobile number</Text>
+                  <View style={styles.row}>
+                    <View
+                      style={[
+                        styles.countryCode,
+                        focusedField === 'phone' && styles.focusedInput,
+                      ]}>
+                      <Text style={styles.countryLabel}>IND</Text>
+                      <Text style={styles.countryCodeText}>+91</Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.phoneInputContainer,
+                        focusedField === 'phone' && styles.focusedInput,
+                      ]}>
+                      <TextInput
+                        style={styles.inputField}
+                        placeholder="98765 43210"
+                        keyboardType="phone-pad"
+                        value={phone}
+                        onChangeText={value =>
+                          setPhone(value.replace(/\D/g, ''))
+                        }
+                        onFocus={() => setFocusedField('phone')}
+                        onBlur={() => setFocusedField(null)}
+                        placeholderTextColor="#99A4B8"
+                        selectionColor={colors.primary}
+                        maxLength={10}
+                        returnKeyType={isPasswordLogin ? 'next' : 'done'}
+                        accessibilityLabel="Mobile number"
+                      />
+                    </View>
+                  </View>
+
+                  {!isPasswordLogin && (
+                    <View style={styles.securityNote}>
+                      <View style={styles.securityDot} />
+                      <Text style={styles.securityText}>
+                        Your number stays private and secure.
+                      </Text>
+                    </View>
+                  )}
+
+                  {isPasswordLogin && (
+                    <>
+                      <Text style={styles.fieldLabel}>Password</Text>
+                      <View
+                        style={[
+                          styles.passwordInputContainer,
+                          focusedField === 'password' && styles.focusedInput,
+                        ]}>
+                        <TextInput
+                          style={styles.passwordInput}
+                          placeholder="Enter your password"
+                          secureTextEntry={secureText}
+                          value={password}
+                          onChangeText={setPassword}
+                          onFocus={() => setFocusedField('password')}
+                          onBlur={() => setFocusedField(null)}
+                          placeholderTextColor="#99A4B8"
+                          selectionColor={colors.primary}
+                          returnKeyType="done"
+                          onSubmitEditing={handleAction}
+                          accessibilityLabel="Password"
+                        />
+                        <TouchableOpacity
+                          style={styles.eyeBtn}
+                          onPress={() => setSecureText(!secureText)}
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            secureText ? 'Show password' : 'Hide password'
+                          }>
+                          <AppIcon
+                            name={secureText ? 'eye-off' : 'eye'}
+                            size={19}
+                          />
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.footerLinks}>
+                        <TouchableOpacity
+                          onPress={() => onForgotPassword(phone)}>
+                          <Text style={styles.forgotPassword}>
+                            Forgot password?
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
+                </View>
+
                 <TouchableOpacity
-                  style={styles.secondaryButton}
-                  onPress={() => setLoginMethod('password')}
+                  style={[
+                    styles.actionButton,
+                    isSubmitting && styles.actionButtonDisabled,
+                  ]}
+                  onPress={handleAction}
                   disabled={isSubmitting}
-                >
-                  <Text style={styles.secondaryButtonText}>Log in with password</Text>
+                  activeOpacity={0.86}
+                  accessibilityRole="button">
+                  {isSubmitting ? (
+                    <ActivityIndicator size="small" color={colors.white} />
+                  ) : (
+                    <Text style={styles.actionButtonText}>{actionLabel}</Text>
+                  )}
                 </TouchableOpacity>
-              )}
 
-              {activeTab === 'login' && loginMethod === 'password' && (
-                <TouchableOpacity
-                  style={styles.secondaryGhostButton}
-                  onPress={() => setLoginMethod('otp')}
-                  disabled={isSubmitting}
-                >
-                  <Text style={styles.secondaryGhostButtonText}>Use OTP login</Text>
-                </TouchableOpacity>
-              )}
+                {activeTab === 'login' && (
+                  <TouchableOpacity
+                    style={styles.secondaryButton}
+                    onPress={() =>
+                      setLoginMethod(
+                        loginMethod === 'otp' ? 'password' : 'otp',
+                      )
+                    }
+                    disabled={isSubmitting}
+                    activeOpacity={0.78}>
+                    <Text style={styles.secondaryLead}>
+                      {loginMethod === 'otp'
+                        ? 'Prefer your password?'
+                        : 'Want a quicker login?'}
+                    </Text>
+                    <Text style={styles.secondaryButtonText}>
+                      {loginMethod === 'otp' ? ' Use password' : ' Use OTP'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
-              <>
                 <View style={styles.separatorContainer}>
                   <View style={styles.separatorLine} />
-                  <Text style={styles.separatorText}>Or</Text>
+                  <Text style={styles.separatorText}>or continue with</Text>
                   <View style={styles.separatorLine} />
                 </View>
 
                 <View style={styles.socialContainer}>
-                  <TouchableOpacity style={styles.socialButton} onPress={onApplePress}>
-                    <AppIcon name="apple" size={20} />
+                  <TouchableOpacity
+                    style={styles.socialButton}
+                    onPress={onApplePress}
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue with Apple">
+                    <Image source={socialIcons.apple} style={styles.socialIcon} />
+                    <Text style={styles.socialText}>Apple</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.socialButton, styles.dashedBorder]}
+                    style={styles.socialButton}
                     onPress={onGooglePress}
-                  >
-                    <AppIcon name="google" size={20} />
+                    activeOpacity={0.75}
+                    accessibilityRole="button"
+                    accessibilityLabel="Continue with Google">
+                    <Image source={socialIcons.google} style={styles.socialIcon} />
+                    <Text style={styles.socialText}>Google</Text>
                   </TouchableOpacity>
                 </View>
-              </>
+
+                <Text style={styles.termsText}>
+                  By continuing, you agree to our Terms of Service and Privacy
+                  Policy.
+                </Text>
+              </View>
             </View>
           </AnimatedScreen>
         </ScrollView>
@@ -220,105 +348,207 @@ export default LoginScreenView;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.white,
+    backgroundColor: '#F7FAFF',
+    overflow: 'hidden',
+  },
+  keyboardAvoiding: {
+    flex: 1,
+  },
+  heroWash: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: Math.max(315, height * 0.35),
+    backgroundColor: '#EAF2FF',
+    borderBottomLeftRadius: 54,
+    borderBottomRightRadius: 54,
+  },
+  topGlow: {
+    position: 'absolute',
+    width: 230,
+    height: 230,
+    borderRadius: 115,
+    backgroundColor: '#D9E7FF',
+    top: -112,
+    left: -88,
+    opacity: 0.78,
+  },
+  bottomGlow: {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: '#E8F8F0',
+    bottom: -145,
+    right: -110,
+    opacity: 0.8,
   },
   scrollContent: {
     flexGrow: 1,
     alignItems: 'center',
-    paddingBottom: 28,
+    justifyContent: 'center',
+    paddingTop: Platform.OS === 'ios' ? 48 : 28,
+    paddingBottom: 30,
+    paddingHorizontal: 16,
+  },
+  animatedScreen: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  animatedContent: {
+    alignItems: 'center',
+    width: '100%',
   },
   logoContainer: {
     alignItems: 'center',
-    marginTop: height * 0.055,
-    marginBottom: 14,
+    marginBottom: 22,
+    maxWidth: 390,
+    paddingHorizontal: 16,
   },
-  titleContainer: {
+  brandPill: {
     flexDirection: 'row',
-    marginTop: 3,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 100,
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    marginBottom: 14,
+    shadowColor: '#285CB8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 2,
   },
-  titleBachat: {
-    fontSize: 22,
-    fontFamily: fonts.BOLD,
-    color: colors.primary,
+  brandPillDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.darkgreen,
+    marginRight: 8,
   },
-  titleBazaar: {
-    fontSize: 22,
+  brandPillText: {
+    fontSize: 10,
+    letterSpacing: 0.9,
     fontFamily: fonts.BOLD,
-    color: colors.primary,
+    color: colors.primaryDark,
+  },
+  logoHalo: {
+    width: 98,
+    height: 98,
+    borderRadius: 32,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.95)',
+    shadowColor: '#2457B8',
+    shadowOffset: { width: 0, height: 9 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  title: {
+    fontSize: 27,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+    letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 13,
-    color: colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#5F6D84',
+    textAlign: 'center',
+    marginTop: 7,
+    maxWidth: 330,
     fontFamily: fonts.BOLD,
   },
   card: {
-    width: width * 0.88,
+    width: Math.min(width - 32, 430),
     backgroundColor: colors.white,
     borderRadius: 28,
     paddingHorizontal: 20,
-    paddingVertical: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 6,
-    marginTop: 6,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
+    paddingTop: 18,
+    paddingBottom: 20,
+    shadowColor: '#173E7A',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.14,
+    shadowRadius: 24,
+    elevation: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#DCE6F7',
   },
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
-    borderRadius: 16,
+    backgroundColor: '#EEF3FC',
+    borderRadius: 18,
     marginBottom: 20,
     padding: 4,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 2,
   },
   tab: {
     flex: 1,
-    paddingVertical: 11,
+    height: 42,
     alignItems: 'center',
-    borderRadius: 12,
+    justifyContent: 'center',
+    borderRadius: 16,
   },
   activeTab: {
     backgroundColor: colors.primary,
-    shadowColor: colors.primary,
+    shadowColor: colors.primaryDark,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowRadius: 8,
+    elevation: 3,
   },
   tabText: {
-    fontSize: 14,
-    color: colors.text,
+    fontSize: 14.5,
+    color: '#69778D',
     fontFamily: fonts.BOLD,
   },
   activeTabText: {
     color: colors.white,
   },
+  formIntro: {
+    marginBottom: 18,
+  },
+  formTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontFamily: fonts.BOLD,
+  },
+  formHelper: {
+    color: '#718097',
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 5,
+  },
   inputSection: {
-    marginBottom: 16,
+    marginBottom: 2,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 9,
   },
   countryCode: {
-    height: 46,
+    width: 78,
+    height: 54,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    backgroundColor: colors.white,
+    borderColor: '#DCE3EE',
+    backgroundColor: '#F8FAFE',
+  },
+  countryLabel: {
+    fontSize: 9,
+    letterSpacing: 0.8,
+    color: '#8190A6',
+    fontFamily: fonts.BOLD,
+    marginBottom: 1,
   },
   countryCodeText: {
     color: colors.text,
@@ -327,50 +557,84 @@ const styles = StyleSheet.create({
   },
   phoneInputContainer: {
     flex: 1,
-    height: 46,
-    borderRadius: 12,
+    height: 54,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    backgroundColor: colors.white,
+    borderColor: '#DCE3EE',
+    backgroundColor: '#F8FAFE',
     justifyContent: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 15,
   },
   fieldLabel: {
     fontSize: 13,
-    color: colors.text,
+    color: '#33415A',
     fontFamily: fonts.BOLD,
-    marginTop: 14,
-    marginBottom: 6,
+    marginBottom: 8,
+    marginLeft: 2,
+  },
+  focusedInput: {
+    borderColor: colors.primary,
+    backgroundColor: colors.white,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 7,
+    elevation: 2,
+  },
+  securityNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 9,
+    marginBottom: 17,
+    marginLeft: 3,
+  },
+  securityDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.darkgreen,
+    marginRight: 7,
+  },
+  securityText: {
+    color: '#708097',
+    fontSize: 11.5,
+    fontFamily: fonts.BOLD,
   },
   passwordInputContainer: {
     width: '100%',
-    height: 46,
-    backgroundColor: colors.white,
-    borderRadius: 12,
+    height: 54,
+    backgroundColor: '#F8FAFE',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: colors.primaryBorder,
-    paddingLeft: 14,
-    paddingRight: 5,
+    borderColor: '#DCE3EE',
+    paddingLeft: 15,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 5,
+    marginBottom: 8,
   },
   eyeBtn: {
-    padding: 8,
+    width: 48,
+    height: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   inputField: {
     flex: 1,
-    fontSize: 14,
-    color: colors.text,
+    fontSize: 15,
+    color: '#182238',
+    fontFamily: fonts.BOLD,
+  },
+  passwordInput: {
+    flex: 1,
+    fontSize: 15,
+    color: '#182238',
     fontFamily: fonts.BOLD,
   },
   footerLinks: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 8,
-  },
-  wrongPassword: {
-    color: colors.mutedText,
+    justifyContent: 'flex-end',
+    minHeight: 24,
+    marginBottom: 7,
   },
   forgotPassword: {
     color: colors.primary,
@@ -379,93 +643,106 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     width: '100%',
-    height: 50,
+    height: 54,
     backgroundColor: colors.primary,
-    borderRadius: 14,
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.14,
-    shadowRadius: 7,
+    shadowColor: colors.primaryDark,
+    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
     elevation: 5,
   },
   actionButtonDisabled: {
-    opacity: 0.75,
+    opacity: 0.7,
   },
   secondaryButton: {
     width: '100%',
-    height: 50,
-    backgroundColor: colors.primary,
-    borderRadius: 14,
+    minHeight: 42,
+    backgroundColor: colors.primarySoft,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 12,
+    flexDirection: 'row',
+    marginTop: 11,
+    paddingHorizontal: 12,
+  },
+  secondaryLead: {
+    fontSize: 12.5,
+    fontFamily: fonts.BOLD,
+    color: '#65748B',
   },
   secondaryButtonText: {
-    fontSize: 15,
+    fontSize: 12.5,
     fontFamily: fonts.BOLD,
-    color: colors.white,
-  },
-  secondaryGhostButton: {
-    width: '100%',
-    height: 46,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 12,
-    backgroundColor: colors.primarySoft,
-  },
-  secondaryGhostButtonText: {
-    fontSize: 14,
-    fontFamily: fonts.BOLD,
-    color: colors.primary,
+    color: colors.primaryDark,
   },
   actionButtonText: {
     fontSize: 15,
     color: colors.white,
     fontFamily: fonts.BOLD,
+    letterSpacing: 0.1,
   },
   separatorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 14,
+    marginTop: 18,
+    marginBottom: 14,
   },
   separatorLine: {
     flex: 1,
     height: 1,
-    backgroundColor: colors.primaryBorder,
+    backgroundColor: '#E2E8F2',
   },
   separatorText: {
-    marginHorizontal: 10,
-    color: colors.mutedText,
+    marginHorizontal: 11,
+    color: '#8794A8',
     fontFamily: fonts.BOLD,
+    fontSize: 10.5,
   },
   socialContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 12,
+    gap: 10,
   },
   socialButton: {
-    width: 56,
-    height: 42,
-    borderRadius: 10,
+    flex: 1,
+    height: 50,
+    borderRadius: 14,
     backgroundColor: colors.white,
     justifyContent: 'center',
     alignItems: 'center',
+    flexDirection: 'row',
     borderWidth: 1,
-    borderColor: colors.primaryBorder,
+    borderColor: '#DCE3EE',
   },
-  dashedBorder: {
-    borderStyle: 'dashed',
+  socialIcon: {
+    width: 19,
+    height: 19,
+    resizeMode: 'contain',
+    marginRight: 9,
+  },
+  socialText: {
+    color: '#27344B',
+    fontSize: 13,
+    fontFamily: fonts.BOLD,
+  },
+  termsText: {
+    marginTop: 15,
+    paddingHorizontal: 8,
+    color: '#8A96A9',
+    fontSize: 10.5,
+    lineHeight: 15,
+    textAlign: 'center',
   },
   topRightVector: {
     position: 'absolute',
-    top: 28,
-    right: 0,
-    width: 150,
-    height: 200,
+    top: -4,
+    right: -6,
+    width: 120,
+    height: 120,
     overflow: 'visible',
-    opacity: 0.55,
+    opacity: 0.7,
   },
 });
