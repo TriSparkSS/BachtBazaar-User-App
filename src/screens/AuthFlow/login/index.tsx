@@ -4,13 +4,15 @@ import LoginScreenView from './LoginScreenView';
 import { useAppContext } from '../../../context/AppContext';
 import { userAuthApi } from '../../../services/userAuthApi';
 import {
-  normalizeIndianPhoneNumber,
+  normalizePhoneNumber,
   sendPhoneVerificationOtp,
-  validateIndianPhoneInput,
+  validatePhoneInput,
 } from '../../../services/firebasePhoneAuth';
 import { showAppAlert } from '../../../services/appAlert';
 import { configureGoogleSignIn, signInWithApple, signInWithGoogle } from '../../../services/firebaseSocialAuth';
 import { useEffect } from 'react';
+
+const BYPASS_AUTH_APIS = true;
 
 const Login = () => {
   const navigation = useNavigation();
@@ -25,9 +27,12 @@ const Login = () => {
     phone: string,
     mode: 'login' | 'signup' | 'forgot-password',
     exists: boolean,
+    skipPhoneVerification = false,
   ) => {
-    const normalizedPhone = normalizeIndianPhoneNumber(phone);
-    await sendPhoneVerificationOtp(phone);
+    const normalizedPhone = normalizePhoneNumber(phone);
+    if (!skipPhoneVerification) {
+      await sendPhoneVerificationOtp(phone);
+    }
 
     setPendingAuth({
       phone: phone.replace(/\D/g, ''),
@@ -43,8 +48,11 @@ const Login = () => {
   };
 
   const handleLoginWithPassword = async (phone: string, password: string) => {
-    if (!validateIndianPhoneInput(phone)) {
-      showAppAlert('Invalid number', 'Please enter a valid 10-digit mobile number.');
+    if (!validatePhoneInput(phone)) {
+      showAppAlert(
+        'Invalid number',
+        'Please enter a valid mobile number for the selected country.',
+      );
       return;
     }
 
@@ -55,7 +63,20 @@ const Login = () => {
 
     try {
       setIsSubmitting(true);
-      const response = await userAuthApi.loginWithPassword(phone.replace(/\D/g, ''), password);
+
+      if (BYPASS_AUTH_APIS) {
+        console.log('[Auth] Password login bypassed for UI development', {
+          phone,
+        });
+        const root = navigation.getParent();
+        if (root) {
+          // @ts-ignore
+          root.navigate('MainStack');
+        }
+        return;
+      }
+
+      const response = await userAuthApi.loginWithPassword(phone, password);
       console.log('[Auth] Login with password response', response);
       await setSession(response.token, response.user);
       const root = navigation.getParent();
@@ -73,15 +94,26 @@ const Login = () => {
   };
 
   const handleLoginWithOtp = async (phone: string) => {
-    if (!validateIndianPhoneInput(phone)) {
-      showAppAlert('Invalid number', 'Please enter a valid 10-digit mobile number.');
+    if (!validatePhoneInput(phone)) {
+      showAppAlert(
+        'Invalid number',
+        'Please enter a valid mobile number for the selected country.',
+      );
       return;
     }
 
     try {
       setIsSubmitting(true);
-      const plainPhone = phone.replace(/\D/g, '');
-      const sendOtpResponse = await userAuthApi.sendOtp(plainPhone);
+
+      if (BYPASS_AUTH_APIS) {
+        console.log('[Auth] Login OTP start bypassed for UI development', {
+          phone,
+        });
+        await navigateToOtp(phone, 'login', true, true);
+        return;
+      }
+
+      const sendOtpResponse = await userAuthApi.sendOtp(phone);
       console.log('[Auth] Send OTP response', sendOtpResponse);
 
       if (!sendOtpResponse.exists) {
@@ -99,15 +131,26 @@ const Login = () => {
   };
 
   const handleSignupWithOtp = async (phone: string) => {
-    if (!validateIndianPhoneInput(phone)) {
-      showAppAlert('Invalid number', 'Please enter a valid 10-digit mobile number.');
+    if (!validatePhoneInput(phone)) {
+      showAppAlert(
+        'Invalid number',
+        'Please enter a valid mobile number for the selected country.',
+      );
       return;
     }
 
     try {
       setIsSubmitting(true);
-      const plainPhone = phone.replace(/\D/g, '');
-      const sendOtpResponse = await userAuthApi.sendOtp(plainPhone);
+
+      if (BYPASS_AUTH_APIS) {
+        console.log('[Auth] Signup OTP start bypassed for UI development', {
+          phone,
+        });
+        await navigateToOtp(phone, 'signup', false, true);
+        return;
+      }
+
+      const sendOtpResponse = await userAuthApi.sendOtp(phone);
       console.log('[Auth] Signup Send OTP response', sendOtpResponse);
 
       if (sendOtpResponse.exists) {
@@ -125,13 +168,25 @@ const Login = () => {
   };
 
   const handleForgotPassword = async (phone: string) => {
-    if (!validateIndianPhoneInput(phone)) {
-      showAppAlert('Invalid number', 'Please enter a valid 10-digit mobile number.');
+    if (!validatePhoneInput(phone)) {
+      showAppAlert(
+        'Invalid number',
+        'Please enter a valid mobile number for the selected country.',
+      );
       return;
     }
 
     try {
       setIsSubmitting(true);
+
+      if (BYPASS_AUTH_APIS) {
+        console.log('[Auth] Forgot password OTP start bypassed for UI development', {
+          phone,
+        });
+        await navigateToOtp(phone, 'forgot-password', true, true);
+        return;
+      }
+
       const sendOtpResponse = await userAuthApi.sendOtp(phone);
       console.log('[Auth] Forgot password send OTP response', sendOtpResponse);
 

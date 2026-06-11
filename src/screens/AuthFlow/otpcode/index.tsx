@@ -4,22 +4,30 @@ import OTPCodeScreenView from './OTPCodeScreenView';
 import { useAppContext } from '../../../context/AppContext';
 import {
   clearPhoneVerificationState,
-  confirmPhoneVerificationOtp,
   resendPhoneVerificationOtp,
 } from '../../../services/firebasePhoneAuth';
-import { userAuthApi } from '../../../services/userAuthApi';
 import { showAppAlert } from '../../../services/appAlert';
 
 const OTPCode = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { pendingAuth, setSession } = useAppContext();
+  const { pendingAuth } = useAppContext();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isResending, setIsResending] = useState(false);
 
   // @ts-ignore
   const phoneNumber = route.params?.phoneNumber ?? pendingAuth?.normalizedPhone ?? '';
+
+  const handleBack = () => {
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
+    // @ts-ignore
+    navigation.navigate('Login');
+  };
 
   const handleVerify = async () => {
     const fullOtp = otp.join('');
@@ -38,18 +46,20 @@ const OTPCode = () => {
 
     try {
       setIsVerifying(true);
-      const { token: firebaseToken } = await confirmPhoneVerificationOtp(fullOtp);
-      console.log('[Auth] Firebase token received for OTP verification', {
+
+      /*
+       * Temporary UI-development bypass:
+       * Restore confirmPhoneVerificationOtp and the token-based API calls here
+       * when Firebase OTP verification is ready to be enabled again.
+       */
+      console.log('[Auth] OTP verification bypassed for UI development', {
         phone: pendingAuth.phone,
         exists: pendingAuth.exists,
         mode: pendingAuth.mode,
       });
+      clearPhoneVerificationState();
 
       if (pendingAuth.mode === 'login') {
-        const response = await userAuthApi.loginWithOtp(firebaseToken);
-        console.log('[Auth] OTP API response', response);
-        await setSession(response.token, response.user);
-        clearPhoneVerificationState();
         const root = navigation.getParent();
         if (root) {
           // @ts-ignore
@@ -59,27 +69,20 @@ const OTPCode = () => {
       }
 
       if (pendingAuth.mode === 'forgot-password') {
-        console.log('[Auth] OTP verified for forgot password');
-        clearPhoneVerificationState();
         // @ts-ignore
         navigation.navigate('Forgot', {
           flow: 'forgot-password',
-          firebaseToken,
           phoneNumber: pendingAuth.normalizedPhone,
+          developmentBypass: true,
         });
         return;
       }
 
-      const response = await userAuthApi.verifyOtp(firebaseToken);
-      console.log('[Auth] OTP API response', response);
-      await setSession(response.token, response.user);
-      clearPhoneVerificationState();
-
       // @ts-ignore
       navigation.navigate('Forgot', {
-        userId: response.user._id,
-        sessionToken: response.token,
         flow: 'signup-password',
+        phoneNumber: pendingAuth.normalizedPhone,
+        developmentBypass: true,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to verify OTP.';
@@ -109,6 +112,7 @@ const OTPCode = () => {
       setOtp={setOtp}
       onVerify={handleVerify}
       onResend={handleResend}
+      onBack={handleBack}
       phoneNumber={phoneNumber}
       isVerifying={isVerifying}
       isResending={isResending}

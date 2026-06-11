@@ -8,6 +8,8 @@ import { useAppContext } from '../../../context/AppContext';
 const isPasswordValid = (value: string) =>
     value.length >= 8 && /[A-Z]/.test(value) && /[!@#$%]/.test(value);
 
+const BYPASS_PASSWORD_APIS = true;
+
 const ForgotPassword = () => {
     const navigation = useNavigation();
     const route = useRoute();
@@ -22,13 +24,19 @@ const ForgotPassword = () => {
     const phoneNumber = route.params?.phoneNumber;
     // @ts-ignore
     const sessionToken = route.params?.sessionToken;
+    // @ts-ignore
+    const developmentBypass = route.params?.developmentBypass;
 
     const handleBack = () => {
         navigation.goBack();
     };
 
     const handleSubmit = async (oldPassword: string, password: string, confirm: string) => {
-        console.log('[Auth] Password setup attempt', { hasUserId: Boolean(userId), flow });
+        console.log('[Auth] Password setup attempt', {
+            hasUserId: Boolean(userId),
+            flow,
+            developmentBypass: Boolean(developmentBypass),
+        });
         if (password !== confirm) {
            showAppAlert('Error', 'Passwords do not match');
            return;
@@ -43,6 +51,34 @@ const ForgotPassword = () => {
         }
 
         try {
+            if (BYPASS_PASSWORD_APIS || developmentBypass) {
+                console.log('[Auth] Password submit bypassed for UI development', {
+                    flow,
+                    phoneNumber,
+                });
+
+                if (flow === 'change-password') {
+                    showAppAlert('Success', 'Password updated successfully', [
+                        { text: 'OK', onPress: () => navigation.goBack() }
+                    ]);
+                    return;
+                }
+
+                if (flow === 'forgot-password') {
+                    showAppAlert('Success', 'Password reset successfully', [
+                        { text: 'OK', onPress: () => navigation.dispatch(StackActions.replace('Login')) }
+                    ]);
+                    return;
+                }
+
+                // @ts-ignore
+                navigation.dispatch(StackActions.replace('Successfull', {
+                    isNewUser: true,
+                    developmentBypass: true,
+                }));
+                return;
+            }
+
             if (flow === 'change-password') {
                 if (!authToken) {
                     showAppAlert('Session expired', 'Please log in again.');

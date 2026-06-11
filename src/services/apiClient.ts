@@ -9,6 +9,46 @@ interface RequestOptions {
   headers?: Record<string, string>;
 }
 
+type ApiLogPayload = Record<string, unknown>;
+
+const SENSITIVE_KEYS = new Set([
+  'authorization',
+  'firebasetoken',
+  'newpassword',
+  'oldpassword',
+  'otp',
+  'password',
+  'token',
+]);
+
+const isSensitiveKey = (key?: string) =>
+  Boolean(key && SENSITIVE_KEYS.has(key.toLowerCase()));
+
+const redactForLogs = (value: unknown, key?: string): unknown => {
+  if (isSensitiveKey(key)) {
+    return '[REDACTED]';
+  }
+
+  if (value instanceof FormData) {
+    return '[FormData payload]';
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(item => redactForLogs(item));
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).reduce<
+      Record<string, unknown>
+    >((sanitized, [entryKey, entryValue]) => {
+      sanitized[entryKey] = redactForLogs(entryValue, entryKey);
+      return sanitized;
+    }, {});
+  }
+
+  return value;
+};
+
 const buildHeaders = (options: RequestOptions) => {
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -26,17 +66,17 @@ const buildHeaders = (options: RequestOptions) => {
   return headers;
 };
 
-const logApiEvent = (label: string, path: string, payload?: unknown) => {
+export const logApiEvent = (label: string, payload?: ApiLogPayload) => {
   if (!__DEV__) {
     return;
   }
 
   if (payload === undefined) {
-    console.log(`[API] ${label} ${path}`);
+    console.log(`[API] ${label}`);
     return;
   }
 
-  console.log(`[API] ${label} ${path}`, payload);
+  console.log(`[API] ${label}`, redactForLogs(payload));
 };
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -48,15 +88,23 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   let response: Response;
   const method = options.method ?? 'GET';
-  const requestBody =
-    options.body instanceof FormData ? '[FormData payload]' : options.body ?? null;
+  const url = `${API_BASE_URL}${path}`;
+  const startedAt = Date.now();
+  const headers = buildHeaders(options);
+  const requestBody = options.body ?? null;
 
-  logApiEvent(`${method} request`, path, requestBody);
+  logApiEvent(`${method} request`, {
+    url,
+    path,
+    method,
+    headers,
+    requestBody,
+  });
 
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(url, {
       method,
-      headers: buildHeaders(options),
+      headers,
       body:
         options.body == null
           ? undefined
@@ -66,7 +114,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : '';
-    logApiEvent(`${method} network-error`, path, message);
+    logApiEvent(`${method} network-error`, {
+      url,
+      path,
+      method,
+      durationMs: Date.now() - startedAt,
+      error: message,
+    });
 
     if (message.toLowerCase().includes('network request failed')) {
       throw new Error(
@@ -83,7 +137,14 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     : await response.text();
 
   if (!response.ok) {
-    logApiEvent(`${method} error-response`, path, payload);
+    logApiEvent(`${method} error-response`, {
+      url,
+      path,
+      method,
+      status: response.status,
+      durationMs: Date.now() - startedAt,
+      responseBody: payload,
+    });
     const message =
       typeof payload === 'object' && payload && 'message' in payload
         ? String(payload.message)
@@ -91,6 +152,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     throw new Error(message);
   }
 
-  logApiEvent(`${method} response`, path, payload);
+  logApiEvent(`${method} response`, {
+    url,
+    path,
+    method,
+    status: response.status,
+    durationMs: Date.now() - startedAt,
+    responseBody: payload,
+  });
   return payload as T;
 }

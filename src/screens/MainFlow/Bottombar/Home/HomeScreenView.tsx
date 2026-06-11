@@ -24,6 +24,7 @@ import { API_BASE_URL } from '../../../../config/api';
 import { colors, fonts } from '../../../../helpers/styles';
 import { useAppContext } from '../../../../context/AppContext';
 import { showAppAlert } from '../../../../services/appAlert';
+import { logApiEvent } from '../../../../services/apiClient';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 48) / 3 - 8;
@@ -215,19 +216,38 @@ const HomeScreenView = () => {
               const { latitude, longitude } = position.coords;
               console.log('[Location] Current coordinates', { latitude, longitude });
 
-              const response = await fetch(
-                `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`,
-                {
-                  headers: {
-                    Accept: 'application/json',
-                  },
-                },
-              );
+              const reverseGeocodeUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`;
+              const reverseGeocodeStartedAt = Date.now();
+              const reverseGeocodeHeaders = {
+                Accept: 'application/json',
+              };
+
+              logApiEvent('GET request', {
+                url: reverseGeocodeUrl,
+                method: 'GET',
+                headers: reverseGeocodeHeaders,
+              });
+
+              const response = await fetch(reverseGeocodeUrl, {
+                headers: reverseGeocodeHeaders,
+              });
 
               const payload = await response.json();
+              logApiEvent(response.ok ? 'GET response' : 'GET error-response', {
+                url: reverseGeocodeUrl,
+                method: 'GET',
+                status: response.status,
+                durationMs: Date.now() - reverseGeocodeStartedAt,
+                responseBody: payload,
+              });
               console.log('[Location] Reverse geocode response', payload);
               setHeaderAddress(formatAddress(payload));
-            } catch {
+            } catch (error) {
+              logApiEvent('GET network-error', {
+                url: 'https://nominatim.openstreetmap.org/reverse',
+                method: 'GET',
+                error: error instanceof Error ? error.message : String(error),
+              });
               setHeaderAddress(fallbackAddress);
             }
           },

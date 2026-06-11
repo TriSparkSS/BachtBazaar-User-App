@@ -2,16 +2,25 @@ import { API_ENDPOINTS } from '../config/api';
 import { AuthResponse, SendOtpResponse, UserProfile } from '../types/auth';
 import { apiRequest } from './apiClient';
 
-const formatIndianApiPhone = (phone: string) => {
-const digits = phone.replace(/\D/g, '');
-return digits.slice(-10); // always return last 10 digits
+const formatApiPhone = (phone: string) => {
+  const digits = phone.replace(/\D/g, '');
+
+  if (phone.trim().startsWith('+')) {
+    if (digits.length === 12 && digits.startsWith('91')) {
+      return digits.slice(-10);
+    }
+
+    return `+${digits}`;
+  }
+
+  return digits;
 };
 
 export const userAuthApi = {
   sendOtp(phone: string) {
     return apiRequest<SendOtpResponse>(API_ENDPOINTS.sendOtp, {
       method: 'POST',
-      body: { phone: formatIndianApiPhone(phone) },
+      body: { phone: formatApiPhone(phone) },
     });
   },
 
@@ -39,7 +48,7 @@ export const userAuthApi = {
   loginWithPassword(phone: string, password: string) {
     return apiRequest<AuthResponse>(API_ENDPOINTS.loginPassword, {
       method: 'POST',
-      body: { phone: formatIndianApiPhone(phone), password },
+      body: { phone: formatApiPhone(phone), password },
     });
   },
 
