@@ -1,5 +1,6 @@
 import React from 'react';
-import { Image, ImageSourcePropType, ImageStyle, StyleProp } from 'react-native';
+import { ImageStyle, StyleProp, StyleSheet } from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 
 export type AppIconName =
   | 'menu'
@@ -40,57 +41,70 @@ export type AppIconName =
   | 'grocery'
   | 'food';
 
-const iconMap: Record<AppIconName, ImageSourcePropType> = {
-  menu: require('../assets/icon/Icon.png'),
-  bell: require('../assets/icon/SVG.png'),
-  search: require('../assets/icon/search.png'),
-  qr: require('../assets/icon/Image (1).png'),
-  google: require('../assets/icon/google.png'),
-  apple: require('../assets/icon/apple-logo-svgrepo-com 1.png'),
-  eye: require('../assets/icon/eye-outline.png'),
-  'eye-off': require('../assets/icon/eye-off-outline.png'),
-  close: require('../assets/icon/icons8-cancel-50 2.png'),
-  phone: require('../assets/icon/phone-receiver-silhouette 1.png'),
-  location: require('../assets/icon/store 1.png'),
-  logout: require('../assets/icon/icons8-logout-24 (1) 1.png'),
-  overview: require('../assets/icon/dashboard 1.png'),
-  shop: require('../assets/icon/store 1.png'),
-  delivery: require('../assets/icon/package-box 1.png'),
-  'discover-product': require('../assets/icon/package 1.png'),
-  offers: require('../assets/icon/discount 1.png'),
-  wallet: require('../assets/icon/wallet-filled-money-tool 1.png'),
-  'saving-summary': require('../assets/icon/lamp 1.png'),
-  target: require('../assets/icon/icons8-target-64 1.png'),
-  tips: require('../assets/icon/mail 1.png'),
-  coupons: require('../assets/icon/coupon 1.png'),
-  'saved-stores': require('../assets/icon/store 1.png'),
-  'saved-products': require('../assets/icon/package 1.png'),
-  password: require('../assets/icon/icons8-password-64 1.png'),
-  'edit-profile': require('../assets/icon/edit-03.png'),
-  notification: require('../assets/icon/SVG.png'),
-  'delete-account': require('../assets/icon/Trash Can.png'),
-  reward: require('../assets/icon/discount 1.png'),
-  'nearby-coupons': require('../assets/icon/coupon 1.png'),
-  'scan-save': require('../assets/icon/Image (1).png'),
-  'invite-earn': require('../assets/icon/icons8-person-30 1.png'),
-  'saved-offers': require('../assets/icon/Image (1) 1.png'),
-  'hot-deals': require('../assets/icon/discount 1.png'),
-  jewelry: require('../assets/icon/Image (1) 1.png'),
-  grocery: require('../assets/icon/shopping-cart 1.png'),
-  food: require('../assets/icon/package-box 1.png'),
+const iconMap: Record<AppIconName, string> = {
+  menu: 'menu',
+  bell: 'bell-outline',
+  search: 'magnify',
+  qr: 'qrcode-scan',
+  google: 'google',
+  apple: 'apple',
+  eye: 'eye-outline',
+  'eye-off': 'eye-off-outline',
+  close: 'close',
+  phone: 'phone-outline',
+  location: 'map-marker-outline',
+  logout: 'logout',
+  overview: 'view-dashboard-outline',
+  shop: 'store-outline',
+  delivery: 'truck-delivery-outline',
+  'discover-product': 'package-variant',
+  offers: 'tag-multiple-outline',
+  wallet: 'wallet-outline',
+  'saving-summary': 'chart-line',
+  target: 'bullseye-arrow',
+  tips: 'lightbulb-on-outline',
+  coupons: 'ticket-percent-outline',
+  'saved-stores': 'store-marker-outline',
+  'saved-products': 'bookmark-box-outline',
+  password: 'lock-outline',
+  'edit-profile': 'account-edit-outline',
+  notification: 'bell-badge-outline',
+  'delete-account': 'delete-outline',
+  reward: 'gift-outline',
+  'nearby-coupons': 'map-marker-radius-outline',
+  'scan-save': 'qrcode-scan',
+  'invite-earn': 'account-plus-outline',
+  'saved-offers': 'bookmark-outline',
+  'hot-deals': 'fire',
+  jewelry: 'diamond-stone',
+  grocery: 'cart-outline',
+  food: 'food-outline',
 };
 
 interface AppIconProps {
   name: AppIconName;
   size?: number;
+  color?: string;
   style?: StyleProp<ImageStyle>;
 }
 
-const AppIcon: React.FC<AppIconProps> = ({ name, size = 20, style }) => (
-  <Image
-    source={iconMap[name]}
-    style={[{ width: size, height: size, resizeMode: 'contain' }, style]}
-  />
-);
+const AppIcon: React.FC<AppIconProps> = ({
+  name,
+  size = 20,
+  color = '#202843',
+  style,
+}) => {
+  const flatStyle = StyleSheet.flatten(style);
+  const iconColor =
+    (flatStyle?.tintColor as string | undefined) ?? color;
+
+  return (
+    <MaterialCommunityIcons
+      name={iconMap[name]}
+      size={size}
+      color={iconColor}
+    />
+  );
+};
 
 export default AppIcon;

@@ -5,21 +5,78 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
-  Pressable,
   Dimensions,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   ActivityIndicator,
-  Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle, Path } from 'react-native-svg';
 import AnimatedScreen from '../../../components/AnimatedScreen';
-import AppIcon from '../../../components/AppIcon';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
 
 const { width, height } = Dimensions.get('window');
+
+const BackArrowIcon = () => (
+  <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M14.5 6.5L9 12l5.5 5.5"
+      stroke="#FFFFFF"
+      strokeWidth={2.6}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const LockIcon = ({ active }: { active?: boolean }) => (
+  <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M7 10V8a5 5 0 0110 0v2"
+      stroke={active ? colors.primary : '#99A4B8'}
+      strokeWidth={1.8}
+      strokeLinecap="round"
+    />
+    <Path
+      d="M6 10h12v10H6z"
+      stroke={active ? colors.primary : '#99A4B8'}
+      strokeWidth={1.8}
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const EyeIcon = ({ hidden, color }: { hidden: boolean; color: string }) =>
+  hidden ? (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M3 3l18 18"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M10.58 10.58A2 2 0 0012 14a2 2 0 001.41-.59M9.88 5.09A10.94 10.94 0 0112 5c7 0 10 7 10 7a13.16 13.16 0 01-1.67 2.68M6.61 6.61A13.526 13.526 0 002 12s3 7 10 7a9.74 9.74 0 005.39-1.61"
+        stroke={color}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  ) : (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"
+        stroke={color}
+        strokeWidth={1.8}
+        strokeLinejoin="round"
+      />
+      <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth={1.8} />
+    </Svg>
+  );
 
 const hasEightCharacters = (value: string) => value.length >= 8;
 const hasUppercaseLetter = (value: string) => /[A-Z]/.test(value);
@@ -134,6 +191,59 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
     refocusInput(confirmPasswordRef);
   };
 
+  const renderPasswordField = (
+    label: string,
+    value: string,
+    onChangeText: (text: string) => void,
+    secure: boolean,
+    onToggleSecure: () => void,
+    inputRef: React.RefObject<TextInput | null>,
+    fieldKey: string,
+    placeholder: string,
+    returnKeyType: 'next' | 'done',
+    onSubmitEditing?: () => void,
+  ) => (
+    <>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View
+        style={[
+          styles.passwordInputContainer,
+          focusedField === fieldKey && styles.focusedInput,
+        ]}>
+        <View style={styles.inputLeadingIcon}>
+          <LockIcon active={focusedField === fieldKey} />
+        </View>
+        <TextInput
+          ref={inputRef}
+          style={styles.passwordInput}
+          placeholder={placeholder}
+          secureTextEntry={secure}
+          value={value}
+          onChangeText={onChangeText}
+          onFocus={() => setFocusedField(fieldKey)}
+          onBlur={() => setFocusedField(null)}
+          placeholderTextColor="#99A4B8"
+          selectionColor={colors.primary}
+          returnKeyType={returnKeyType}
+          blurOnSubmit={returnKeyType === 'done'}
+          onSubmitEditing={onSubmitEditing}
+        />
+        <TouchableOpacity
+          style={styles.eyeBtn}
+          onPress={onToggleSecure}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={secure ? `Show ${label.toLowerCase()}` : `Hide ${label.toLowerCase()}`}
+          accessibilityState={{ selected: !secure }}>
+          <EyeIcon
+            hidden={secure}
+            color={secure ? '#607287' : colors.primary}
+          />
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.heroWash} />
@@ -143,18 +253,16 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
         <VectorSVG width={120} height={120} />
       </View>
 
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={onBack}
-        activeOpacity={0.78}
-        accessibilityRole="button"
-        accessibilityLabel="Go back">
-        <Image
-          source={require('../../../assets/icon/ic_back.png')}
-          style={styles.backIcon}
-          resizeMode="contain"
-        />
-      </TouchableOpacity>
+      <SafeAreaView edges={['top']} style={styles.safeArea}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={onBack}
+          activeOpacity={0.78}
+          accessibilityRole="button"
+          accessibilityLabel="Go back">
+          <BackArrowIcon />
+        </TouchableOpacity>
+      </SafeAreaView>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -166,7 +274,7 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
           <AnimatedScreen style={styles.animatedScreen}>
             <View style={styles.logoContainer}>
               <View style={styles.logoHalo}>
-                <LogoSVG width={82} height={82} />
+                <LogoSVG width={86} height={86} />
               </View>
               <View style={styles.badge}>
                 <View style={styles.badgeDot} />
@@ -180,121 +288,45 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
               <Text style={styles.cardTitle}>{screenCopy.cardTitle}</Text>
               <Text style={styles.cardCopy}>{screenCopy.cardCopy}</Text>
 
-              {isChangePassword && (
-                <>
-                  <Text style={styles.fieldLabel}>Old Password</Text>
-                  <Pressable
-                    style={[
-                      styles.passwordInputContainer,
-                      focusedField === 'oldPassword' && styles.focusedInput,
-                    ]}
-                    onPress={() => oldPasswordRef.current?.focus()}>
-                    <TextInput
-                      ref={oldPasswordRef}
-                      style={styles.passwordInput}
-                      placeholder="Enter old password"
-                      secureTextEntry={secureOldText}
-                      value={oldPassword}
-                      onChangeText={setOldPassword}
-                      onFocus={() => setFocusedField('oldPassword')}
-                      onBlur={() => setFocusedField(null)}
-                      placeholderTextColor="#99A4B8"
-                      selectionColor={colors.primary}
-                      showSoftInputOnFocus
-                      returnKeyType="next"
-                      blurOnSubmit={false}
-                      onSubmitEditing={() => passwordRef.current?.focus()}
-                    />
-                    <TouchableOpacity
-                      style={styles.eyeBtn}
-                      onPress={toggleOldPasswordVisibility}
-                      accessibilityRole="button"
-                      accessibilityLabel={
-                        secureOldText ? 'Show old password' : 'Hide old password'
-                      }
-                      accessibilityState={{ selected: !secureOldText }}>
-                      <AppIcon
-                        name={secureOldText ? 'eye' : 'eye-off'}
-                        size={18}
-                      />
-                    </TouchableOpacity>
-                  </Pressable>
-                </>
+              {isChangePassword &&
+                renderPasswordField(
+                  'Old Password',
+                  oldPassword,
+                  setOldPassword,
+                  secureOldText,
+                  toggleOldPasswordVisibility,
+                  oldPasswordRef,
+                  'oldPassword',
+                  'Enter old password',
+                  'next',
+                  () => passwordRef.current?.focus(),
+                )}
+
+              {renderPasswordField(
+                'Password',
+                password,
+                setPassword,
+                secureText,
+                togglePasswordVisibility,
+                passwordRef,
+                'password',
+                'Create password',
+                'next',
+                () => confirmPasswordRef.current?.focus(),
               )}
 
-              <Text style={styles.fieldLabel}>Password</Text>
-              <Pressable
-                style={[
-                  styles.passwordInputContainer,
-                  focusedField === 'password' && styles.focusedInput,
-                ]}
-                onPress={() => passwordRef.current?.focus()}>
-                <TextInput
-                  ref={passwordRef}
-                  style={styles.passwordInput}
-                  placeholder="Create password"
-                  secureTextEntry={secureText}
-                  value={password}
-                  onChangeText={setPassword}
-                  onFocus={() => setFocusedField('password')}
-                  onBlur={() => setFocusedField(null)}
-                  placeholderTextColor="#99A4B8"
-                  selectionColor={colors.primary}
-                  showSoftInputOnFocus
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => confirmPasswordRef.current?.focus()}
-                />
-                <TouchableOpacity
-                  style={styles.eyeBtn}
-                  onPress={togglePasswordVisibility}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    secureText ? 'Show password' : 'Hide password'
-                  }
-                  accessibilityState={{ selected: !secureText }}>
-                  <AppIcon name={secureText ? 'eye' : 'eye-off'} size={18} />
-                </TouchableOpacity>
-              </Pressable>
-
-              <Text style={styles.fieldLabel}>Confirm Password</Text>
-              <Pressable
-                style={[
-                  styles.passwordInputContainer,
-                  focusedField === 'confirmPassword' && styles.focusedInput,
-                ]}
-                onPress={() => confirmPasswordRef.current?.focus()}>
-                <TextInput
-                  ref={confirmPasswordRef}
-                  style={styles.passwordInput}
-                  placeholder="Confirm password"
-                  secureTextEntry={secureConfirmText}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  onFocus={() => setFocusedField('confirmPassword')}
-                  onBlur={() => setFocusedField(null)}
-                  placeholderTextColor="#99A4B8"
-                  selectionColor={colors.primary}
-                  showSoftInputOnFocus
-                  returnKeyType="done"
-                  onSubmitEditing={handleSubmit}
-                />
-                <TouchableOpacity
-                  style={styles.eyeBtn}
-                  onPress={toggleConfirmPasswordVisibility}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    secureConfirmText
-                      ? 'Show confirm password'
-                      : 'Hide confirm password'
-                  }
-                  accessibilityState={{ selected: !secureConfirmText }}>
-                  <AppIcon
-                    name={secureConfirmText ? 'eye' : 'eye-off'}
-                    size={18}
-                  />
-                </TouchableOpacity>
-              </Pressable>
+              {renderPasswordField(
+                'Confirm Password',
+                confirmPassword,
+                setConfirmPassword,
+                secureConfirmText,
+                toggleConfirmPasswordVisibility,
+                confirmPasswordRef,
+                'confirmPassword',
+                'Confirm password',
+                'done',
+                handleSubmit,
+              )}
 
               <View style={styles.requirementsWrap}>
                 {passwordChecks.map(check => (
@@ -309,9 +341,9 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
                         styles.requirementIndicator,
                         check.met && styles.requirementIndicatorActive,
                       ]}>
-                      {check.met && (
+                      {check.met ? (
                         <Text style={styles.requirementCheckmark}>✓</Text>
-                      )}
+                      ) : null}
                     </View>
                     <Text
                       style={[
@@ -343,9 +375,7 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
                 {isSubmitting ? (
                   <ActivityIndicator size="small" color={colors.white} />
                 ) : (
-                  <Text style={styles.actionButtonText}>
-                    {screenCopy.action}
-                  </Text>
+                  <Text style={styles.actionButtonText}>{screenCopy.action}</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -363,6 +393,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F7FAFF',
     overflow: 'hidden',
+  },
+  safeArea: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
   },
   keyboardAvoiding: {
     flex: 1,
@@ -407,10 +444,8 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   backButton: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 54 : 24,
-    left: 18,
-    zIndex: 20,
+    marginLeft: 18,
+    marginTop: 4,
     width: 46,
     height: 46,
     borderRadius: 23,
@@ -423,15 +458,32 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 7,
   },
-  backIcon: {
-    width: 38,
-    height: 38,
+  backChevron: {
+    width: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backChevronLine: {
+    position: 'absolute',
+    width: 18,
+    height: 4,
+    borderRadius: 4,
+    backgroundColor: colors.white,
+  },
+  backChevronTop: {
+    transform: [{ rotate: '-45deg' }],
+    top: 3,
+  },
+  backChevronBottom: {
+    transform: [{ rotate: '45deg' }],
+    bottom: 3,
   },
   scrollContent: {
     flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: Platform.OS === 'ios' ? 48 : 28,
+    paddingTop: Platform.OS === 'ios' ? 72 : 62,
     paddingBottom: 30,
     paddingHorizontal: 16,
   },
@@ -452,7 +504,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 13,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.95)',
     shadowColor: '#2457B8',
@@ -471,6 +523,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 13,
     paddingVertical: 7,
     marginBottom: 13,
+    shadowColor: '#285CB8',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 2,
   },
   badgeDot: {
     width: 7,
@@ -543,10 +600,11 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#DCE3EE',
-    paddingLeft: 15,
+    paddingLeft: 12,
+    paddingRight: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   focusedInput: {
     borderColor: colors.primary,
@@ -557,17 +615,23 @@ const styles = StyleSheet.create({
     shadowRadius: 7,
     elevation: 2,
   },
+  inputLeadingIcon: {
+    marginRight: 8,
+  },
   passwordInput: {
     flex: 1,
     fontSize: 15,
     color: '#182238',
     fontFamily: fonts.BOLD,
+    paddingVertical: 0,
   },
   eyeBtn: {
-    width: 48,
-    height: 52,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#EEF3FC',
   },
   requirementsWrap: {
     marginTop: 2,
@@ -604,13 +668,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.darkgreen,
   },
   requirementCheckmark: {
-    fontSize: 9,
-    lineHeight: 10,
+    fontSize: 10,
     color: colors.white,
     fontFamily: fonts.BOLD,
-    textAlign: 'center',
-    includeFontPadding: false,
-    transform: [{ translateY: -0.5 }],
+    lineHeight: 12,
   },
   requirementText: {
     fontSize: 12.5,
@@ -623,6 +684,7 @@ const styles = StyleSheet.create({
   securityNote: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
     backgroundColor: '#F1FBF6',
     borderRadius: 14,
     paddingHorizontal: 12,
@@ -634,7 +696,6 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
     backgroundColor: colors.darkgreen,
-    marginRight: 8,
   },
   securityText: {
     flex: 1,

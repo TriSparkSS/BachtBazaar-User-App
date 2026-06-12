@@ -7,7 +7,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TouchableOpacity,
   View,
@@ -27,7 +26,10 @@ import { showAppAlert } from '../../../../services/appAlert';
 import { logApiEvent } from '../../../../services/apiClient';
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - 48) / 3 - 8;
+const CARD_WIDTH = Math.min((width - 48) / 3 - 4, 118);
+const LOCAL_OFFER_CARD_WIDTH = Math.min(width * 0.74, 292);
+const DINEOUT_GREEN = '#004B36';
+const DINEOUT_GREEN_LIGHT = '#0F6B4F';
 
 type SidebarItem = {
   icon: AppIconName;
@@ -39,6 +41,34 @@ type SidebarItem = {
 type SidebarGroup = {
   title: string;
   items: SidebarItem[];
+};
+
+type CategoryChip = {
+  id: string;
+  label: string;
+  icon: string;
+  color: string;
+  bg: string;
+};
+
+type StoreProductOffer = {
+  id: string;
+  title: string;
+  subtitle: string;
+  discount: string;
+  countdown: string;
+  image: string;
+};
+
+type FeaturedStore = {
+  name: string;
+  logo: string;
+  tagline: string;
+  rating: string;
+  ratingCount: string;
+  distance: string;
+  isOpen: boolean;
+  offers: StoreProductOffer[];
 };
 
 const sidebarIconPalette: Record<string, string> = {
@@ -118,11 +148,57 @@ const sidebarGroups: SidebarGroup[] = [
   },
 ];
 
+const categoryChips: CategoryChip[] = [
+  { id: 'hot-deals', label: 'Hot Deals', icon: 'fire', color: '#E65A24', bg: '#FFF0EB' },
+  { id: 'jewelry', label: 'Jewelry', icon: 'diamond-stone', color: '#8A5A00', bg: '#FFF4D8' },
+  { id: 'grocery', label: 'Grocery', icon: 'cart-outline', color: '#0F6B4F', bg: '#E9F8EF' },
+  { id: 'food', label: 'Food', icon: 'food-fork-drink', color: '#366FE0', bg: '#EEF4FF' },
+];
+
+const featuredStore: FeaturedStore = {
+  name: 'Sharma Jewelers',
+  logo:
+    'https://images.pexels.com/photos/248077/pexels-photo-248077.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=200',
+  tagline: 'Trusted since 1995',
+  rating: '4.8',
+  ratingCount: '57',
+  distance: '0.3km',
+  isOpen: true,
+  offers: [
+    {
+      id: 'gold-jewelry',
+      title: 'FLAT10%OFF',
+      subtitle: 'on Gold Jewelry',
+      discount: '10%OFF',
+      countdown: '02:12:51 remaining',
+      image:
+        'https://images.pexels.com/photos/1191531/pexels-photo-1191531.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400',
+    },
+    {
+      id: 'silver-items',
+      title: 'Buy 1Get 1',
+      subtitle: 'on Silver Items',
+      discount: 'Buy 1Get 1',
+      countdown: '02:12:51 remaining',
+      image:
+        'https://images.pexels.com/photos/145909/pexels-photo-145909.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400',
+    },
+    {
+      id: 'silver-polish',
+      title: 'Free Silver',
+      subtitle: 'Polishing',
+      discount: 'Free SUFF',
+      countdown: '02:12:51 remaining',
+      image:
+        'https://images.pexels.com/photos/265906/pexels-photo-265906.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400',
+    },
+  ],
+};
+
 const HomeScreenView = () => {
   const navigation = useNavigation();
   const { currentUser, clearSession } = useAppContext();
-  const [comparePrices, setComparePrices] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState('Hot Deals');
+  const [selectedCategory, setSelectedCategory] = useState('hot-deals');
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [isPhoneVisible, setIsPhoneVisible] = useState(false);
   const [profileImageLoadError, setProfileImageLoadError] = useState(false);
@@ -131,18 +207,36 @@ const HomeScreenView = () => {
   );
 
   const quickActions = [
-    { icon: 'reward' as AppIconName, label: 'Daily\nRewards', bgColor: '#EEF4FF' },
-    { icon: 'nearby-coupons' as AppIconName, label: 'Nearby\nCoupons', bgColor: '#F3E5F5' },
-    { icon: 'scan-save' as AppIconName, label: 'Scan &\nSave', bgColor: '#E3F2FD' },
-    { icon: 'invite-earn' as AppIconName, label: 'Invite &\nEarn', bgColor: '#E8F5E9' },
-    { icon: 'saved-offers' as AppIconName, label: 'Saved\nOffers', bgColor: '#EEF4FF' },
-  ];
-
-  const categories = [
-    { id: 'Hot Deals', icon: 'hot-deals' as AppIconName, label: 'Hot Deals' },
-    { id: 'Jewelry', icon: 'jewelry' as AppIconName, label: 'Jewelry' },
-    { id: 'Grocery', icon: 'grocery' as AppIconName, label: 'Grocery' },
-    { id: 'Food', icon: 'food' as AppIconName, label: 'Food' },
+    {
+      icon: 'gift-outline',
+      label: 'Daily\nRewards',
+      bgColor: '#FFF4E5',
+      color: '#F2994A',
+    },
+    {
+      icon: 'map-marker-radius-outline',
+      label: 'Nearby\nCoupons',
+      bgColor: '#F1EAFE',
+      color: '#8B5CF6',
+    },
+    {
+      icon: 'qrcode-scan',
+      label: 'Scan &\nSave',
+      bgColor: '#E7F0FF',
+      color: colors.primary,
+    },
+    {
+      icon: 'account-plus-outline',
+      label: 'Invite &\nEarn',
+      bgColor: '#E7F8EF',
+      color: '#27AE60',
+    },
+    {
+      icon: 'bookmark-outline',
+      label: 'Saved\nOffers',
+      bgColor: '#FFF0EB',
+      color: '#E65A24',
+    },
   ];
 
   const userName = useMemo(() => currentUser?.name?.trim() || 'Your name', [currentUser?.name]);
@@ -327,6 +421,38 @@ const HomeScreenView = () => {
     ]);
   };
 
+  const handleSidebarItemPress = (label: string) => {
+    if (label === 'Edit Profile') {
+      openProfileSetup();
+      return;
+    }
+
+    if (label === 'Password') {
+      openChangePassword();
+      return;
+    }
+
+    if (label === 'Delete account') {
+      setSidebarVisible(false);
+      showAppAlert(
+        'Delete account',
+        'Account deletion will be available soon. Contact support if you need help.',
+        [{ text: 'OK' }],
+      );
+      return;
+    }
+
+    if (label === 'Overview') {
+      setSidebarVisible(false);
+      return;
+    }
+
+    setSidebarVisible(false);
+    showAppAlert('Coming soon', `${label} will be available in an upcoming update.`, [
+      { text: 'OK' },
+    ]);
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.bgAccent} />
@@ -338,31 +464,67 @@ const HomeScreenView = () => {
           contentContainerStyle={styles.scrollContent}
         >
           <AnimatedScreen>
-            <Navbar onMenuPress={() => setSidebarVisible(true)} title={userName} subtitle={headerAddress} />
+            <Navbar
+              onMenuPress={() => setSidebarVisible(true)}
+              title="Bacht Bazaar"
+              subtitle={headerAddress}
+              showSearch
+            />
 
-            <View style={styles.countdownHeader}>
-              <View style={styles.countdownLeft}>
-                <MaterialCommunityIcons name="fire" size={18} color={colors.primary} />
-                <Text style={styles.countdownLabel}>Mega Sale Starts in</Text>
-              </View>
-              <Text style={styles.countdownTime}>02:12:51</Text>
-            </View>
+            <View style={styles.promoBannerSection}>
+              <View style={styles.promoBanner}>
+                <View style={styles.promoBannerGlow} />
+                <View style={styles.promoBannerGlowSecondary} />
+                <View style={styles.promoBannerCopy}>
+                  <View style={styles.promoBannerBadge}>
+                    <MaterialCommunityIcons name="fire" size={15} color="#FFE28A" />
+                    <Text style={styles.promoBannerBadgeText}>LIMITED TIME</Text>
+                  </View>
+                  <Text style={styles.promoBannerTitle}>50% OFF</Text>
+                  <Text style={styles.promoBannerSubtitle}>Nearby Stores</Text>
+                  <View style={styles.promoBannerCountdown}>
+                    <MaterialCommunityIcons
+                      name="clock-outline"
+                      size={15}
+                      color={colors.white}
+                    />
+                    <Text style={styles.promoBannerCountdownText}>02:12:51 remaining</Text>
+                  </View>
+                </View>
 
-            <View style={[styles.banner, styles.bannerGradientFallback]}>
-              <View style={styles.bannerContent}>
-                <View style={styles.bannerTextSection}>
-                  <Text style={styles.bannerTitle}>50% OFF</Text>
-                  <Text style={styles.bannerSubtitle}>Nearby Stores</Text>
-                </View>
-                <View style={styles.bannerCountdown}>
-                  <MaterialCommunityIcons name="clock-outline" size={16} color={colors.white} />
-                  <Text style={styles.bannerCountdownText}>02:12:51 remaining</Text>
+                <View style={styles.promoArtwork}>
+                  <View style={[styles.promoGiftBox, styles.promoGiftBoxLarge]}>
+                    <MaterialCommunityIcons
+                      name="store-outline"
+                      size={34}
+                      color={DINEOUT_GREEN}
+                    />
+                  </View>
+                  <View style={[styles.promoGiftBox, styles.promoGiftBoxSmall]}>
+                    <MaterialCommunityIcons name="gift-outline" size={25} color="#9A6500" />
+                  </View>
+                  <View style={styles.promoCoin}>
+                    <Text style={styles.promoCoinText}>₹</Text>
+                  </View>
                 </View>
               </View>
-              <View style={styles.bannerDecorations}>
-                <View style={[styles.giftBox, { backgroundColor: '#FFB300' }]} />
-                <View style={[styles.giftBox, { backgroundColor: '#FF8A65', marginTop: 15 }]} />
-                <View style={[styles.giftBox, { backgroundColor: '#90CAF9', marginTop: 10 }]} />
+
+              <View style={styles.walletSavingsStrip}>
+                <View style={styles.walletSavingsIcon}>
+                  <MaterialCommunityIcons
+                    name="wallet-outline"
+                    size={19}
+                    color={colors.primary}
+                  />
+                </View>
+                <Text style={styles.walletSavingsText}>
+                  Save extra when you pay with Bachat Wallet
+                </Text>
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={20}
+                  color={colors.primary}
+                />
               </View>
             </View>
 
@@ -373,9 +535,24 @@ const HomeScreenView = () => {
               contentContainerStyle={styles.quickActionsContent}
             >
               {quickActions.map(action => (
-                <TouchableOpacity key={action.label} style={styles.quickActionItem}>
+                <TouchableOpacity
+                  key={action.label}
+                  style={styles.quickActionItem}
+                  activeOpacity={0.82}
+                  onPress={() =>
+                    showAppAlert(
+                      action.label.replace('\n', ' '),
+                      'This feature will be available in an upcoming update.',
+                      [{ text: 'OK' }],
+                    )
+                  }
+                >
                   <View style={[styles.quickActionCircle, { backgroundColor: action.bgColor }]}>
-                    <AppIcon name={action.icon} size={22} />
+                    <MaterialCommunityIcons
+                      name={action.icon}
+                      size={25}
+                      color={action.color}
+                    />
                   </View>
                   <Text style={styles.quickActionLabel}>{action.label}</Text>
                 </TouchableOpacity>
@@ -388,82 +565,105 @@ const HomeScreenView = () => {
               style={styles.categoriesScroll}
               contentContainerStyle={styles.categoriesContent}
             >
-              {categories.map(cat => (
-                <TouchableOpacity
-                  key={cat.id}
-                  style={[
-                    styles.categoryPill,
-                    selectedCategory === cat.id && styles.categoryPillSelected,
-                  ]}
-                  onPress={() => setSelectedCategory(cat.id)}
-                >
-                  <AppIcon name={cat.icon} size={16} />
-                  <Text
+              {categoryChips.map(chip => {
+                const isSelected = selectedCategory === chip.id;
+
+                return (
+                  <TouchableOpacity
+                    key={chip.id}
                     style={[
-                      styles.categoryPillText,
-                      selectedCategory === cat.id && styles.categoryPillTextSelected,
+                      styles.categoryPill,
+                      isSelected && styles.categoryPillSelected,
+                      isSelected && { backgroundColor: chip.bg, borderColor: chip.color },
                     ]}
+                    activeOpacity={0.82}
+                    onPress={() => setSelectedCategory(chip.id)}
                   >
-                    {cat.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <View
+                      style={[
+                        styles.categoryIconWrap,
+                        { backgroundColor: isSelected ? colors.white : chip.bg },
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name={chip.icon}
+                        size={18}
+                        color={chip.color}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        styles.categoryPillText,
+                        isSelected && styles.categoryPillTextSelected,
+                        isSelected && { color: chip.color },
+                      ]}
+                    >
+                      {chip.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
 
             <View style={styles.localOffersSection}>
               <View style={styles.localOffersHeader}>
-                <Text style={styles.localOffersTitle}>Local Offers</Text>
-                <TouchableOpacity style={styles.filterRow}>
-                  <Text style={styles.filterText}>Filter offer</Text>
-                  <MaterialCommunityIcons name="filter-variant" size={20} color={colors.darkGray} />
-                </TouchableOpacity>
+                <View>
+                  <Text style={styles.localOffersKicker}>Near your area</Text>
+                  <Text style={styles.localOffersTitle}>Local Offers</Text>
+                </View>
+                <View style={styles.localOffersHeaderActions}>
+                  <TouchableOpacity style={styles.filterOfferButton} activeOpacity={0.78}>
+                    <MaterialCommunityIcons
+                      name="filter-variant"
+                      size={16}
+                      color={colors.primary}
+                    />
+                    <Text style={styles.filterOfferText}>Filter offer</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.viewAllHeaderButton} activeOpacity={0.78}>
+                    <Text style={styles.viewAllHeaderText}>View all</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={colors.primary} />
+                  </TouchableOpacity>
+                </View>
               </View>
 
-              <View style={styles.controlsRow}>
-                <Text style={styles.controlsLabel}>Compare Prices</Text>
-                <Switch
-                  value={comparePrices}
-                  onValueChange={setComparePrices}
-                  thumbColor={colors.white}
-                  trackColor={{ false: '#D3D9E5', true: '#8DC29B' }}
-                />
-              </View>
-
-              <View style={styles.storeCard}>
+              <View style={styles.localOffersFeatureCard}>
                 <View style={styles.storeHeader}>
                   <View style={styles.storeLogoCircle}>
-                    <Image
-                      source={{
-                        uri: 'https://images.pexels.com/photos/102061/pexels-photo-102061.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500',
-                      }}
-                      style={styles.storeLogo}
-                    />
+                    <Image source={{ uri: featuredStore.logo }} style={styles.storeLogo} />
                   </View>
                   <View style={styles.storeInfo}>
                     <View style={styles.storeNameContainer}>
-                      <Text style={styles.storeName}>Sharma Jewelers</Text>
+                      <Text style={styles.storeName}>{featuredStore.name}</Text>
                       <MaterialCommunityIcons
                         name="check-decagram"
-                        size={18}
-                        color="#029AF1"
+                        size={16}
+                        color={colors.primary}
                         style={styles.verifiedIcon}
                       />
                     </View>
-                    <Text style={styles.storeTagline}>Trusted since 1995</Text>
+                    <Text style={styles.storeTagline}>{featuredStore.tagline}</Text>
                   </View>
                   <View style={styles.storeMeta}>
                     <View style={styles.ratingRow}>
-                      <MaterialCommunityIcons name="star" size={22} color="#FFD93D" />
+                      <MaterialCommunityIcons name="star-outline" size={14} color="#F2A900" />
                       <Text style={styles.ratingText}>
-                        4.8 <Text style={styles.ratingCount}>(57)</Text>
+                        {featuredStore.rating}{' '}
+                        <Text style={styles.ratingCount}>({featuredStore.ratingCount})</Text>
                       </Text>
                     </View>
                     <View style={styles.distanceStatusRow}>
-                      <MaterialCommunityIcons name="map-marker" size={16} color={colors.primary} />
-                      <Text style={styles.distanceText}>0.3km</Text>
-                      <View style={styles.openTag}>
-                        <Text style={styles.openTagText}>Open</Text>
-                      </View>
+                      <MaterialCommunityIcons
+                        name="map-marker"
+                        size={13}
+                        color="#E65A24"
+                      />
+                      <Text style={styles.distanceText}>{featuredStore.distance}</Text>
+                      {featuredStore.isOpen ? (
+                        <View style={styles.openTag}>
+                          <Text style={styles.openTagText}>Open</Text>
+                        </View>
+                      ) : null}
                     </View>
                   </View>
                 </View>
@@ -474,34 +674,16 @@ const HomeScreenView = () => {
                   style={styles.offersScroll}
                   contentContainerStyle={styles.offersContent}
                 >
-                  {[
-                    {
-                      tag: '10%OFF',
-                      title: 'FLAT10%OFF',
-                      subtitle: 'on Gold Jewelry',
-                      image:
-                        'https://images.pexels.com/photos/248077/pexels-photo-248077.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500',
-                    },
-                    {
-                      tag: 'Buy 1Get 1',
-                      title: 'Buy 1Get 1',
-                      subtitle: 'on Silver Items',
-                      image:
-                        'https://images.pexels.com/photos/248077/pexels-photo-248077.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500',
-                    },
-                    {
-                      tag: 'Free SUFF',
-                      title: 'Free Silver',
-                      subtitle: 'Polishing',
-                      image:
-                        'https://images.pexels.com/photos/248077/pexels-photo-248077.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500',
-                    },
-                  ].map((offer, index) => (
-                    <View key={index} style={styles.offerCard}>
+                  {featuredStore.offers.map(offer => (
+                    <TouchableOpacity
+                      key={offer.id}
+                      style={styles.offerCard}
+                      activeOpacity={0.88}
+                    >
                       <View style={styles.offerImageContainer}>
                         <Image source={{ uri: offer.image }} style={styles.offerImage} />
                         <View style={styles.offerTag}>
-                          <Text style={styles.offerTagTextSmall}>{offer.tag}</Text>
+                          <Text style={styles.offerTagTextSmall}>{offer.discount}</Text>
                         </View>
                       </View>
                       <View style={styles.offerInfo}>
@@ -511,9 +693,9 @@ const HomeScreenView = () => {
                         <Text style={styles.cardOfferSubtitle} numberOfLines={1}>
                           {offer.subtitle}
                         </Text>
-                        <Text style={styles.cardCountdown}>02:12:51 remaining</Text>
+                        <Text style={styles.cardCountdown}>{offer.countdown}</Text>
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   ))}
                 </ScrollView>
               </View>
@@ -534,8 +716,13 @@ const HomeScreenView = () => {
             <View style={styles.sidebarPatternBottom} />
             <View style={styles.sidebarHeaderRow}>
               <View />
-              <TouchableOpacity onPress={() => setSidebarVisible(false)}>
-                <AppIcon name="close" size={18} />
+              <TouchableOpacity
+                onPress={() => setSidebarVisible(false)}
+                style={styles.sidebarCloseButton}
+                accessibilityRole="button"
+                accessibilityLabel="Close menu"
+              >
+                <AppIcon name="close" size={22} color={colors.text} />
               </TouchableOpacity>
             </View>
 
@@ -564,7 +751,7 @@ const HomeScreenView = () => {
 
                 <View style={styles.contactRow}>
                   <View style={styles.contactIconBadge}>
-                    <AppIcon name="phone" size={13} />
+                    <AppIcon name="phone" size={16} color={colors.primary} />
                   </View>
                   <Text style={styles.contactText}>
                     {isPhoneVisible ? displayPhone : `+91 ${maskedPhone}`}
@@ -572,14 +759,20 @@ const HomeScreenView = () => {
                   <TouchableOpacity
                     style={styles.contactToggleButton}
                     onPress={() => setIsPhoneVisible(prev => !prev)}
+                    accessibilityRole="button"
+                    accessibilityLabel={isPhoneVisible ? 'Hide phone number' : 'Show phone number'}
                   >
-                    <AppIcon name={isPhoneVisible ? 'eye' : 'eye-off'} size={16} />
+                    <AppIcon
+                      name={isPhoneVisible ? 'eye' : 'eye-off'}
+                      size={18}
+                      color={colors.primary}
+                    />
                   </TouchableOpacity>
                 </View>
 
                 <View style={styles.contactRow}>
                   <View style={styles.contactIconBadge}>
-                    <AppIcon name="location" size={13} />
+                    <AppIcon name="location" size={16} color={colors.primary} />
                   </View>
                   <Text style={styles.contactText}>{sidebarLocation}</Text>
                 </View>
@@ -618,18 +811,14 @@ const HomeScreenView = () => {
                       return null;
                     }
 
-                    const onPress =
-                      item.label === 'Edit Profile'
-                        ? openProfileSetup
-                        : item.label === 'Password'
-                          ? openChangePassword
-                          : undefined;
+                    const onPress = () => handleSidebarItemPress(item.label);
 
                     return (
                       <TouchableOpacity
                         key={item.label}
                         style={[styles.sidebarItem, item.active && styles.sidebarItemActive]}
                         onPress={onPress}
+                        activeOpacity={0.75}
                       >
                         <View
                           style={[
@@ -643,11 +832,11 @@ const HomeScreenView = () => {
                         >
                           <AppIcon
                             name={item.icon}
-                            size={13}
-                            style={
+                            size={18}
+                            color={
                               item.active
-                                ? styles.sidebarItemIconActive
-                                : { tintColor: sidebarIconTint[item.label] ?? colors.primary }
+                                ? colors.white
+                                : sidebarIconTint[item.label] ?? colors.primary
                             }
                           />
                         </View>
@@ -666,8 +855,8 @@ const HomeScreenView = () => {
                 </View>
               ))}
 
-              <TouchableOpacity style={styles.logoutRow} onPress={handleLogout}>
-                <AppIcon name="logout" size={16} />
+              <TouchableOpacity style={styles.logoutRow} onPress={handleLogout} activeOpacity={0.75}>
+                <AppIcon name="logout" size={20} color="#E45A5A" />
                 <Text style={styles.logoutText}>Log Out</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -703,7 +892,168 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 176,
+  },
+  promoBannerSection: {
+    marginHorizontal: 16,
+    marginBottom: 18,
+  },
+  promoBanner: {
+    minHeight: 188,
+    borderRadius: 25,
+    overflow: 'hidden',
+    backgroundColor: DINEOUT_GREEN,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    shadowColor: DINEOUT_GREEN,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.32,
+    shadowRadius: 20,
+    elevation: 8,
+  },
+  promoBannerGlow: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    right: -70,
+    top: -48,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  promoBannerGlowSecondary: {
+    position: 'absolute',
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    left: -40,
+    bottom: -50,
+    backgroundColor: 'rgba(15,107,79,0.55)',
+  },
+  promoBannerCopy: {
+    flex: 1,
+    zIndex: 2,
+  },
+  promoBannerBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 14,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    marginBottom: 8,
+  },
+  promoBannerBadgeText: {
+    color: '#FFE28A',
+    fontSize: 10,
+    fontFamily: fonts.BOLD,
+    letterSpacing: 1.2,
+  },
+  promoBannerTitle: {
+    color: colors.white,
+    fontSize: 38,
+    lineHeight: 42,
+    fontFamily: fonts.BOLD,
+    letterSpacing: -1.4,
+  },
+  promoBannerSubtitle: {
+    color: 'rgba(255,255,255,0.86)',
+    fontSize: 18,
+    fontFamily: fonts.BOLD,
+    marginTop: 2,
+  },
+  promoBannerCountdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 16,
+    marginTop: 12,
+  },
+  promoBannerCountdownText: {
+    color: colors.white,
+    fontSize: 11,
+    fontFamily: fonts.BOLD,
+  },
+  promoArtwork: {
+    width: 126,
+    height: 142,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promoGiftBox: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.52)',
+  },
+  promoGiftBoxLarge: {
+    width: 78,
+    height: 92,
+    right: 4,
+    bottom: 8,
+    backgroundColor: '#E7FFF3',
+    transform: [{ rotate: '5deg' }],
+  },
+  promoGiftBoxSmall: {
+    width: 58,
+    height: 67,
+    left: 3,
+    bottom: 2,
+    backgroundColor: '#FFE5A6',
+    transform: [{ rotate: '-8deg' }],
+  },
+  promoCoin: {
+    position: 'absolute',
+    top: 6,
+    right: 26,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#D7A44E',
+    borderWidth: 3,
+    borderColor: '#F6D990',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  promoCoinText: {
+    color: '#513B0D',
+    fontSize: 21,
+    fontFamily: fonts.BOLD,
+  },
+  walletSavingsStrip: {
+    marginTop: 10,
+    minHeight: 52,
+    borderRadius: 18,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  walletSavingsIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.primarySoft,
+  },
+  walletSavingsText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 12,
+    fontFamily: fonts.BOLD,
   },
   countdownHeader: {
     flexDirection: 'row',
@@ -783,35 +1133,47 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   quickActionsScroll: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   quickActionsContent: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    gap: 12,
+    paddingVertical: 4,
+    gap: 10,
   },
   quickActionItem: {
     alignItems: 'center',
-    width: 66,
+    width: 76,
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    paddingTop: 10,
+    paddingBottom: 9,
+    borderWidth: 1,
+    borderColor: '#E9EDF5',
+    shadowColor: '#1B2430',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
   },
   quickActionCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 46,
+    height: 46,
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 6,
   },
   quickActionLabel: {
     fontSize: 11,
-    color: colors.lightGray,
+    color: colors.text,
     textAlign: 'center',
     fontFamily: fonts.BOLD,
     marginTop: 4,
     lineHeight: 13,
   },
   categoriesScroll: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
   categoriesContent: {
     flexDirection: 'row',
@@ -821,17 +1183,28 @@ const styles = StyleSheet.create({
   categoryPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: colors.primaryBorder,
+    borderColor: '#E7ECF5',
     backgroundColor: colors.white,
-    gap: 6,
+    gap: 8,
+    shadowColor: '#1B2430',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  categoryIconWrap: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   categoryPillSelected: {
-    backgroundColor: colors.primarySoft,
-    borderColor: colors.primaryBorder,
+    borderWidth: 1.5,
   },
   categoryPillText: {
     fontSize: 12,
@@ -848,13 +1221,405 @@ const styles = StyleSheet.create({
   localOffersHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+    gap: 10,
+  },
+  localOffersHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  filterOfferButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.white,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+  },
+  filterOfferText: {
+    fontSize: 11,
+    color: colors.primary,
+    fontFamily: fonts.BOLD,
+  },
+  localOffersTitle: {
+    fontSize: 24,
+    fontFamily: fonts.BOLD,
+    color: colors.text,
+    letterSpacing: -0.5,
+  },
+  localOffersKicker: {
+    fontSize: 12,
+    color: DINEOUT_GREEN_LIGHT,
+    fontFamily: fonts.BOLD,
+    marginBottom: 2,
+  },
+  viewAllHeaderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    paddingLeft: 12,
+    paddingRight: 8,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+  },
+  viewAllHeaderText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontFamily: fonts.BOLD,
+  },
+  featuredStoreCard: {
+    backgroundColor: colors.white,
+    borderRadius: 22,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E7ECF5',
+    marginBottom: 16,
+    shadowColor: '#1B2430',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 5,
+  },
+  localOffersFeatureCard: {
+    backgroundColor: colors.white,
+    borderRadius: 22,
+    paddingTop: 16,
+    paddingBottom: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E7ECF5',
+    shadowColor: '#1B2430',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 5,
+  },
+  localOfferGlowTop: {
+    position: 'absolute',
+    top: -54,
+    right: -28,
+    width: 152,
+    height: 152,
+    borderRadius: 76,
+    backgroundColor: 'rgba(15,107,79,0.1)',
+  },
+  localOfferGlowBottom: {
+    position: 'absolute',
+    bottom: -76,
+    left: 36,
+    width: 190,
+    height: 110,
+    borderRadius: 55,
+    backgroundColor: 'rgba(15,107,79,0.06)',
+  },
+  localOfferCoinSmall: {
+    position: 'absolute',
+    top: 84,
+    right: 86,
+    width: 25,
+    height: 25,
+    borderRadius: 13,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.36,
+    shadowRadius: 16,
+    elevation: 6,
+  },
+  localOfferCoinText: {
+    color: colors.white,
+    fontSize: 13,
+    fontFamily: fonts.BOLD,
+  },
+  featureHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    marginBottom: 18,
+    gap: 12,
+  },
+  featureCopy: {
+    flex: 1,
+  },
+  featureTitle: {
+    color: colors.text,
+    fontSize: 24,
+    fontFamily: fonts.BOLD,
+    letterSpacing: -0.6,
+  },
+  featureTitleStrike: {
+    color: colors.lighterGray,
+    textDecorationLine: 'line-through',
+  },
+  featureSubtitle: {
+    color: colors.lightGray,
+    fontSize: 14,
+    lineHeight: 20,
+    fontFamily: fonts.BOLD,
+    marginTop: 8,
+  },
+  comparePill: {
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+  },
+  comparePillText: {
+    color: colors.primary,
+    fontSize: 10,
+    fontFamily: fonts.BOLD,
+    marginBottom: 4,
+  },
+  localStoresScroll: {
+    marginTop: 2,
+  },
+  localStoresContent: {
+    paddingLeft: 14,
+    paddingRight: 20,
+    gap: 14,
+  },
+  localStoreCard: {
+    width: LOCAL_OFFER_CARD_WIDTH,
+    backgroundColor: colors.white,
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: 1,
+    shadowColor: '#1D4F91',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 8,
+  },
+  localStoreImageWrap: {
+    height: 164,
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  localStoreImage: {
+    width: '100%',
+    height: '100%',
+  },
+  cashbackBadge: {
+    position: 'absolute',
+    top: 12,
+    left: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  cashbackBadgeText: {
+    fontSize: 12,
+    fontFamily: fonts.BOLD,
+  },
+  favoriteBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(15,23,42,0.24)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  storeThemeRibbon: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 5,
+  },
+  localStoreBody: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
+  },
+  localStoreNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  localStoreName: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 19,
+    fontFamily: fonts.BOLD,
+    letterSpacing: -0.3,
+  },
+  localRatingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 14,
+  },
+  localRatingText: {
+    color: colors.white,
+    fontSize: 13,
+    fontFamily: fonts.BOLD,
+  },
+  localStoreArea: {
+    color: colors.lighterGray,
+    fontSize: 13,
+    fontFamily: fonts.BOLD,
+    marginTop: 6,
+  },
+  localStoreCategory: {
+    color: colors.lightGray,
+    fontSize: 13,
+    fontFamily: fonts.BOLD,
+    marginTop: 4,
+  },
+  localOfferStrip: {
+    marginTop: 12,
+    paddingTop: 11,
+    borderTopWidth: 1,
+    borderTopColor: '#EEF1F6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  localOfferStripLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  localOfferStripText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 12,
+    fontFamily: fonts.BOLD,
+  },
+  localOfferCount: {
+    fontSize: 12,
+    fontFamily: fonts.BOLD,
+  },
+  localOffersViewAll: {
+    alignSelf: 'center',
+    marginTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: DINEOUT_GREEN_LIGHT,
+    borderRadius: 18,
+    paddingVertical: 11,
+    paddingHorizontal: 18,
+    shadowColor: DINEOUT_GREEN,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  localOffersViewAllText: {
+    color: colors.white,
+    fontSize: 15,
+    fontFamily: fonts.BOLD,
+  },
+  sponsoredSection: {
+    marginTop: 24,
+    marginBottom: 46,
+  },
+  sponsoredHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 12,
   },
-  localOffersTitle: {
-    fontSize: 18,
-    fontFamily: fonts.BOLD,
+  sponsoredTitle: {
     color: colors.text,
+    fontSize: 22,
+    fontFamily: fonts.BOLD,
+    letterSpacing: -0.4,
+  },
+  sponsoredViewAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  sponsoredViewAllText: {
+    color: '#E65A24',
+    fontSize: 14,
+    fontFamily: fonts.BOLD,
+  },
+  sponsoredContent: {
+    gap: 14,
+    paddingRight: 18,
+    paddingBottom: 24,
+  },
+  sponsoredCard: {
+    width: LOCAL_OFFER_CARD_WIDTH - 34,
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#E7ECF5',
+    shadowColor: '#1B2430',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 4,
+    marginBottom: 8,
+  },
+  sponsoredImage: {
+    width: '100%',
+    height: 112,
+  },
+  sponsoredBadge: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    borderRadius: 15,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  sponsoredBadgeText: {
+    fontSize: 11,
+    fontFamily: fonts.BOLD,
+  },
+  sponsoredHeart: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(15,23,42,0.24)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sponsoredBody: {
+    padding: 12,
+  },
+  sponsoredStoreName: {
+    color: colors.text,
+    fontSize: 15,
+    fontFamily: fonts.BOLD,
+  },
+  sponsoredMeta: {
+    color: colors.lightGray,
+    fontSize: 12,
+    fontFamily: fonts.BOLD,
+    marginTop: 4,
   },
   filterRow: {
     flexDirection: 'row',
@@ -893,7 +1658,8 @@ const styles = StyleSheet.create({
   storeHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
+    paddingHorizontal: 14,
   },
   storeLogoCircle: {
     width: 52,
@@ -901,6 +1667,8 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     overflow: 'hidden',
     marginRight: 12,
+    borderWidth: 2,
+    borderColor: '#E7ECF5',
   },
   storeLogo: {
     width: '100%',
@@ -914,18 +1682,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   storeName: {
-    fontSize: 14,
+    fontSize: 16,
     fontFamily: fonts.BOLD,
     color: colors.text,
+    letterSpacing: -0.2,
   },
   verifiedIcon: {
-    marginLeft: 6,
+    marginLeft: 5,
   },
   storeTagline: {
     fontSize: 11,
     color: colors.lighterGray,
     fontFamily: fonts.BOLD,
-    marginTop: 2,
+    marginTop: 3,
   },
   storeMeta: {
     alignItems: 'flex-end',
@@ -933,57 +1702,62 @@ const styles = StyleSheet.create({
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 3,
   },
   ratingText: {
     fontSize: 12,
     color: colors.text,
     fontFamily: fonts.BOLD,
-    marginLeft: 4,
   },
   ratingCount: {
     color: colors.lighterGray,
+    fontSize: 11,
   },
   distanceStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 4,
-    gap: 4,
+    marginTop: 5,
+    gap: 3,
   },
   distanceText: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.lightGray,
     fontFamily: fonts.BOLD,
   },
   openTag: {
-    marginLeft: 6,
+    marginLeft: 4,
     backgroundColor: '#DBF0D9',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
   },
   openTagText: {
     color: '#4C9A45',
-    fontSize: 12,
+    fontSize: 10,
     fontFamily: fonts.BOLD,
   },
   offersScroll: {
-    marginTop: 4,
+    marginTop: 2,
   },
   offersContent: {
     gap: 10,
-    paddingRight: 4,
+    paddingHorizontal: 14,
+    paddingRight: 18,
   },
   offerCard: {
-    width: CARD_WIDTH,
-    backgroundColor: '#F9FAFD',
-    borderRadius: 12,
+    width: CARD_WIDTH + 12,
+    backgroundColor: colors.white,
+    borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E6ECF7',
   },
   offerImageContainer: {
-    height: 88,
+    height: 96,
     position: 'relative',
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+    overflow: 'hidden',
   },
   offerImage: {
     width: '100%',
@@ -992,19 +1766,36 @@ const styles = StyleSheet.create({
   offerTag: {
     position: 'absolute',
     left: 8,
-    bottom: 8,
+    top: 8,
     backgroundColor: '#F8E791',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   offerTagTextSmall: {
     fontSize: 10,
     color: '#8C7400',
     fontFamily: fonts.BOLD,
   },
+  offerCountdownBadge: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  offerCountdownBadgeText: {
+    fontSize: 9,
+    color: DINEOUT_GREEN,
+    fontFamily: fonts.BOLD,
+  },
   offerInfo: {
-    padding: 8,
+    padding: 9,
   },
   cardOfferTitle: {
     fontSize: 12,
@@ -1012,16 +1803,16 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
   },
   cardOfferSubtitle: {
-    fontSize: 11,
+    fontSize: 10,
     color: colors.lightGray,
     fontFamily: fonts.BOLD,
-    marginTop: 3,
+    marginTop: 2,
   },
   cardCountdown: {
-    fontSize: 11,
-    color: colors.primary,
+    fontSize: 10,
+    color: '#E31C5F',
     fontFamily: fonts.BOLD,
-    marginTop: 7,
+    marginTop: 6,
   },
   modalRoot: {
     flex: 1,
@@ -1083,6 +1874,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
+  sidebarCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F4F7FC',
+  },
   sidebarProfileCard: {
     backgroundColor: 'rgba(255,255,255,0.72)',
     borderRadius: 18,
@@ -1140,9 +1939,9 @@ const styles = StyleSheet.create({
     minHeight: 32,
   },
   contactIconBadge: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#EEF4FF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1154,9 +1953,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contactToggleButton: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#EEF4FF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1239,9 +2038,9 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   sidebarItemIconWrap: {
-    width: 22,
-    height: 22,
-    borderRadius: 7,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1252,9 +2051,6 @@ const styles = StyleSheet.create({
   },
   sidebarItemTextActive: {
     color: colors.white,
-  },
-  sidebarItemIconActive: {
-    tintColor: colors.white,
   },
   sidebarItemTextDanger: {
     color: '#E45A5A',

@@ -10,10 +10,10 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
-  Image,
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
 } from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnimatedScreen from '../../../components/AnimatedScreen';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
@@ -107,11 +107,10 @@ const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({
         activeOpacity={0.78}
         accessibilityRole="button"
         accessibilityLabel="Go back to previous screen">
-        <Image
-          source={require('../../../assets/icon/ic_back.png')}
-          style={styles.backIcon}
-          resizeMode="contain"
-        />
+        <View style={styles.backChevron}>
+          <View style={[styles.backChevronLine, styles.backChevronTop]} />
+          <View style={[styles.backChevronLine, styles.backChevronBottom]} />
+        </View>
       </TouchableOpacity>
 
       <KeyboardAvoidingView
@@ -137,10 +136,10 @@ const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({
                 <View style={styles.phoneTextWrap}>
                   <View style={styles.phoneLabelRow}>
                     <View style={styles.phoneIconWrap}>
-                      <Image
-                        source={require('../../../assets/icon/phone.png')}
-                        style={styles.phoneIcon}
-                        resizeMode="contain"
+                      <MaterialCommunityIcons
+                        name="phone-outline"
+                        size={19}
+                        color={colors.darkgreen}
                       />
                     </View>
                     <Text style={styles.phoneLabel}>Code sent to</Text>
@@ -297,10 +296,26 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 7,
   },
-  backIcon: {
-    width: 38,
-    height: 38,
-    tintColor: "#FFFFFF",
+  backChevron: {
+    width: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  backChevronLine: {
+    position: 'absolute',
+    width: 18,
+    height: 4,
+    borderRadius: 4,
+    backgroundColor: colors.white,
+  },
+  backChevronTop: {
+    transform: [{ rotate: '-45deg' }],
+    top: 3,
+  },
+  backChevronBottom: {
+    transform: [{ rotate: '45deg' }],
+    bottom: 3,
   },
   scrollContent: {
     flexGrow: 1,
@@ -413,11 +428,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 8,
   }, */
-  phoneIcon: {
-    width: 18,
-    height: 18,
-    tintColor: "#FFFFFF",
-  },
   phoneTextWrap: {
     flex: 1,
   },

@@ -1,59 +1,71 @@
 import React from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors, fonts } from '../helpers/styles';
-import AppIcon from './AppIcon';
 
 interface NavbarProps {
   onMenuPress?: () => void;
   title?: string;
   subtitle?: string;
+  showSearch?: boolean;
 }
 
 const Navbar: React.FC<NavbarProps> = ({
   onMenuPress,
   title = 'Bacht Bazaar',
   subtitle = 'Work - Mohan Sharn',
+  showSearch = true,
 }) => {
   const formattedSubtitle = subtitle.replace(/^Work\s*-\s*/i, '').trim();
 
   return (
     <>
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.titleSection}>
-            <Text style={styles.locationTitle}>{title}</Text>
-            <View style={styles.locationSubRow}>
-              <TouchableOpacity style={styles.inlineMenuButton} onPress={onMenuPress}>
-                <AppIcon name="menu" size={14} />
-              </TouchableOpacity>
-              <Text style={styles.locationSubtext} numberOfLines={1}>
-                {formattedSubtitle}
-              </Text>
-              <Text style={styles.chevronText}>⌄</Text>
-            </View>
-          </View>
-        </View>
+        <TouchableOpacity
+          style={styles.menuButton}
+          onPress={onMenuPress}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Open menu"
+        >
+          <MaterialCommunityIcons name="menu" size={24} color="#202843" />
+        </TouchableOpacity>
 
-        <View style={styles.headerActions}>
-          <TouchableOpacity style={styles.iconButton}>
-            <AppIcon name="bell" size={21} />
+        <View style={styles.titleSection}>
+          <Text style={styles.locationTitle}>{title}</Text>
+          <TouchableOpacity style={styles.locationSubRow} activeOpacity={0.75}>
+            <Text style={styles.locationSubtext} numberOfLines={1}>
+              {formattedSubtitle ? `Work - ${formattedSubtitle}` : 'Work - Select location'}
+            </Text>
+            <MaterialCommunityIcons name="chevron-down" size={16} color="#202843" />
           </TouchableOpacity>
         </View>
-      </View>
 
-      <View style={styles.searchRow}>
-        <View style={styles.searchContainer}>
-          <AppIcon name="search" size={18} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search Product ..."
-            placeholderTextColor={colors.lighterGray}
-          />
-        </View>
-        <TouchableOpacity style={styles.qrButton}>
-          <AppIcon name="qr" size={18} />
+        <TouchableOpacity
+          style={styles.iconButton}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Notifications"
+        >
+          <MaterialCommunityIcons name="bell-outline" size={24} color="#202843" />
         </TouchableOpacity>
       </View>
+
+      {showSearch && (
+        <View style={styles.searchRow}>
+          <View style={styles.searchContainer}>
+            <MaterialCommunityIcons name="magnify" size={22} color={colors.primary} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search Product..."
+              placeholderTextColor={colors.lighterGray}
+            />
+          </View>
+          <TouchableOpacity style={styles.qrButton} activeOpacity={0.82}>
+            <MaterialCommunityIcons name="qrcode-scan" size={22} color={colors.white} />
+          </TouchableOpacity>
+        </View>
+      )}
     </>
   );
 };
@@ -63,60 +75,61 @@ export default Navbar;
 const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 8,
-  },
-  headerLeft: {
-    flex: 1,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 6,
     gap: 10,
-    marginLeft: 12,
+  },
+  menuButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: '#D8E2F0',
+    shadowColor: '#1B2430',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
   titleSection: {
+    flex: 1,
     justifyContent: 'center',
-    flexShrink: 1,
   },
   locationTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontFamily: fonts.BOLD,
     color: '#202843',
     lineHeight: 22,
+    letterSpacing: -0.3,
   },
   locationSubRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginTop: 1,
+    gap: 2,
+    marginTop: 2,
   },
   locationSubtext: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#4A5672',
     fontFamily: fonts.BOLD,
     flexShrink: 1,
-    maxWidth: '84%',
-    lineHeight: 14,
-  },
-  chevronText: {
-    fontSize: 12,
-    color: '#202843',
-    fontFamily: fonts.BOLD,
-    marginTop: -1,
-  },
-  inlineMenuButton: {
-    width: 18,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 2,
+    maxWidth: '92%',
+    lineHeight: 15,
   },
   iconButton: {
-    padding: 4,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: '#F0C4C4',
   },
   searchRow: {
     flexDirection: 'row',
@@ -131,25 +144,35 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.white,
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 24,
+    height: 52,
+    borderRadius: 18,
     gap: 8,
     borderWidth: 1,
     borderColor: colors.primaryBorder,
+    shadowColor: '#1B2430',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
   },
   searchInput: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 13,
     color: colors.darkGray,
     padding: 0,
     fontFamily: fonts.BOLD,
   },
   qrButton: {
-    width: 42,
-    height: 42,
+    width: 52,
+    height: 52,
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 18,
     backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 5,
   },
 });
