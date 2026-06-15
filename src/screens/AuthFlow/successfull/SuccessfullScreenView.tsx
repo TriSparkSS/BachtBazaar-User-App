@@ -6,9 +6,9 @@ import {
   StyleSheet,
   TouchableOpacity,
   Dimensions,
-  ScrollView,
 } from 'react-native';
 import AnimatedScreen from '../../../components/AnimatedScreen';
+import { ScreenScaffold } from '../../../components/ScreenScaffold';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import TickSVG from '../../../assets/image/Tick.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
@@ -63,18 +63,21 @@ const SuccessfullScreenView: React.FC<SuccessfullScreenViewProps> = ({
   }, [floatAnim, pulseAnim]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.topGlow} />
-      <View style={styles.bottomGlow} />
-      <View style={styles.topRightVector}>
-        <VectorSVG width={width * 0.4} height={width * 0.4} />
-      </View>
-      <View style={styles.bottomLeftVector}>
-        <VectorSVG width={118} height={118} />
-      </View>
-
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <AnimatedScreen>
+    <ScreenScaffold
+      backgroundColor={colors.white}
+      background={
+        <>
+          <View style={styles.topGlow} />
+          <View style={styles.bottomGlow} />
+          <View style={styles.topRightVector}>
+            <VectorSVG width={width * 0.4} height={width * 0.4} />
+          </View>
+          <View style={styles.bottomLeftVector}>
+            <VectorSVG width={118} height={118} />
+          </View>
+        </>
+      }>
+      <AnimatedScreen>
           <View style={styles.logoContainer}>
             <LogoSVG width={100} height={100} />
             <View style={styles.titleContainer}>
@@ -123,18 +126,13 @@ const SuccessfullScreenView: React.FC<SuccessfullScreenViewProps> = ({
             </TouchableOpacity>
           </View>
         </AnimatedScreen>
-      </ScrollView>
-    </View>
+    </ScreenScaffold>
   );
 };
 
 export default SuccessfullScreenView;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
   topGlow: {
     position: 'absolute',
     top: 120,
@@ -160,7 +158,7 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginTop: height * 0.055,
+    marginTop: 8,
     marginBottom: 14,
   },
   titleContainer: {

@@ -7,9 +7,7 @@ import {
   TextInput,
   TouchableOpacity,
   Dimensions,
-  KeyboardAvoidingView,
   Platform,
-  ScrollView,
   ActivityIndicator,
   Modal,
   FlatList,
@@ -18,6 +16,8 @@ import {
 } from 'react-native';
 import AnimatedScreen from '../../../components/AnimatedScreen';
 import AppIcon from '../../../components/AppIcon';
+import { AppTextInput } from '../../../components/AppTextInput';
+import { ScreenScaffold } from '../../../components/ScreenScaffold';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import {
@@ -70,9 +70,6 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
     useState<Country>(defaultCountry);
   const [countryPickerVisible, setCountryPickerVisible] = useState(false);
   const [countrySearch, setCountrySearch] = useState('');
-  const [focusedField, setFocusedField] = useState<
-    'phone' | 'password' | null
-  >(null);
 
   const internationalPhone = `${selectedCountry.dialCode}${phone}`;
   const maxPhoneLength = getNationalNumberMaxLength(selectedCountry);
@@ -107,7 +104,6 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
 
   const togglePasswordVisibility = () => {
     setSecureText(current => !current);
-    requestAnimationFrame(() => passwordInputRef.current?.focus());
   };
 
   const openCountryPicker = () => {
@@ -134,24 +130,129 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
       : 'Continue with OTP';
 
   return (
-    <View style={styles.container}>
-      <View style={styles.heroWash} />
-      <View style={styles.topGlow} />
-      <View style={styles.bottomGlow} />
-      <View style={styles.topRightVector}>
-        <VectorSVG width={120} height={120} />
-      </View>
+    <ScreenScaffold
+      background={
+        <>
+          <View style={styles.heroWash} />
+          <View style={styles.topGlow} />
+          <View style={styles.bottomGlow} />
+          <View style={styles.topRightVector}>
+            <VectorSVG width={120} height={120} />
+          </View>
+        </>
+      }
+      overlay={
+        <Modal
+          visible={countryPickerVisible}
+          transparent
+          animationType="slide"
+          statusBarTranslucent
+          onRequestClose={() => setCountryPickerVisible(false)}>
+          <View style={styles.modalRoot}>
+            <Pressable
+              style={styles.modalBackdrop}
+              onPress={() => setCountryPickerVisible(false)}
+              accessibilityLabel="Close country picker"
+            />
+            <View style={styles.countrySheet}>
+              <View style={styles.sheetHandle} />
+              <View style={styles.sheetHeader}>
+                <View>
+                  <Text style={styles.sheetTitle}>Select country</Text>
+                  <Text style={styles.sheetSubtitle}>
+                    Choose your flag and dialing code
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setCountryPickerVisible(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close country picker">
+                  <Text style={styles.closeButtonText}>X</Text>
+                </TouchableOpacity>
+              </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardAvoiding}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          <AnimatedScreen style={styles.animatedScreen}>
-            <View style={styles.animatedContent}>
-              <View style={styles.logoContainer}>
+              <View style={styles.countrySearchContainer}>
+                <AppIcon name="search" size={17} />
+                <AppTextInput
+                  containerStyle={styles.countrySearchInputWrap}
+                  style={styles.countrySearchInput}
+                  value={countrySearch}
+                  onChangeText={setCountrySearch}
+                  placeholder="Search country or code"
+                  placeholderTextColor="#929DB0"
+                  autoCapitalize="none"
+                  accessibilityLabel="Search countries"
+                />
+              </View>
+
+              <FlatList
+                data={filteredCountries}
+                keyExtractor={country => country.code}
+                keyboardShouldPersistTaps="always"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.countryList}
+                renderItem={({ item }) => {
+                  const isSelected = item.code === selectedCountry.code;
+
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.countryOption,
+                        isSelected && styles.selectedCountryOption,
+                      ]}
+                      onPress={() => selectCountry(item)}
+                      activeOpacity={0.72}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}>
+                      <Text style={styles.optionFlag}>
+                        {getCountryFlag(item.code)}
+                      </Text>
+                      <View style={styles.optionDetails}>
+                        <Text
+                          style={[
+                            styles.optionName,
+                            isSelected && styles.selectedOptionText,
+                          ]}
+                          numberOfLines={1}>
+                          {item.name}
+                        </Text>
+                        <Text style={styles.optionIso}>{item.code}</Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.optionDialCode,
+                          isSelected && styles.selectedOptionText,
+                        ]}>
+                        {item.dialCode}
+                      </Text>
+                      <View
+                        style={[
+                          styles.selectionIndicator,
+                          isSelected && styles.selectedIndicator,
+                        ]}
+                      />
+                    </TouchableOpacity>
+                  );
+                }}
+                ListEmptyComponent={
+                  <View style={styles.emptyCountries}>
+                    <Text style={styles.emptyCountriesTitle}>
+                      No country found
+                    </Text>
+                    <Text style={styles.emptyCountriesText}>
+                      Try another country name or dialing code.
+                    </Text>
+                  </View>
+                }
+              />
+            </View>
+          </View>
+        </Modal>
+      }>
+      <AnimatedScreen style={styles.animatedScreen}>
+        <View style={styles.animatedContent}>
+          <View style={styles.logoContainer}>
                 <View style={styles.logoHalo}>
                   <LogoSVG width={86} height={86} />
                 </View>
@@ -228,35 +329,24 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
                       </Text>
                       <View style={styles.dropdownArrow} />
                     </TouchableOpacity>
-                    <Pressable
-                      style={[
-                        styles.phoneInputContainer,
-                        focusedField === 'phone' && styles.focusedInput,
-                      ]}
-                      onPress={() => phoneInputRef.current?.focus()}
-                      accessibilityRole="button"
-                      accessibilityLabel="Focus mobile number field">
-                      <TextInput
-                        ref={phoneInputRef}
-                        style={[styles.inputField, styles.phoneTextInput]}
-                        placeholder={
-                          selectedCountry.example ?? 'Phone number'
+                    <AppTextInput
+                      ref={phoneInputRef}
+                      containerStyle={styles.phoneInputContainer}
+                      focusedContainerStyle={styles.focusedInput}
+                      style={styles.phoneTextInput}
+                      placeholder={selectedCountry.example ?? 'Phone number'}
+                      keyboardType="phone-pad"
+                      value={phone}
+                      onChangeText={value => setPhone(value.replace(/\D/g, ''))}
+                      maxLength={maxPhoneLength}
+                      returnKeyType={isPasswordLogin ? 'next' : 'done'}
+                      onSubmitEditing={() => {
+                        if (isPasswordLogin) {
+                          passwordInputRef.current?.focus();
                         }
-                        keyboardType="phone-pad"
-                        value={phone}
-                        onChangeText={value =>
-                          setPhone(value.replace(/\D/g, ''))
-                        }
-                        onFocus={() => setFocusedField('phone')}
-                        onBlur={() => setFocusedField(null)}
-                        placeholderTextColor="#99A4B8"
-                        selectionColor={colors.primary}
-                        maxLength={maxPhoneLength}
-                        returnKeyType={isPasswordLogin ? 'next' : 'done'}
-                        showSoftInputOnFocus
-                        accessibilityLabel="Mobile number"
-                      />
-                    </Pressable>
+                      }}
+                      accessibilityLabel="Mobile number"
+                    />
                   </View>
 
                   {!isPasswordLogin && (
@@ -271,40 +361,38 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
                   {isPasswordLogin && (
                     <>
                       <Text style={styles.fieldLabel}>Password</Text>
-                      <View
-                        style={[
-                          styles.passwordInputContainer,
-                          focusedField === 'password' && styles.focusedInput,
-                        ]}>
-                        <TextInput
-                          ref={passwordInputRef}
-                          style={styles.passwordInput}
-                          placeholder="Enter your password"
-                          secureTextEntry={secureText}
-                          value={password}
-                          onChangeText={setPassword}
-                          onFocus={() => setFocusedField('password')}
-                          onBlur={() => setFocusedField(null)}
-                          placeholderTextColor="#99A4B8"
-                          selectionColor={colors.primary}
-                          returnKeyType="done"
-                          onSubmitEditing={handleAction}
-                          accessibilityLabel="Password"
-                        />
-                        <TouchableOpacity
-                          style={styles.eyeBtn}
-                          onPress={togglePasswordVisibility}
-                          accessibilityRole="button"
-                          accessibilityLabel={
-                            secureText ? 'Show password' : 'Hide password'
-                          }
-                          accessibilityState={{ selected: !secureText }}>
-                          <AppIcon
-                            name={secureText ? 'eye' : 'eye-off'}
-                            size={19}
-                          />
-                        </TouchableOpacity>
-                      </View>
+                      <AppTextInput
+                        ref={passwordInputRef}
+                        containerStyle={styles.passwordInputContainer}
+                        focusedContainerStyle={styles.focusedInput}
+                        style={styles.passwordInput}
+                        placeholder="Enter your password"
+                        secureTextEntry={secureText}
+                        value={password}
+                        onChangeText={setPassword}
+                        returnKeyType="done"
+                        onSubmitEditing={handleAction}
+                        textContentType="password"
+                        autoComplete="password"
+                        editable={!isSubmitting}
+                        accessibilityLabel="Password"
+                        rightAdornment={
+                          <TouchableOpacity
+                            style={styles.eyeBtn}
+                            onPress={togglePasswordVisibility}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            accessibilityRole="button"
+                            accessibilityLabel={
+                              secureText ? 'Show password' : 'Hide password'
+                            }
+                            accessibilityState={{ selected: !secureText }}>
+                            <AppIcon
+                              name={secureText ? 'eye' : 'eye-off'}
+                              size={19}
+                            />
+                          </TouchableOpacity>
+                        }
+                      />
 
                       <View style={styles.footerLinks}>
                         <TouchableOpacity
@@ -389,132 +477,13 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
               </View>
             </View>
           </AnimatedScreen>
-        </ScrollView>
-      </KeyboardAvoidingView>
-
-      <Modal
-        visible={countryPickerVisible}
-        transparent
-        animationType="slide"
-        statusBarTranslucent
-        onRequestClose={() => setCountryPickerVisible(false)}>
-        <View style={styles.modalRoot}>
-          <Pressable
-            style={styles.modalBackdrop}
-            onPress={() => setCountryPickerVisible(false)}
-            accessibilityLabel="Close country picker"
-          />
-          <View style={styles.countrySheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <View>
-                <Text style={styles.sheetTitle}>Select country</Text>
-                <Text style={styles.sheetSubtitle}>
-                  Choose your flag and dialing code
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setCountryPickerVisible(false)}
-                accessibilityRole="button"
-                accessibilityLabel="Close country picker">
-                <Text style={styles.closeButtonText}>X</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.countrySearchContainer}>
-              <AppIcon name="search" size={17} />
-              <TextInput
-                style={styles.countrySearchInput}
-                value={countrySearch}
-                onChangeText={setCountrySearch}
-                placeholder="Search country or code"
-                placeholderTextColor="#929DB0"
-                selectionColor={colors.primary}
-                autoCorrect={false}
-                autoCapitalize="none"
-                accessibilityLabel="Search countries"
-              />
-            </View>
-
-            <FlatList
-              data={filteredCountries}
-              keyExtractor={country => country.code}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.countryList}
-              renderItem={({ item }) => {
-                const isSelected = item.code === selectedCountry.code;
-
-                return (
-                  <TouchableOpacity
-                    style={[
-                      styles.countryOption,
-                      isSelected && styles.selectedCountryOption,
-                    ]}
-                    onPress={() => selectCountry(item)}
-                    activeOpacity={0.72}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isSelected }}>
-                    <Text style={styles.optionFlag}>
-                      {getCountryFlag(item.code)}
-                    </Text>
-                    <View style={styles.optionDetails}>
-                      <Text
-                        style={[
-                          styles.optionName,
-                          isSelected && styles.selectedOptionText,
-                        ]}
-                        numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                      <Text style={styles.optionIso}>{item.code}</Text>
-                    </View>
-                    <Text
-                      style={[
-                        styles.optionDialCode,
-                        isSelected && styles.selectedOptionText,
-                      ]}>
-                      {item.dialCode}
-                    </Text>
-                    <View
-                      style={[
-                        styles.selectionIndicator,
-                        isSelected && styles.selectedIndicator,
-                      ]}
-                    />
-                  </TouchableOpacity>
-                );
-              }}
-              ListEmptyComponent={
-                <View style={styles.emptyCountries}>
-                  <Text style={styles.emptyCountriesTitle}>
-                    No country found
-                  </Text>
-                  <Text style={styles.emptyCountriesText}>
-                    Try another country name or dialing code.
-                  </Text>
-                </View>
-              }
-            />
-          </View>
-        </View>
-      </Modal>
-    </View>
+    </ScreenScaffold>
   );
 };
 
 export default LoginScreenView;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F7FAFF',
-    overflow: 'hidden',
-  },
-  keyboardAvoiding: {
-    flex: 1,
-  },
   heroWash: {
     position: 'absolute',
     top: 0,
@@ -549,9 +518,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingTop: Platform.OS === 'ios' ? 48 : 28,
-    paddingBottom: 30,
-    paddingHorizontal: 16,
   },
   animatedScreen: {
     width: '100%',
@@ -984,11 +950,20 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     gap: 10,
   },
-  countrySearchInput: {
+  countrySearchInputWrap: {
     flex: 1,
+    minHeight: 0,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  countrySearchInput: {
     color: colors.text,
     fontSize: 14,
     fontFamily: fonts.BOLD,
+    minHeight: 0,
+    paddingVertical: 0,
   },
   countryList: {
     paddingBottom: 8,

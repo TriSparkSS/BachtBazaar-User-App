@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import LoginScreenView from './LoginScreenView';
 import { useAppContext } from '../../../context/AppContext';
@@ -10,9 +10,6 @@ import {
 } from '../../../services/firebasePhoneAuth';
 import { showAppAlert } from '../../../services/appAlert';
 import { configureGoogleSignIn, signInWithApple, signInWithGoogle } from '../../../services/firebaseSocialAuth';
-import { useEffect } from 'react';
-
-const BYPASS_AUTH_APIS = true;
 
 const Login = () => {
   const navigation = useNavigation();
@@ -27,12 +24,9 @@ const Login = () => {
     phone: string,
     mode: 'login' | 'signup' | 'forgot-password',
     exists: boolean,
-    skipPhoneVerification = false,
   ) => {
     const normalizedPhone = normalizePhoneNumber(phone);
-    if (!skipPhoneVerification) {
-      await sendPhoneVerificationOtp(phone);
-    }
+    await sendPhoneVerificationOtp(phone);
 
     setPendingAuth({
       phone: phone.replace(/\D/g, ''),
@@ -63,21 +57,7 @@ const Login = () => {
 
     try {
       setIsSubmitting(true);
-
-      if (BYPASS_AUTH_APIS) {
-        console.log('[Auth] Password login bypassed for UI development', {
-          phone,
-        });
-        const root = navigation.getParent();
-        if (root) {
-          // @ts-ignore
-          root.navigate('MainStack');
-        }
-        return;
-      }
-
       const response = await userAuthApi.loginWithPassword(phone, password);
-      console.log('[Auth] Login with password response', response);
       await setSession(response.token, response.user);
       const root = navigation.getParent();
       if (root) {
@@ -104,17 +84,7 @@ const Login = () => {
 
     try {
       setIsSubmitting(true);
-
-      if (BYPASS_AUTH_APIS) {
-        console.log('[Auth] Login OTP start bypassed for UI development', {
-          phone,
-        });
-        await navigateToOtp(phone, 'login', true, true);
-        return;
-      }
-
       const sendOtpResponse = await userAuthApi.sendOtp(phone);
-      console.log('[Auth] Send OTP response', sendOtpResponse);
 
       if (!sendOtpResponse.exists) {
         showAppAlert('Account not found', 'This mobile number is not registered. Please sign up first.');
@@ -141,17 +111,7 @@ const Login = () => {
 
     try {
       setIsSubmitting(true);
-
-      if (BYPASS_AUTH_APIS) {
-        console.log('[Auth] Signup OTP start bypassed for UI development', {
-          phone,
-        });
-        await navigateToOtp(phone, 'signup', false, true);
-        return;
-      }
-
       const sendOtpResponse = await userAuthApi.sendOtp(phone);
-      console.log('[Auth] Signup Send OTP response', sendOtpResponse);
 
       if (sendOtpResponse.exists) {
         showAppAlert('Account already exists', 'This mobile number is already registered. Please log in.');
@@ -178,17 +138,7 @@ const Login = () => {
 
     try {
       setIsSubmitting(true);
-
-      if (BYPASS_AUTH_APIS) {
-        console.log('[Auth] Forgot password OTP start bypassed for UI development', {
-          phone,
-        });
-        await navigateToOtp(phone, 'forgot-password', true, true);
-        return;
-      }
-
       const sendOtpResponse = await userAuthApi.sendOtp(phone);
-      console.log('[Auth] Forgot password send OTP response', sendOtpResponse);
 
       if (!sendOtpResponse.exists) {
         showAppAlert('Account not found', 'This mobile number is not registered. Please sign up first.');
@@ -213,7 +163,6 @@ const Login = () => {
           return;
         }
 
-        console.log('[Auth] Google login response', response);
         await setSession(response.token, response.user);
         const root = navigation.getParent();
         if (root) {

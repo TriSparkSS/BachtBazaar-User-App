@@ -6,6 +6,14 @@ const AUTH_USER_KEY = '@bachatbazaar/auth-user';
 
 export const authStorage = {
   async setSession(token: string, user: UserProfile) {
+    if (!token?.trim()) {
+      throw new Error('Cannot save session: auth token is missing.');
+    }
+
+    if (!user?._id) {
+      throw new Error('Cannot save session: user details are missing.');
+    }
+
     await AsyncStorage.multiSet([
       [AUTH_TOKEN_KEY, token],
       [AUTH_USER_KEY, JSON.stringify(user)],

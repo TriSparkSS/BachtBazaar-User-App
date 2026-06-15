@@ -1,6 +1,7 @@
-import { API_ENDPOINTS } from '../config/api';
-import { AuthResponse, SendOtpResponse, UserProfile } from '../types/auth';
+import { API_ENDPOINTS, resolveProfileImageUrl } from '../config/api';
+import { SendOtpResponse, UserProfile } from '../types/auth';
 import { apiRequest } from './apiClient';
+import { parseAuthResponse, parseVerifyOtpResponse } from './authResponseParser';
 
 const formatApiPhone = (phone: string) => {
   const digits = phone.replace(/\D/g, '');
@@ -24,11 +25,11 @@ export const userAuthApi = {
     });
   },
 
-  verifyOtp(token: string) {
-    return apiRequest<AuthResponse>(API_ENDPOINTS.verifyOtp, {
+  verifyOtp(firebaseToken: string, phone?: string) {
+    return apiRequest<unknown>(API_ENDPOINTS.verifyOtp, {
       method: 'POST',
-      body: { token },
-    });
+      body: { token: firebaseToken, firebaseToken },
+    }).then(payload => parseVerifyOtpResponse(payload, phone, firebaseToken));
   },
 
   forgotPassword(token: string, newPassword: string) {
@@ -38,18 +39,18 @@ export const userAuthApi = {
     });
   },
 
-  loginWithOtp(token: string) {
-    return apiRequest<AuthResponse>(API_ENDPOINTS.loginOtp, {
+  loginWithOtp(firebaseToken: string, phone?: string) {
+    return apiRequest<unknown>(API_ENDPOINTS.loginOtp, {
       method: 'POST',
-      body: { token },
-    });
+      body: { token: firebaseToken, firebaseToken },
+    }).then(payload => parseAuthResponse(payload, phone));
   },
 
   loginWithPassword(phone: string, password: string) {
-    return apiRequest<AuthResponse>(API_ENDPOINTS.loginPassword, {
+    return apiRequest<unknown>(API_ENDPOINTS.loginPassword, {
       method: 'POST',
       body: { phone: formatApiPhone(phone), password },
-    });
+    }).then(payload => parseAuthResponse(payload, formatApiPhone(phone)));
   },
 
   setPassword(userId: string, password: string, token?: string) {
@@ -105,4 +106,13 @@ export const userAuthApi = {
       body: formData,
     });
   },
+
+  getProfileImage(token: string) {
+    return apiRequest<{ profileImage?: string; url?: string }>(API_ENDPOINTS.profileImage, {
+      method: 'GET',
+      token,
+    });
+  },
+
+  resolveProfileImageUrl,
 };

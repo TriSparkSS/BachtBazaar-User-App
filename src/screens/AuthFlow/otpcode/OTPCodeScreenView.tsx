@@ -5,16 +5,15 @@ import {
   StyleSheet,
   TextInput,
   TouchableOpacity,
+  Pressable,
   Dimensions,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   ActivityIndicator,
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnimatedScreen from '../../../components/AnimatedScreen';
+import { ScreenScaffold } from '../../../components/ScreenScaffold';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
@@ -94,33 +93,19 @@ const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.heroWash} />
-      <View style={styles.topGlow} />
-      <View style={styles.bottomGlow} />
-      <View style={styles.topRightVector}>
-        <VectorSVG width={120} height={120} />
-      </View>
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={onBack}
-        activeOpacity={0.78}
-        accessibilityRole="button"
-        accessibilityLabel="Go back to previous screen">
-        <View style={styles.backChevron}>
-          <View style={[styles.backChevronLine, styles.backChevronTop]} />
-          <View style={[styles.backChevronLine, styles.backChevronBottom]} />
-        </View>
-      </TouchableOpacity>
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardAvoiding}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}>
-          <AnimatedScreen style={styles.animatedScreen}>
+    <ScreenScaffold
+      onBack={onBack}
+      background={
+        <>
+          <View style={styles.heroWash} />
+          <View style={styles.topGlow} />
+          <View style={styles.bottomGlow} />
+          <View style={styles.topRightVector}>
+            <VectorSVG width={120} height={120} />
+          </View>
+        </>
+      }>
+      <AnimatedScreen style={styles.animatedScreen}>
             <View style={styles.logoContainer}>
               <View style={styles.logoHalo}>
                 <LogoSVG width={82} height={82} />
@@ -156,28 +141,35 @@ const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({
                   const isFilled = Boolean(digit);
 
                   return (
-                    <TextInput
+                    <Pressable
                       key={index}
-                      ref={ref => {
-                        inputRefs.current[index] = ref;
-                      }}
                       style={[
                         styles.otpInput,
                         isFocused && styles.otpInputFocused,
                         isFilled && styles.otpInputFilled,
                       ]}
-                      keyboardType="number-pad"
-                      textContentType="oneTimeCode"
-                      autoComplete="sms-otp"
-                      maxLength={6}
-                      value={digit}
-                      onChangeText={value => handleOtpChange(value, index)}
-                      onKeyPress={event => handleKeyPress(event, index)}
-                      onFocus={() => setFocusedIndex(index)}
-                      onBlur={() => setFocusedIndex(null)}
-                      selectionColor={colors.primary}
-                      accessibilityLabel={`OTP digit ${index + 1}`}
-                    />
+                      onPress={() => inputRefs.current[index]?.focus()}>
+                      <TextInput
+                        ref={ref => {
+                          inputRefs.current[index] = ref;
+                        }}
+                        style={styles.otpTextInput}
+                        keyboardType="number-pad"
+                        textContentType="oneTimeCode"
+                        autoComplete="sms-otp"
+                        maxLength={6}
+                        value={digit}
+                        onChangeText={value => handleOtpChange(value, index)}
+                        onKeyPress={event => handleKeyPress(event, index)}
+                        onFocus={() => setFocusedIndex(index)}
+                        onBlur={() =>
+                          setFocusedIndex(current => (current === index ? null : current))
+                        }
+                        showSoftInputOnFocus
+                        selectionColor={colors.primary}
+                        accessibilityLabel={`OTP digit ${index + 1}`}
+                      />
+                    </Pressable>
                   );
                 })}
               </View>
@@ -223,23 +215,13 @@ const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({
               </View>
             </View>
           </AnimatedScreen>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </View>
+    </ScreenScaffold>
   );
 };
 
 export default OTPCodeScreenView;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F7FAFF',
-    overflow: 'hidden',
-  },
-  keyboardAvoiding: {
-    flex: 1,
-  },
   heroWash: {
     position: 'absolute',
     top: 0,
@@ -278,52 +260,6 @@ const styles = StyleSheet.create({
     height: 120,
     overflow: 'visible',
     opacity: 0.7,
-  },
-  backButton: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 54 : 24,
-    left: 18,
-    zIndex: 20,
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.primary,
-    shadowColor: '#173E7A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.28,
-    shadowRadius: 12,
-    elevation: 7,
-  },
-  backChevron: {
-    width: 18,
-    height: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  backChevronLine: {
-    position: 'absolute',
-    width: 18,
-    height: 4,
-    borderRadius: 4,
-    backgroundColor: colors.white,
-  },
-  backChevronTop: {
-    transform: [{ rotate: '-45deg' }],
-    top: 3,
-  },
-  backChevronBottom: {
-    transform: [{ rotate: '45deg' }],
-    bottom: 3,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingTop: Platform.OS === 'ios' ? 48 : 28,
-    paddingBottom: 30,
-    paddingHorizontal: 16,
   },
   animatedScreen: {
     width: '100%',
@@ -473,6 +409,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.4,
     borderColor: '#DCE3EE',
     borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  otpTextInput: {
+    width: '100%',
+    height: '100%',
     textAlign: 'center',
     textAlignVertical: 'center',
     paddingVertical: 0,

@@ -17,9 +17,9 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import Geolocation from 'react-native-geolocation-service';
 import AnimatedScreen from '../../../../components/AnimatedScreen';
-import AppIcon, { AppIconName } from '../../../../components/AppIcon';
+import { AppIconName } from '../../../../components/AppIcon';
 import Navbar from '../../../../components/navbar';
-import { API_BASE_URL } from '../../../../config/api';
+import { resolveProfileImageUrl } from '../../../../config/api';
 import { colors, fonts } from '../../../../helpers/styles';
 import { useAppContext } from '../../../../context/AppContext';
 import { showAppAlert } from '../../../../services/appAlert';
@@ -107,6 +107,46 @@ const sidebarIconTint: Record<string, string> = {
   'Edit Profile': '#5E9631',
   Notification: '#4E73D8',
   'Delete account': '#D84B4B',
+};
+
+const sidebarMciIcons: Record<AppIconName, string> = {
+  menu: 'menu',
+  bell: 'bell-outline',
+  search: 'magnify',
+  qr: 'qrcode-scan',
+  google: 'google',
+  apple: 'apple',
+  eye: 'eye-outline',
+  'eye-off': 'eye-off-outline',
+  close: 'close',
+  phone: 'phone-outline',
+  location: 'map-marker-outline',
+  logout: 'logout',
+  overview: 'view-dashboard-outline',
+  shop: 'store-outline',
+  delivery: 'truck-delivery-outline',
+  'discover-product': 'package-variant',
+  offers: 'tag-multiple-outline',
+  wallet: 'wallet-outline',
+  'saving-summary': 'chart-line',
+  target: 'bullseye-arrow',
+  tips: 'lightbulb-on-outline',
+  coupons: 'ticket-percent-outline',
+  'saved-stores': 'store-marker-outline',
+  'saved-products': 'bookmark-box-outline',
+  password: 'lock-outline',
+  'edit-profile': 'account-edit-outline',
+  notification: 'bell-badge-outline',
+  'delete-account': 'delete-outline',
+  reward: 'gift-outline',
+  'nearby-coupons': 'map-marker-radius-outline',
+  'scan-save': 'qrcode-scan',
+  'invite-earn': 'account-plus-outline',
+  'saved-offers': 'bookmark-outline',
+  'hot-deals': 'fire',
+  jewelry: 'diamond-stone',
+  grocery: 'cart-outline',
+  food: 'food-outline',
 };
 
 const sidebarGroups: SidebarGroup[] = [
@@ -257,9 +297,7 @@ const HomeScreenView = () => {
   const profileActionLabel = isProfileComplete ? 'Edit Profile' : 'Complete Profile';
   const profileImageUri =
     !profileImageLoadError && currentUser?.profileImage
-      ? currentUser.profileImage.startsWith('http')
-        ? currentUser.profileImage
-        : `${API_BASE_URL.replace(/\/api\/user\/?$/, '')}${currentUser.profileImage}`
+      ? resolveProfileImageUrl(currentUser.profileImage) ?? ''
       : '';
 
   useEffect(() => {
@@ -559,6 +597,7 @@ const HomeScreenView = () => {
               ))}
             </ScrollView>
 
+            <View style={styles.categoriesSection}>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -604,6 +643,7 @@ const HomeScreenView = () => {
                 );
               })}
             </ScrollView>
+            </View>
 
             <View style={styles.localOffersSection}>
               <View style={styles.localOffersHeader}>
@@ -707,22 +747,20 @@ const HomeScreenView = () => {
       <Modal
         visible={sidebarVisible}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setSidebarVisible(false)}
       >
         <View style={styles.modalRoot}>
           <AnimatedScreen style={styles.sidebarCard}>
-            <View style={styles.sidebarPatternTop} />
-            <View style={styles.sidebarPatternBottom} />
             <View style={styles.sidebarHeaderRow}>
-              <View />
+              <Text style={styles.sidebarTitle}>Menu</Text>
               <TouchableOpacity
                 onPress={() => setSidebarVisible(false)}
                 style={styles.sidebarCloseButton}
                 accessibilityRole="button"
                 accessibilityLabel="Close menu"
               >
-                <AppIcon name="close" size={22} color={colors.text} />
+                <MaterialCommunityIcons name="close" size={22} color={colors.text} />
               </TouchableOpacity>
             </View>
 
@@ -751,7 +789,7 @@ const HomeScreenView = () => {
 
                 <View style={styles.contactRow}>
                   <View style={styles.contactIconBadge}>
-                    <AppIcon name="phone" size={16} color={colors.primary} />
+                    <MaterialCommunityIcons name="phone-outline" size={16} color={colors.primary} />
                   </View>
                   <Text style={styles.contactText}>
                     {isPhoneVisible ? displayPhone : `+91 ${maskedPhone}`}
@@ -762,8 +800,8 @@ const HomeScreenView = () => {
                     accessibilityRole="button"
                     accessibilityLabel={isPhoneVisible ? 'Hide phone number' : 'Show phone number'}
                   >
-                    <AppIcon
-                      name={isPhoneVisible ? 'eye' : 'eye-off'}
+                    <MaterialCommunityIcons
+                      name={isPhoneVisible ? 'eye-outline' : 'eye-off-outline'}
                       size={18}
                       color={colors.primary}
                     />
@@ -772,7 +810,7 @@ const HomeScreenView = () => {
 
                 <View style={styles.contactRow}>
                   <View style={styles.contactIconBadge}>
-                    <AppIcon name="location" size={16} color={colors.primary} />
+                    <MaterialCommunityIcons name="map-marker-outline" size={16} color={colors.primary} />
                   </View>
                   <Text style={styles.contactText}>{sidebarLocation}</Text>
                 </View>
@@ -818,21 +856,21 @@ const HomeScreenView = () => {
                         key={item.label}
                         style={[styles.sidebarItem, item.active && styles.sidebarItemActive]}
                         onPress={onPress}
-                        activeOpacity={0.75}
+                        activeOpacity={0.65}
                       >
                         <View
                           style={[
                             styles.sidebarItemIconWrap,
                             {
                               backgroundColor: item.active
-                                ? 'rgba(255,255,255,0.24)'
+                                ? 'rgba(255,255,255,0.22)'
                                 : sidebarIconPalette[item.label] ?? '#EEF4FF',
                             },
                           ]}
                         >
-                          <AppIcon
-                            name={item.icon}
-                            size={18}
+                          <MaterialCommunityIcons
+                            name={sidebarMciIcons[item.icon]}
+                            size={20}
                             color={
                               item.active
                                 ? colors.white
@@ -855,8 +893,8 @@ const HomeScreenView = () => {
                 </View>
               ))}
 
-              <TouchableOpacity style={styles.logoutRow} onPress={handleLogout} activeOpacity={0.75}>
-                <AppIcon name="logout" size={20} color="#E45A5A" />
+              <TouchableOpacity style={styles.logoutRow} onPress={handleLogout} activeOpacity={0.7}>
+                <MaterialCommunityIcons name="logout" size={20} color="#E45A5A" />
                 <Text style={styles.logoutText}>Log Out</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -878,6 +916,7 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
+    paddingTop: 6,
   },
   bgAccent: {
     position: 'absolute',
@@ -893,6 +932,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 176,
+    paddingTop: 4,
   },
   promoBannerSection: {
     marginHorizontal: 16,
@@ -1172,19 +1212,25 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 13,
   },
-  categoriesScroll: {
+  categoriesSection: {
     marginBottom: 18,
+    paddingBottom: 4,
+  },
+  categoriesScroll: {
+    flexGrow: 0,
   },
   categoriesContent: {
     flexDirection: 'row',
     paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 10,
     gap: 10,
   },
   categoryPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 22,
     borderWidth: 1,
     borderColor: '#E7ECF5',
@@ -1816,30 +1862,28 @@ const styles = StyleSheet.create({
   },
   modalRoot: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.14)',
+    backgroundColor: 'rgba(15, 23, 42, 0.38)',
     flexDirection: 'row',
   },
   sidebarCard: {
-    width: width * 0.78,
-    maxWidth: 330,
-    backgroundColor: 'rgba(255,255,255,0.97)',
+    width: width * 0.82,
+    maxWidth: 340,
+    backgroundColor: colors.white,
     marginTop: 0,
     marginBottom: 0,
     marginLeft: 0,
-    borderTopRightRadius: 32,
-    borderBottomRightRadius: 32,
+    borderTopRightRadius: 28,
+    borderBottomRightRadius: 28,
     borderTopLeftRadius: 0,
     borderBottomLeftRadius: 0,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 18,
-    borderWidth: 2,
-    borderColor: '#366FE0',
+    paddingHorizontal: 18,
+    paddingTop: 14,
+    paddingBottom: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.14,
+    shadowOffset: { width: 8, height: 0 },
+    shadowOpacity: 0.18,
     shadowRadius: 24,
-    elevation: 12,
+    elevation: 16,
     overflow: 'hidden',
   },
   sidebarPatternTop: {
@@ -1870,14 +1914,23 @@ const styles = StyleSheet.create({
   },
   sidebarHeaderRow: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 14,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF2F8',
+  },
+  sidebarTitle: {
+    fontSize: 18,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+    letterSpacing: -0.3,
   },
   sidebarCloseButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F4F7FC',
@@ -2023,31 +2076,33 @@ const styles = StyleSheet.create({
   sidebarItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    minHeight: 38,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    marginBottom: 6,
+    gap: 12,
+    minHeight: 48,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    marginBottom: 4,
   },
   sidebarItemActive: {
-    backgroundColor: '#D7A44E',
-    shadowColor: '#D7A44E',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 5,
+    backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   sidebarItemIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sidebarItemText: {
-    fontSize: 11,
+    fontSize: 13,
     color: colors.text,
     fontFamily: fonts.BOLD,
+    flex: 1,
   },
   sidebarItemTextActive: {
     color: colors.white,

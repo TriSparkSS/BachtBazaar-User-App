@@ -1,8 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity } from 'react-native';
+import React, { useRef } from 'react';
+import { TextInput, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { AppTextInput } from './AppTextInput';
 import { colors, fonts } from '../helpers/styles';
-
 interface NavbarProps {
   onMenuPress?: () => void;
   title?: string;
@@ -16,6 +16,7 @@ const Navbar: React.FC<NavbarProps> = ({
   subtitle = 'Work - Mohan Sharn',
   showSearch = true,
 }) => {
+  const searchInputRef = useRef<TextInput>(null);
   const formattedSubtitle = subtitle.replace(/^Work\s*-\s*/i, '').trim();
 
   return (
@@ -53,15 +54,20 @@ const Navbar: React.FC<NavbarProps> = ({
 
       {showSearch && (
         <View style={styles.searchRow}>
-          <View style={styles.searchContainer}>
+          <TouchableOpacity
+            style={styles.searchContainer}
+            activeOpacity={1}
+            onPress={() => searchInputRef.current?.focus()}>
             <MaterialCommunityIcons name="magnify" size={22} color={colors.primary} />
-            <TextInput
+            <AppTextInput
+              ref={searchInputRef}
+              containerStyle={styles.searchInputWrap}
               style={styles.searchInput}
               placeholder="Search Product..."
               placeholderTextColor={colors.lighterGray}
+              returnKeyType="search"
             />
-          </View>
-          <TouchableOpacity style={styles.qrButton} activeOpacity={0.82}>
+          </TouchableOpacity>          <TouchableOpacity style={styles.qrButton} activeOpacity={0.82}>
             <MaterialCommunityIcons name="qrcode-scan" size={22} color={colors.white} />
           </TouchableOpacity>
         </View>
@@ -77,7 +83,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 12,
     paddingBottom: 6,
     gap: 10,
   },
@@ -136,7 +142,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     gap: 10,
-    marginBottom: 14,
+    marginTop: 14,
+    marginBottom: 16,
   },
   searchContainer: {
     flex: 1,
@@ -155,14 +162,21 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 3,
   },
-  searchInput: {
+  searchInputWrap: {
     flex: 1,
+    minHeight: 0,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  searchInput: {
     fontSize: 13,
     color: colors.darkGray,
     padding: 0,
     fontFamily: fonts.BOLD,
-  },
-  qrButton: {
+    minHeight: 0,
+  },  qrButton: {
     width: 52,
     height: 52,
     justifyContent: 'center',

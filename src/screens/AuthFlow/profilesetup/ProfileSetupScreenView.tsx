@@ -1,17 +1,17 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
   Image,
+  Platform,
 } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnimatedScreen from '../../../components/AnimatedScreen';
+import { AppTextInput } from '../../../components/AppTextInput';
+import { ScreenScaffold } from '../../../components/ScreenScaffold';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
@@ -47,27 +47,28 @@ const ProfileSetupScreenView: React.FC<ProfileSetupScreenViewProps> = ({
   isNewUser = true,
   isSubmitting = false,
 }) => {
+  const nameInputRef = useRef<TextInput>(null);
+  const addressInputRef = useRef<TextInput>(null);
   const avatarUri =
     profileImageUri ||
     'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500';
 
   return (
-    <View style={styles.container}>
-      <View style={styles.topGlow} />
-      <View style={styles.bottomGlow} />
-      <View style={styles.topRightVector}>
-        <VectorSVG width={150} height={160} />
-      </View>
-      <View style={styles.bottomLeftVector}>
-        <VectorSVG width={118} height={118} />
-      </View>
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.flex}
-      >
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <AnimatedScreen style={styles.contentWrap}>
+    <ScreenScaffold
+      backgroundColor={colors.white}
+      background={
+        <>
+          <View style={styles.topGlow} />
+          <View style={styles.bottomGlow} />
+          <View style={styles.topRightVector}>
+            <VectorSVG width={150} height={160} />
+          </View>
+          <View style={styles.bottomLeftVector}>
+            <VectorSVG width={118} height={118} />
+          </View>
+        </>
+      }>
+      <AnimatedScreen style={styles.contentWrap}>
             <View style={styles.logoContainer}>
               <LogoSVG width={100} height={100} />
               <View style={styles.titleContainer}>
@@ -93,12 +94,20 @@ const ProfileSetupScreenView: React.FC<ProfileSetupScreenViewProps> = ({
               <Text style={styles.userPhone}>{phone || '786543567'}</Text>
 
               <Text style={styles.fieldLabel}>Your Name</Text>
-              <TextInput
-                style={styles.inputField}
+              <AppTextInput
+                ref={nameInputRef}
+                containerStyle={styles.inputField}
+                focusedContainerStyle={styles.inputFieldFocused}
+                style={styles.inputText}
                 placeholder="Enter your Name"
                 placeholderTextColor={colors.lighterGray}
                 value={name}
                 onChangeText={setName}
+                returnKeyType="next"
+                onSubmitEditing={() => addressInputRef.current?.focus()}
+                editable={!isSubmitting}
+                autoCapitalize="words"
+                textContentType="name"
               />
 
               <View style={styles.genderRow}>
@@ -119,13 +128,19 @@ const ProfileSetupScreenView: React.FC<ProfileSetupScreenViewProps> = ({
               </View>
 
               <Text style={styles.fieldLabel}>Your Address (optional)</Text>
-              <TextInput
-                style={[styles.inputField, styles.addressInput]}
+              <AppTextInput
+                ref={addressInputRef}
+                containerStyle={[styles.inputField, styles.addressInput]}
+                focusedContainerStyle={styles.inputFieldFocused}
+                style={styles.inputText}
                 placeholder="Enter your Address"
                 placeholderTextColor={colors.lighterGray}
                 value={address}
                 onChangeText={setAddress}
                 multiline
+                editable={!isSubmitting}
+                textAlignVertical="top"
+                autoCapitalize="sentences"
               />
 
               <TouchableOpacity
@@ -143,19 +158,13 @@ const ProfileSetupScreenView: React.FC<ProfileSetupScreenViewProps> = ({
               </TouchableOpacity>
             </View>
           </AnimatedScreen>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </View>
+    </ScreenScaffold>
   );
 };
 
 export default ProfileSetupScreenView;
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.white,
-  },
   topGlow: {
     position: 'absolute',
     top: 116,
@@ -177,12 +186,6 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
-  scrollContent: {
-    flexGrow: 1,
-    alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingBottom: 28,
-  },
   contentWrap: {
     width: '100%',
     alignItems: 'center',
@@ -202,7 +205,7 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginTop: 32,
+    marginTop: 4,
     marginBottom: 14,
   },
   titleContainer: {
@@ -306,15 +309,26 @@ const styles = StyleSheet.create({
     borderColor: colors.primaryBorder,
     backgroundColor: colors.white,
     paddingHorizontal: 14,
-    color: colors.text,
-    fontFamily: fonts.BOLD,
-    fontSize: 14,
     marginBottom: 14,
+  },
+  inputFieldFocused: {
+    borderColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 7,
+    elevation: 2,
+  },
+  inputText: {
+    color: colors.text,
+    fontSize: 14,
+    fontFamily: fonts.BOLD,
+    minHeight: 0,
+    paddingVertical: Platform.OS === 'android' ? 10 : 0,
   },
   addressInput: {
     minHeight: 78,
-    paddingTop: 14,
-    textAlignVertical: 'top',
+    alignItems: 'flex-start',
   },
   genderRow: {
     flexDirection: 'row',

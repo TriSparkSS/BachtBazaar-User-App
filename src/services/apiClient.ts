@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/api';
+import { API_DEBUG } from '../config/debug';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 
@@ -67,7 +68,7 @@ const buildHeaders = (options: RequestOptions) => {
 };
 
 export const logApiEvent = (label: string, payload?: ApiLogPayload) => {
-  if (!__DEV__) {
+  if (!API_DEBUG) {
     return;
   }
 
@@ -132,9 +133,31 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   const contentType = response.headers.get('content-type') ?? '';
-  const payload = contentType.includes('application/json')
-    ? await response.json()
-    : await response.text();
+  let payload: unknown;
+
+  if (contentType.includes('application/json')) {
+    payload = await response.json();
+  } else {
+    const text = await response.text();
+    const trimmed = text.trim();
+
+    if (trimmed.startsWith('<!doctype html') || trimmed.startsWith('<html')) {
+      logApiEvent(`${method} invalid-response`, {
+        url,
+        path,
+        method,
+        status: response.status,
+        durationMs: Date.now() - startedAt,
+        hint: 'Server returned HTML instead of JSON. Check API_BASE_URL uses https://',
+        responsePreview: trimmed.slice(0, 120),
+      });
+      throw new Error(
+        'Server returned an HTML page instead of API data. Ensure API_BASE_URL uses https://bachatbazaar.tech/api/user',
+      );
+    }
+
+    payload = text;
+  }
 
   if (!response.ok) {
     logApiEvent(`${method} error-response`, {

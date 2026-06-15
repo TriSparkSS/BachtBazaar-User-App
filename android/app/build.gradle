@@ -90,7 +90,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
-        resValue "integer", "react_native_dev_server_port", "8088"
+        resValue "integer", "react_native_dev_server_port", "8081"
         externalNativeBuild {
             cmake {
                 arguments "-DANDROID_STL=c++_shared",

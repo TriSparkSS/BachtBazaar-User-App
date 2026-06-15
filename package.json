@@ -3,16 +3,18 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "android": "react-native run-android --port 8088",
+    "android": "react-native run-android --port 8081",
     "ios": "react-native run-ios",
     "lint": "eslint .",
-    "start": "react-native start --port 8088",
+    "start": "react-native start --port 8081",
+    "device": "powershell -NoProfile -Command \"Get-NetTCPConnection -LocalPort 8081 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }; adb reverse tcp:8081 tcp:8081; npx react-native run-android --port 8081\"",
     "test": "jest"
   },
   "dependencies": {
     "@invertase/react-native-apple-authentication": "^2.5.1",
     "@react-native-async-storage/async-storage": "^1.24.0",
     "@react-native-firebase/app": "^21.12.0",
+    "@react-native-firebase/app-check": "^21.14.0",
     "@react-native-firebase/auth": "^21.12.0",
     "@react-native-google-signin/google-signin": "^16.1.2",
     "@react-native/new-app-screen": "0.84.1",

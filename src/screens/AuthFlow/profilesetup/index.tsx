@@ -10,7 +10,7 @@ import {
 import ProfileSetupScreenView from './ProfileSetupScreenView';
 import { useAppContext } from '../../../context/AppContext';
 import { userAuthApi } from '../../../services/userAuthApi';
-import { API_BASE_URL } from '../../../config/api';
+import { resolveProfileImageUrl } from '../../../config/api';
 import { showAppAlert } from '../../../services/appAlert';
 
 type ProfileImageFile = {
@@ -33,11 +33,7 @@ const ProfileSetup = () => {
   // @ts-ignore
   const source = route.params?.source ?? 'auth';
   const profileImageUri = profileImage?.uri
-    ?? (currentUser?.profileImage
-      ? currentUser.profileImage.startsWith('http')
-        ? currentUser.profileImage
-        : `${API_BASE_URL.replace(/\/api\/user\/?$/, '')}${currentUser.profileImage}`
-      : undefined);
+    ?? resolveProfileImageUrl(currentUser?.profileImage);
 
   const imagePickerOptions: ImageLibraryOptions & CameraOptions = {
     mediaType: 'photo',

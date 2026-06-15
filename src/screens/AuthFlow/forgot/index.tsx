@@ -6,152 +6,122 @@ import { showAppAlert } from '../../../services/appAlert';
 import { useAppContext } from '../../../context/AppContext';
 
 const isPasswordValid = (value: string) =>
-    value.length >= 8 && /[A-Z]/.test(value) && /[!@#$%]/.test(value);
-
-const BYPASS_PASSWORD_APIS = true;
+  value.length >= 8 && /[A-Z]/.test(value) && /[!@#$%]/.test(value);
 
 const ForgotPassword = () => {
-    const navigation = useNavigation();
-    const route = useRoute();
-    const { authToken } = useAppContext();
-    // @ts-ignore
-    const userId = route.params?.userId;
-    // @ts-ignore
-    const flow = route.params?.flow;
-    // @ts-ignore
-    const firebaseToken = route.params?.firebaseToken;
-    // @ts-ignore
-    const phoneNumber = route.params?.phoneNumber;
-    // @ts-ignore
-    const sessionToken = route.params?.sessionToken;
-    // @ts-ignore
-    const developmentBypass = route.params?.developmentBypass;
+  const navigation = useNavigation();
+  const route = useRoute();
+  const { authToken, currentUser } = useAppContext();
+  // @ts-ignore
+  const userId = route.params?.userId;
+  // @ts-ignore
+  const flow = route.params?.flow;
+  // @ts-ignore
+  const firebaseToken = route.params?.firebaseToken;
+  // @ts-ignore
+  const phoneNumber = route.params?.phoneNumber;
+  // @ts-ignore
+  const sessionToken = route.params?.sessionToken;
 
-    const handleBack = () => {
-        navigation.goBack();
-    };
+  const handleBack = () => {
+    navigation.goBack();
+  };
 
-    const handleSubmit = async (oldPassword: string, password: string, confirm: string) => {
-        console.log('[Auth] Password setup attempt', {
-            hasUserId: Boolean(userId),
-            flow,
-            developmentBypass: Boolean(developmentBypass),
-        });
-        if (password !== confirm) {
-           showAppAlert('Error', 'Passwords do not match');
-           return;
+  const handleSubmit = async (oldPassword: string, password: string, confirm: string) => {
+    if (password !== confirm) {
+      showAppAlert('Error', 'Passwords do not match');
+      return;
+    }
+
+    if (!isPasswordValid(password.trim())) {
+      showAppAlert(
+        'Weak password',
+        'Password must have 8+ characters, 1 uppercase letter, and 1 symbol (!@#$%).',
+      );
+      return;
+    }
+
+    try {
+      if (flow === 'change-password') {
+        if (!authToken) {
+          showAppAlert('Session expired', 'Please log in again.');
+          return;
         }
 
-        if (!isPasswordValid(password.trim())) {
-            showAppAlert(
-                'Weak password',
-                'Password must have 8+ characters, 1 uppercase letter, and 1 symbol (!@#$%).',
-            );
-            return;
+        if (oldPassword.trim().length < 6) {
+          showAppAlert('Error', 'Old password must be at least 6 characters');
+          return;
         }
 
-        try {
-            if (BYPASS_PASSWORD_APIS || developmentBypass) {
-                console.log('[Auth] Password submit bypassed for UI development', {
-                    flow,
-                    phoneNumber,
-                });
+        await userAuthApi.changePassword(
+          authToken,
+          oldPassword.trim(),
+          password.trim(),
+        );
+        showAppAlert('Success', 'Password updated successfully', [
+          { text: 'OK', onPress: () => navigation.goBack() },
+        ]);
+        return;
+      }
 
-                if (flow === 'change-password') {
-                    showAppAlert('Success', 'Password updated successfully', [
-                        { text: 'OK', onPress: () => navigation.goBack() }
-                    ]);
-                    return;
-                }
-
-                if (flow === 'forgot-password') {
-                    showAppAlert('Success', 'Password reset successfully', [
-                        { text: 'OK', onPress: () => navigation.dispatch(StackActions.replace('Login')) }
-                    ]);
-                    return;
-                }
-
-                // @ts-ignore
-                navigation.dispatch(StackActions.replace('Successfull', {
-                    isNewUser: true,
-                    developmentBypass: true,
-                }));
-                return;
-            }
-
-            if (flow === 'change-password') {
-                if (!authToken) {
-                    showAppAlert('Session expired', 'Please log in again.');
-                    return;
-                }
-
-                if (oldPassword.trim().length < 6) {
-                    showAppAlert('Error', 'Old password must be at least 6 characters');
-                    return;
-                }
-
-                const response = await userAuthApi.changePassword(
-                    authToken,
-                    oldPassword.trim(),
-                    password.trim(),
-                );
-                console.log('[Auth] Change password response', response);
-                showAppAlert('Success', 'Password updated successfully', [
-                    { text: 'OK', onPress: () => navigation.goBack() }
-                ]);
-                return;
-            }
-
-            if (flow === 'forgot-password') {
-                if (!firebaseToken) {
-                    showAppAlert('Unavailable', 'Verification session expired. Please verify your number again.');
-                    return;
-                }
-
-                const response = await userAuthApi.forgotPassword(firebaseToken, password.trim());
-                console.log('[Auth] Forgot password response', response);
-                showAppAlert('Success', 'Password reset successfully', [
-                    { text: 'OK', onPress: () => navigation.dispatch(StackActions.replace('Login')) }
-                ]);
-                return;
-            }
-
-            if (!userId) {
-                showAppAlert('Unavailable', 'User ID not found. Please verify your number again.');
-                return;
-            }
-
-            const response = await userAuthApi.setPassword(
-                userId,
-                password.trim(),
-                sessionToken ?? authToken ?? undefined,
-            );
-            console.log('[Auth] Set password response', response);
-
-            if (flow === 'signup-password') {
-                // @ts-ignore
-                navigation.dispatch(StackActions.replace('Successfull', { isNewUser: true }));
-                return;
-            }
-
-            showAppAlert('Success', 'Password updated successfully', [
-                { text: 'OK', onPress: () => navigation.dispatch(StackActions.replace('Login')) }
-            ]);
-        } catch (error) {
-            const message =
-                error instanceof Error ? error.message : 'Unable to set password right now.';
-            showAppAlert('Password setup failed', message);
+      if (flow === 'forgot-password') {
+        if (!firebaseToken) {
+          showAppAlert('Unavailable', 'Verification session expired. Please verify your number again.');
+          return;
         }
-    };
 
-    return (
-        <ForgotPasswordScreenView
-            onBack={handleBack}
-            onSubmit={handleSubmit}
-            mode={flow === 'change-password' ? 'change-password' : flow === 'forgot-password' ? 'forgot-password' : 'signup-password'}
-            phoneNumber={phoneNumber}
-        />
-    );
+        await userAuthApi.forgotPassword(firebaseToken, password.trim());
+        showAppAlert('Success', 'Password reset successfully', [
+          { text: 'OK', onPress: () => navigation.dispatch(StackActions.replace('Login')) },
+        ]);
+        return;
+      }
+
+      const resolvedUserId = userId ?? currentUser?._id;
+      const resolvedToken = sessionToken ?? authToken ?? undefined;
+
+      if (!resolvedUserId) {
+        showAppAlert('Unavailable', 'User ID not found. Please verify your number again.');
+        return;
+      }
+
+      if (!resolvedToken) {
+        showAppAlert('Session expired', 'Please verify your number again.');
+        return;
+      }
+
+      await userAuthApi.setPassword(resolvedUserId, password.trim(), resolvedToken);
+
+      if (flow === 'signup-password') {
+        // @ts-ignore
+        navigation.dispatch(StackActions.replace('Successfull', { isNewUser: true }));
+        return;
+      }
+
+      showAppAlert('Success', 'Password updated successfully', [
+        { text: 'OK', onPress: () => navigation.dispatch(StackActions.replace('Login')) },
+      ]);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to set password right now.';
+      showAppAlert('Password setup failed', message);
+    }
+  };
+
+  return (
+    <ForgotPasswordScreenView
+      onBack={handleBack}
+      onSubmit={handleSubmit}
+      mode={
+        flow === 'change-password'
+          ? 'change-password'
+          : flow === 'forgot-password'
+            ? 'forgot-password'
+            : 'signup-password'
+      }
+      phoneNumber={phoneNumber}
+    />
+  );
 };
 
 export default ForgotPassword;
