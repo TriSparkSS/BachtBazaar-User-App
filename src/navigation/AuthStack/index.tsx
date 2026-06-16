@@ -14,7 +14,7 @@ export const AuthStack = () => {
                 headerShown: false,
                 cardStyle: styles.container
             }}
-            initialRouteName='Splash'
+            initialRouteName='Login'
         >
             <AuthStackNav.Screen component={screens.Splash} name='Splash' />
             <AuthStackNav.Screen component={screens.Login} name='Login' />

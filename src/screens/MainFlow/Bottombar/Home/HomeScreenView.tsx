@@ -10,11 +10,13 @@ import {
   Text,
   TouchableOpacity,
   View,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import React, { useEffect, useMemo, useState } from 'react';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { CommonActions, useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import Geolocation from 'react-native-geolocation-service';
 import AnimatedScreen from '../../../../components/AnimatedScreen';
 import { AppIconName } from '../../../../components/AppIcon';
@@ -22,8 +24,12 @@ import Navbar from '../../../../components/navbar';
 import { resolveProfileImageUrl } from '../../../../config/api';
 import { colors, fonts } from '../../../../helpers/styles';
 import { useAppContext } from '../../../../context/AppContext';
+import { userAuthApi } from '../../../../services/userAuthApi';
 import { showAppAlert } from '../../../../services/appAlert';
 import { logApiEvent } from '../../../../services/apiClient';
+import { ShopOffer, ShopWithOffers } from '../../../../types/shop';
+import { MainStackParamList } from '../../../../navigation/types';
+import { formatOfferCountdown } from '../../../../utils/offer';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min((width - 48) / 3 - 4, 118);
@@ -34,7 +40,6 @@ const DINEOUT_GREEN_LIGHT = '#0F6B4F';
 type SidebarItem = {
   icon: AppIconName;
   label: string;
-  active?: boolean;
   tone?: 'danger';
 };
 
@@ -51,25 +56,11 @@ type CategoryChip = {
   bg: string;
 };
 
-type StoreProductOffer = {
-  id: string;
-  title: string;
-  subtitle: string;
-  discount: string;
-  countdown: string;
-  image: string;
-};
+const PLACEHOLDER_SHOP_LOGO =
+  'https://images.pexels.com/photos/248077/pexels-photo-248077.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=200';
 
-type FeaturedStore = {
-  name: string;
-  logo: string;
-  tagline: string;
-  rating: string;
-  ratingCount: string;
-  distance: string;
-  isOpen: boolean;
-  offers: StoreProductOffer[];
-};
+const PLACEHOLDER_OFFER_IMAGE =
+  'https://images.pexels.com/photos/1191531/pexels-photo-1191531.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400';
 
 const sidebarIconPalette: Record<string, string> = {
   Overview: '#F7DCA8',
@@ -153,7 +144,7 @@ const sidebarGroups: SidebarGroup[] = [
   {
     title: 'Home',
     items: [
-      { icon: 'overview', label: 'Overview', active: true },
+      { icon: 'overview', label: 'Overview' },
       { icon: 'shop', label: 'Shop' },
       { icon: 'delivery', label: 'Delivery' },
       { icon: 'discover-product', label: 'Discover Product' },
@@ -195,51 +186,64 @@ const categoryChips: CategoryChip[] = [
   { id: 'food', label: 'Food', icon: 'food-fork-drink', color: '#366FE0', bg: '#EEF4FF' },
 ];
 
-const featuredStore: FeaturedStore = {
-  name: 'Sharma Jewelers',
-  logo:
-    'https://images.pexels.com/photos/248077/pexels-photo-248077.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=200',
-  tagline: 'Trusted since 1995',
-  rating: '4.8',
-  ratingCount: '57',
-  distance: '0.3km',
-  isOpen: true,
-  offers: [
-    {
-      id: 'gold-jewelry',
-      title: 'FLAT10%OFF',
-      subtitle: 'on Gold Jewelry',
-      discount: '10%OFF',
-      countdown: '02:12:51 remaining',
-      image:
-        'https://images.pexels.com/photos/1191531/pexels-photo-1191531.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400',
-    },
-    {
-      id: 'silver-items',
-      title: 'Buy 1Get 1',
-      subtitle: 'on Silver Items',
-      discount: 'Buy 1Get 1',
-      countdown: '02:12:51 remaining',
-      image:
-        'https://images.pexels.com/photos/145909/pexels-photo-145909.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400',
-    },
-    {
-      id: 'silver-polish',
-      title: 'Free Silver',
-      subtitle: 'Polishing',
-      discount: 'Free SUFF',
-      countdown: '02:12:51 remaining',
-      image:
-        'https://images.pexels.com/photos/265906/pexels-photo-265906.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400',
-    },
-  ],
-};
+const STATIC_SHOPS: ShopWithOffers[] = [
+  {
+    id: 'sharma-jewelers',
+    name: 'Sharma Jewelers',
+    logo: PLACEHOLDER_SHOP_LOGO,
+    coverImage:
+      'https://images.pexels.com/photos/248077/pexels-photo-248077.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=800',
+    tagline: 'Trusted since 1995',
+    rating: '4.8',
+    ratingCount: '57',
+    distance: '0.3 km',
+    isOpen: true,
+    isVerified: true,
+    categories: ['Jewelry', 'Gold', 'Wedding'],
+    offers: [
+      {
+        id: 'offer-gold-10',
+        shopId: 'sharma-jewelers',
+        title: 'FLAT 10% OFF',
+        subtitle: 'on Gold Jewelry',
+        discount: '10% OFF',
+        image:
+          'https://images.pexels.com/photos/1191531/pexels-photo-1191531.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400',
+        countdown: '02:12:51',
+      },
+      {
+        id: 'offer-silver-b1g1',
+        shopId: 'sharma-jewelers',
+        title: 'Buy 1 Get 1',
+        subtitle: 'on Silver Items',
+        discount: 'BUY 1 GET 1',
+        image:
+          'https://images.pexels.com/photos/145909/pexels-photo-145909.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400',
+        countdown: '02:12:51',
+      },
+      {
+        id: 'offer-polish-free',
+        shopId: 'sharma-jewelers',
+        title: 'Free Silver',
+        subtitle: 'Polishing',
+        discount: 'FREE SERVICE',
+        image:
+          'https://images.pexels.com/photos/265906/pexels-photo-265906.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400',
+        countdown: '02:12:51',
+      },
+    ],
+  },
+];
 
 const HomeScreenView = () => {
   const navigation = useNavigation();
-  const { currentUser, clearSession } = useAppContext();
+  const { authToken, currentUser, clearSession, setSession } = useAppContext();
   const [selectedCategory, setSelectedCategory] = useState('hot-deals');
+  const [selectedSidebarItem, setSelectedSidebarItem] = useState('Overview');
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const shops = STATIC_SHOPS;
+  const isLoadingShops = false;
+  const shopsError: string | null = null;
   const [isPhoneVisible, setIsPhoneVisible] = useState(false);
   const [profileImageLoadError, setProfileImageLoadError] = useState(false);
   const [headerAddress, setHeaderAddress] = useState(
@@ -299,6 +303,37 @@ const HomeScreenView = () => {
     !profileImageLoadError && currentUser?.profileImage
       ? resolveProfileImageUrl(currentUser.profileImage) ?? ''
       : '';
+
+  useEffect(() => {
+    setProfileImageLoadError(false);
+  }, [currentUser?.profileImage]);
+
+  useEffect(() => {
+    if (!authToken || !currentUser) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncProfile = async () => {
+      try {
+        const refreshedUser = await userAuthApi.refreshUserProfile(authToken, currentUser);
+        if (cancelled) {
+          return;
+        }
+
+        await setSession(authToken, refreshedUser);
+      } catch {
+        // Ignore profile sync errors on home.
+      }
+    };
+
+    syncProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, currentUser?._id]);
 
   useEffect(() => {
     const requestLocationPermission = async () => {
@@ -431,6 +466,26 @@ const HomeScreenView = () => {
     );
   };
 
+  const openOfferDetail = (shop: ShopWithOffers, offer: ShopOffer) => {
+    const parentNavigation = navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('OfferDetail', { shop, offer });
+      return;
+    }
+
+    navigation.navigate('OfferDetail' as never, { shop, offer } as never);
+  };
+
+  const openStoreDetail = (shop: ShopWithOffers) => {
+    const parentNavigation = navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('StoreDetail', { shop });
+      return;
+    }
+
+    navigation.navigate('StoreDetail' as never, { shop } as never);
+  };
+
   const handleLogout = () => {
     showAppAlert('Logout', 'Do you want to logout from this account?', [
       { text: 'Cancel', style: 'cancel' },
@@ -438,28 +493,16 @@ const HomeScreenView = () => {
         text: 'Logout',
         style: 'destructive',
         onPress: async () => {
-          console.log('[Auth] Logout requested');
           await clearSession();
           setSidebarVisible(false);
-          navigation.dispatch(
-            CommonActions.reset({
-              index: 0,
-              routes: [
-                {
-                  name: 'AuthFlow',
-                  state: {
-                    routes: [{ name: 'Login' }],
-                  },
-                },
-              ],
-            }),
-          );
         },
       },
     ]);
   };
 
   const handleSidebarItemPress = (label: string) => {
+    setSelectedSidebarItem(label);
+
     if (label === 'Edit Profile') {
       openProfileSetup();
       return;
@@ -496,19 +539,19 @@ const HomeScreenView = () => {
       <View style={styles.bgAccent} />
 
       <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <Navbar
+          onMenuPress={() => setSidebarVisible(true)}
+          title="Bacht Bazaar"
+          subtitle={headerAddress}
+          showSearch
+        />
+
         <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
           <AnimatedScreen>
-            <Navbar
-              onMenuPress={() => setSidebarVisible(true)}
-              title="Bacht Bazaar"
-              subtitle={headerAddress}
-              showSearch
-            />
-
             <View style={styles.promoBannerSection}>
               <View style={styles.promoBanner}>
                 <View style={styles.promoBannerGlow} />
@@ -667,78 +710,134 @@ const HomeScreenView = () => {
                 </View>
               </View>
 
-              <View style={styles.localOffersFeatureCard}>
-                <View style={styles.storeHeader}>
-                  <View style={styles.storeLogoCircle}>
-                    <Image source={{ uri: featuredStore.logo }} style={styles.storeLogo} />
-                  </View>
-                  <View style={styles.storeInfo}>
-                    <View style={styles.storeNameContainer}>
-                      <Text style={styles.storeName}>{featuredStore.name}</Text>
-                      <MaterialCommunityIcons
-                        name="check-decagram"
-                        size={16}
-                        color={colors.primary}
-                        style={styles.verifiedIcon}
-                      />
-                    </View>
-                    <Text style={styles.storeTagline}>{featuredStore.tagline}</Text>
-                  </View>
-                  <View style={styles.storeMeta}>
-                    <View style={styles.ratingRow}>
-                      <MaterialCommunityIcons name="star-outline" size={14} color="#F2A900" />
-                      <Text style={styles.ratingText}>
-                        {featuredStore.rating}{' '}
-                        <Text style={styles.ratingCount}>({featuredStore.ratingCount})</Text>
-                      </Text>
-                    </View>
-                    <View style={styles.distanceStatusRow}>
-                      <MaterialCommunityIcons
-                        name="map-marker"
-                        size={13}
-                        color="#E65A24"
-                      />
-                      <Text style={styles.distanceText}>{featuredStore.distance}</Text>
-                      {featuredStore.isOpen ? (
-                        <View style={styles.openTag}>
-                          <Text style={styles.openTagText}>Open</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                  </View>
+              {isLoadingShops ? (
+                <View style={styles.shopsLoadingCard}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={styles.shopsLoadingText}>Loading nearby shops...</Text>
                 </View>
+              ) : shopsError ? (
+                <View style={styles.shopsEmptyCard}>
+                  <MaterialCommunityIcons name="store-off-outline" size={28} color="#99A4B8" />
+                  <Text style={styles.shopsEmptyTitle}>Could not load shops</Text>
+                  <Text style={styles.shopsEmptyText}>{shopsError}</Text>
+                </View>
+              ) : shops.length === 0 ? (
+                <View style={styles.shopsEmptyCard}>
+                  <MaterialCommunityIcons name="store-off-outline" size={28} color="#99A4B8" />
+                  <Text style={styles.shopsEmptyTitle}>No shops nearby</Text>
+                  <Text style={styles.shopsEmptyText}>Check back soon for local offers.</Text>
+                </View>
+              ) : (
+                shops.map(shop => {
+                  const shopLogo = shop.logo ?? PLACEHOLDER_SHOP_LOGO;
 
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.offersScroll}
-                  contentContainerStyle={styles.offersContent}
-                >
-                  {featuredStore.offers.map(offer => (
-                    <TouchableOpacity
-                      key={offer.id}
-                      style={styles.offerCard}
-                      activeOpacity={0.88}
-                    >
-                      <View style={styles.offerImageContainer}>
-                        <Image source={{ uri: offer.image }} style={styles.offerImage} />
-                        <View style={styles.offerTag}>
-                          <Text style={styles.offerTagTextSmall}>{offer.discount}</Text>
+                  return (
+                    <View key={shop.id} style={styles.localOffersFeatureCard}>
+                      <TouchableOpacity
+                        style={styles.storeHeader}
+                        activeOpacity={0.86}
+                        onPress={() => openStoreDetail(shop)}
+                      >
+                        <View style={styles.storeLogoCircle}>
+                          <Image source={{ uri: shopLogo }} style={styles.storeLogo} />
                         </View>
-                      </View>
-                      <View style={styles.offerInfo}>
-                        <Text style={styles.cardOfferTitle} numberOfLines={1}>
-                          {offer.title}
-                        </Text>
-                        <Text style={styles.cardOfferSubtitle} numberOfLines={1}>
-                          {offer.subtitle}
-                        </Text>
-                        <Text style={styles.cardCountdown}>{offer.countdown}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </View>
+                        <View style={styles.storeInfo}>
+                          <View style={styles.storeNameContainer}>
+                            <Text style={styles.storeName}>{shop.name}</Text>
+                            {shop.isVerified ? (
+                              <MaterialCommunityIcons
+                                name="check-decagram"
+                                size={16}
+                                color={colors.primary}
+                                style={styles.verifiedIcon}
+                              />
+                            ) : null}
+                          </View>
+                          {shop.tagline ? (
+                            <Text style={styles.storeTagline}>{shop.tagline}</Text>
+                          ) : null}
+                        </View>
+                        <View style={styles.storeMeta}>
+                          {shop.rating ? (
+                            <View style={styles.ratingRow}>
+                              <MaterialCommunityIcons name="star-outline" size={14} color="#F2A900" />
+                              <Text style={styles.ratingText}>
+                                {shop.rating}
+                                {shop.ratingCount ? (
+                                  <Text style={styles.ratingCount}> ({shop.ratingCount})</Text>
+                                ) : null}
+                              </Text>
+                            </View>
+                          ) : null}
+                          <View style={styles.distanceStatusRow}>
+                            {shop.distance ? (
+                              <>
+                                <MaterialCommunityIcons
+                                  name="map-marker"
+                                  size={13}
+                                  color="#E65A24"
+                                />
+                                <Text style={styles.distanceText}>{shop.distance}</Text>
+                              </>
+                            ) : null}
+                            {shop.isOpen ? (
+                              <View style={styles.openTag}>
+                                <Text style={styles.openTagText}>Open</Text>
+                              </View>
+                            ) : null}
+                          </View>
+                        </View>
+                      </TouchableOpacity>
+
+                      {shop.offers.length > 0 ? (
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          style={styles.offersScroll}
+                          contentContainerStyle={styles.offersContent}
+                        >
+                          {shop.offers.map(offer => {
+                            const offerImage = offer.image ?? PLACEHOLDER_OFFER_IMAGE;
+
+                            return (
+                              <TouchableOpacity
+                                key={offer.id}
+                                style={styles.offerCard}
+                                activeOpacity={0.88}
+                                onPress={() => openOfferDetail(shop, offer)}
+                              >
+                                <View style={styles.offerImageContainer}>
+                                  <Image source={{ uri: offerImage }} style={styles.offerImage} />
+                                  {offer.discount ? (
+                                    <View style={styles.offerTag}>
+                                      <Text style={styles.offerTagTextSmall}>{offer.discount}</Text>
+                                    </View>
+                                  ) : null}
+                                </View>
+                                <View style={styles.offerInfo}>
+                                  <Text style={styles.cardOfferTitle} numberOfLines={1}>
+                                    {offer.title}
+                                  </Text>
+                                  {offer.subtitle ? (
+                                    <Text style={styles.cardOfferSubtitle} numberOfLines={1}>
+                                      {offer.subtitle}
+                                    </Text>
+                                  ) : null}
+                                  <Text style={styles.cardCountdown}>
+                                    {offer.countdown?.trim() || `${formatOfferCountdown(offer)} remaining`}
+                                  </Text>
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      ) : (
+                        <Text style={styles.noOffersText}>No offers available right now.</Text>
+                      )}
+                    </View>
+                  );
+                })
+              )}
             </View>
           </AnimatedScreen>
         </ScrollView>
@@ -851,10 +950,12 @@ const HomeScreenView = () => {
 
                     const onPress = () => handleSidebarItemPress(item.label);
 
+                    const isActive = selectedSidebarItem === item.label;
+
                     return (
                       <TouchableOpacity
                         key={item.label}
-                        style={[styles.sidebarItem, item.active && styles.sidebarItemActive]}
+                        style={[styles.sidebarItem, isActive && styles.sidebarItemActive]}
                         onPress={onPress}
                         activeOpacity={0.65}
                       >
@@ -862,7 +963,7 @@ const HomeScreenView = () => {
                           style={[
                             styles.sidebarItemIconWrap,
                             {
-                              backgroundColor: item.active
+                              backgroundColor: isActive
                                 ? 'rgba(255,255,255,0.22)'
                                 : sidebarIconPalette[item.label] ?? '#EEF4FF',
                             },
@@ -872,7 +973,7 @@ const HomeScreenView = () => {
                             name={sidebarMciIcons[item.icon]}
                             size={20}
                             color={
-                              item.active
+                              isActive
                                 ? colors.white
                                 : sidebarIconTint[item.label] ?? colors.primary
                             }
@@ -881,7 +982,7 @@ const HomeScreenView = () => {
                         <Text
                           style={[
                             styles.sidebarItemText,
-                            item.active && styles.sidebarItemTextActive,
+                            isActive && styles.sidebarItemTextActive,
                             isDanger && styles.sidebarItemTextDanger,
                           ]}
                         >
@@ -932,7 +1033,52 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 176,
-    paddingTop: 4,
+    paddingTop: 8,
+  },
+  shopsLoadingCard: {
+    marginHorizontal: 16,
+    marginBottom: 18,
+    backgroundColor: colors.white,
+    borderRadius: 22,
+    paddingVertical: 28,
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: '#E8EDF5',
+  },
+  shopsLoadingText: {
+    fontSize: 13,
+    color: '#667085',
+    fontFamily: fonts.BOLD,
+  },
+  shopsEmptyCard: {
+    marginHorizontal: 16,
+    marginBottom: 18,
+    backgroundColor: colors.white,
+    borderRadius: 22,
+    paddingVertical: 28,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#E8EDF5',
+  },
+  shopsEmptyTitle: {
+    fontSize: 15,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+  },
+  shopsEmptyText: {
+    fontSize: 12,
+    color: '#667085',
+    textAlign: 'center',
+  },
+  noOffersText: {
+    fontSize: 12,
+    color: '#667085',
+    fontFamily: fonts.BOLD,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   promoBannerSection: {
     marginHorizontal: 16,
@@ -1339,6 +1485,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     paddingTop: 16,
     paddingBottom: 16,
+    marginBottom: 16,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E7ECF5',

@@ -247,7 +247,6 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
                 confirmPasswordRef,
                 'Confirm password',
                 'done',
-                handleSubmit,
               )}
 
               <View style={styles.requirementsWrap}>

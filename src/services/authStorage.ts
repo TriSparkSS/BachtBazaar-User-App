@@ -4,6 +4,19 @@ import { UserProfile } from '../types/auth';
 const AUTH_TOKEN_KEY = '@bachatbazaar/auth-token';
 const AUTH_USER_KEY = '@bachatbazaar/auth-user';
 
+const normalizeStoredUser = (user: UserProfile): UserProfile => {
+  const gender = user.gender?.trim().toLowerCase();
+  const normalizedGender =
+    gender === 'female' || gender === 'male' || gender === 'other'
+      ? gender
+      : undefined;
+
+  return {
+    ...user,
+    gender: normalizedGender,
+  };
+};
+
 export const authStorage = {
   async setSession(token: string, user: UserProfile) {
     if (!token?.trim()) {
@@ -16,7 +29,7 @@ export const authStorage = {
 
     await AsyncStorage.multiSet([
       [AUTH_TOKEN_KEY, token],
-      [AUTH_USER_KEY, JSON.stringify(user)],
+      [AUTH_USER_KEY, JSON.stringify(normalizeStoredUser(user))],
     ]);
   },
 
@@ -26,10 +39,17 @@ export const authStorage = {
       AUTH_USER_KEY,
     ]);
 
+    const normalizedToken = token?.trim() || null;
+
     return {
-      token,
-      user: userJson ? (JSON.parse(userJson) as UserProfile) : null,
+      token: normalizedToken,
+      user: userJson ? normalizeStoredUser(JSON.parse(userJson) as UserProfile) : null,
     };
+  },
+
+  async hasSession() {
+    const { token } = await this.getSession();
+    return Boolean(token);
   },
 
   async clearSession() {

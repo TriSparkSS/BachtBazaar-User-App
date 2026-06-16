@@ -7,11 +7,13 @@ import React, {
   useState,
 } from 'react';
 import { authStorage } from '../services/authStorage';
+import { userAuthApi } from '../services/userAuthApi';
 import { PendingAuthState, UserProfile } from '../types/auth';
 
 type AppContextValue = {
   authToken: string | null;
   currentUser: UserProfile | null;
+  isAuthenticated: boolean;
   isBootstrapping: boolean;
   pendingAuth: PendingAuthState | null;
   setPendingAuth: (value: PendingAuthState | null) => void;
@@ -22,6 +24,7 @@ type AppContextValue = {
 const defaultValue: AppContextValue = {
   authToken: null,
   currentUser: null,
+  isAuthenticated: false,
   isBootstrapping: true,
   pendingAuth: null,
   setPendingAuth: () => undefined,
@@ -41,8 +44,23 @@ export const AppProvider = ({ children }: PropsWithChildren) => {
     const bootstrap = async () => {
       try {
         const session = await authStorage.getSession();
-        setAuthToken(session.token ?? null);
-        setCurrentUser(session.user);
+        const token = session.token ?? null;
+        const user = session.user;
+
+        if (token && user) {
+          try {
+            const refreshedUser = await userAuthApi.refreshUserProfile(token, user);
+            await authStorage.setSession(token, refreshedUser);
+            setAuthToken(token);
+            setCurrentUser(refreshedUser);
+            return;
+          } catch {
+            // Fall back to cached session when profile APIs are unavailable.
+          }
+        }
+
+        setAuthToken(token);
+        setCurrentUser(user);
       } finally {
         setIsBootstrapping(false);
       }
@@ -55,6 +73,7 @@ export const AppProvider = ({ children }: PropsWithChildren) => {
     () => ({
       authToken,
       currentUser,
+      isAuthenticated: Boolean(authToken?.trim()),
       isBootstrapping,
       pendingAuth,
       setPendingAuth,

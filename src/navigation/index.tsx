@@ -7,87 +7,95 @@ import { enableScreens } from 'react-native-screens';
 import { AuthStack } from './AuthStack';
 import { MainStack } from './MainStack';
 import { showAppAlert } from '../services/appAlert';
+import { useAppContext } from '../context/AppContext';
+import SplashScreenView from '../screens/AuthFlow/splash/SplashScreenView';
 
 enableScreens(false);
 
-
 export const navigationRef = createNavigationContainerRef();
 
-// Flag to track if we're in MainStack
 let isInMainStack = false;
 
 const exitApp = () => {
-	BackHandler.exitApp();
+  BackHandler.exitApp();
 };
 
 const handleBackButtonClick = () => {
-	// Don't handle back press if we're in MainStack
-	// (MainStack now handles its own back button logic)
-	if (isInMainStack) {
-		return false;
-	}
+  if (isInMainStack) {
+    return false;
+  }
 
-	// Only handle for AuthStack when can't go back
-	if (!navigationRef.canGoBack()) {
-		showAppAlert('Hold on!', 'Are you sure you want to exit the application?', [
-			{
-				text: 'Cancel',
-				onPress: () => console.log('cancel')
-			},
-			{
-				text: 'Yes',
-				onPress: () => exitApp()
-			}
-		]);
-	}
-	return !navigationRef.canGoBack();
+  if (!navigationRef.canGoBack()) {
+    showAppAlert('Hold on!', 'Are you sure you want to exit the application?', [
+      {
+        text: 'Cancel',
+        onPress: () => console.log('cancel'),
+      },
+      {
+        text: 'Yes',
+        onPress: () => exitApp(),
+      },
+    ]);
+  }
+  return !navigationRef.canGoBack();
 };
 
 export function navigate(name: string, params?: any) {
-	if (navigationRef.isReady()) {
-		// @ts-ignore: Type issues with navigation params
-		navigationRef.dispatch(StackActions.replace(name, params));
-	}
+  if (navigationRef.isReady()) {
+    // @ts-ignore
+    navigationRef.dispatch(StackActions.replace(name, params));
+  }
 }
 
 export function replace(name: string, params?: any) {
-	if (navigationRef.isReady()) {
-		// @ts-ignore: Type issues with navigation params
-		navigationRef.dispatch(StackActions.replace(name, params));
-	}
+  if (navigationRef.isReady()) {
+    // @ts-ignore
+    navigationRef.dispatch(StackActions.replace(name, params));
+  }
 }
 
 export function goBack() {
-	if (navigationRef.isReady()) {
-		try {
-			if (navigationRef.canGoBack()) {
-				navigationRef.goBack();
-			} else {
-				handleBackButtonClick();
-			}
-		} catch (error) {
-			console.log(error);
-		}
-	}
+  if (navigationRef.isReady()) {
+    try {
+      if (navigationRef.canGoBack()) {
+        navigationRef.goBack();
+      } else {
+        handleBackButtonClick();
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  }
 }
 
 const RootStackNav = createStackNavigator();
 
-export const AppNavigation = () => {
+const RootNavigator = () => {
+  const { isAuthenticated, isBootstrapping } = useAppContext();
 
-	return (
-		<SafeAreaProvider>
-			<NavigationContainer >
-				<RootStackNav.Navigator
-					screenOptions={{
-						headerShown: false
-					}}
-					initialRouteName={'AuthFlow'}
-				>
-					<RootStackNav.Screen component={AuthStack} name={'AuthFlow'} />
-					<RootStackNav.Screen component={MainStack} name={'MainStack'} />
-				</RootStackNav.Navigator>
-			</NavigationContainer>
-		</SafeAreaProvider>
-	);
+  if (isBootstrapping) {
+    return <SplashScreenView />;
+  }
+
+  return (
+    <RootStackNav.Navigator
+      key={isAuthenticated ? 'authenticated' : 'guest'}
+      screenOptions={{
+        headerShown: false,
+      }}
+      initialRouteName={isAuthenticated ? 'MainStack' : 'AuthFlow'}>
+      <RootStackNav.Screen component={AuthStack} name="AuthFlow" />
+      <RootStackNav.Screen component={MainStack} name="MainStack" />
+    </RootStackNav.Navigator>
+  );
+};
+
+export const AppNavigation = () => {
+  return (
+    <SafeAreaProvider>
+      <NavigationContainer ref={navigationRef}>
+        <RootNavigator />
+      </NavigationContainer>
+    </SafeAreaProvider>
+  );
 };

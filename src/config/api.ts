@@ -9,7 +9,10 @@ export const API_ENDPOINTS = {
   loginPassword: '/auth/login-password',
   loginOtp: '/auth/login-otp',
   updateProfile: '/profile',
+  getProfile: '/profile',
   profileImage: '/profile-image',
+  shops: '/users/shop',
+  shopOffers: (shopId: string) => `/users/shop/offers/${shopId}`,
 } as const;
 
 export const resolveProfileImageUrl = (path?: string | null) => {
@@ -17,7 +20,11 @@ export const resolveProfileImageUrl = (path?: string | null) => {
     return undefined;
   }
 
-  if (path.startsWith('http://') || path.startsWith('https://')) {
+  if (
+    path.startsWith('http://') ||
+    path.startsWith('https://') ||
+    path.startsWith('data:image/')
+  ) {
     return path;
   }
 
