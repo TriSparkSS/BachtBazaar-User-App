@@ -8,6 +8,7 @@ interface RequestOptions {
   body?: unknown;
   token?: string;
   headers?: Record<string, string>;
+  baseUrl?: string;
 }
 
 type ApiLogPayload = Record<string, unknown>;
@@ -89,7 +90,8 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   let response: Response;
   const method = options.method ?? 'GET';
-  const url = `${API_BASE_URL}${path}`;
+  const baseUrl = options.baseUrl ?? API_BASE_URL;
+  const url = `${baseUrl}${path}`;
   const startedAt = Date.now();
   const headers = buildHeaders(options);
   const requestBody = options.body ?? null;

@@ -6,10 +6,9 @@ import { MainStackParamList } from '../../../navigation/types';
 import { useAppContext } from '../../../context/AppContext';
 import { shopApi } from '../../../services/shopApi';
 import { ShopOffer, ShopWithOffers } from '../../../types/shop';
-import { mapOffersToProducts } from '../../../utils/shop';
 
-const HERO_PLACEHOLDER =
-  'https://images.pexels.com/photos/248077/pexels-photo-248077.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=800';
+const GROCERY_HERO_PLACEHOLDER =
+  'https://images.pexels.com/photos/264636/pexels-photo-264636.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=800';
 
 const StoreDetail = () => {
   const navigation = useNavigation<StackNavigationProp<MainStackParamList, 'StoreDetail'>>();
@@ -17,29 +16,32 @@ const StoreDetail = () => {
   const { authToken } = useAppContext();
   const initialShop = (route.params as MainStackParamList['StoreDetail']).shop;
   const [shop, setShop] = useState<ShopWithOffers>(initialShop);
-  const [isLoadingOffers, setIsLoadingOffers] = useState(false);
+  const [isLoadingShop, setIsLoadingShop] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
 
-    const loadOffers = async () => {
+    const loadShopDetail = async () => {
       try {
-        setIsLoadingOffers(true);
-        const offers = await shopApi.fetchShopOffers(initialShop.id, authToken ?? undefined);
+        setIsLoadingShop(true);
+        const detail = await shopApi.fetchShopByIdWithOffers(
+          initialShop.id,
+          authToken ?? undefined,
+        );
 
         if (!cancelled) {
-          setShop(current => ({ ...current, offers }));
+          setShop(detail);
         }
       } catch {
-        // Keep offers passed from the previous screen when refresh fails.
+        // Keep shop data passed from the previous screen when refresh fails.
       } finally {
         if (!cancelled) {
-          setIsLoadingOffers(false);
+          setIsLoadingShop(false);
         }
       }
     };
 
-    loadOffers();
+    loadShopDetail();
 
     return () => {
       cancelled = true;
@@ -47,15 +49,17 @@ const StoreDetail = () => {
   }, [authToken, initialShop.id]);
 
   const heroImageUri = useMemo(() => {
+    const productImage = shop.products?.find(product => product.image)?.image;
+
     return (
       shopApi.resolveImageUrl(shop.coverImage) ??
+      shopApi.resolveImageUrl(productImage) ??
       shopApi.resolveImageUrl(shop.logo) ??
-      shopApi.resolveImageUrl(shop.offers[0]?.image) ??
-      HERO_PLACEHOLDER
+      GROCERY_HERO_PLACEHOLDER
     );
-  }, [shop.coverImage, shop.logo, shop.offers]);
+  }, [shop.coverImage, shop.logo, shop.products]);
 
-  const products = useMemo(() => mapOffersToProducts(shop.offers), [shop.offers]);
+  const products = shop.products ?? [];
 
   const openOfferDetail = (offer: ShopOffer) => {
     navigation.navigate('OfferDetail', { shop, offer });
@@ -66,7 +70,7 @@ const StoreDetail = () => {
       shop={shop}
       heroImageUri={heroImageUri}
       products={products}
-      isLoadingOffers={isLoadingOffers}
+      isLoadingOffers={isLoadingShop}
       onBack={() => navigation.goBack()}
       onOfferPress={openOfferDetail}
       resolveImageUrl={shopApi.resolveImageUrl}

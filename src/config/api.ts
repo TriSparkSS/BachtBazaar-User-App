@@ -1,5 +1,8 @@
 export const API_BASE_URL = 'https://bachatbazaar.tech/api/user';
 
+/** Shop/offers APIs live under /api/users (not /api/user). */
+export const SHOPS_API_BASE_URL = 'https://bachatbazaar.tech/api/users';
+
 export const API_ENDPOINTS = {
   sendOtp: '/auth/send-otp',
   verifyOtp: '/auth/verify-otp',
@@ -11,8 +14,10 @@ export const API_ENDPOINTS = {
   updateProfile: '/profile',
   getProfile: '/profile',
   profileImage: '/profile-image',
-  shops: '/users/shop',
-  shopOffers: (shopId: string) => `/users/shop/offers/${shopId}`,
+  shopsByCity: (city: string) => `/shop?city=${encodeURIComponent(city)}`,
+  shopById: (shopId: string) => `/shop/${encodeURIComponent(shopId)}`,
+  shopOffers: (shopId: string) => `/shop/offers/${shopId}`,
+  offerById: (offerId: string) => `/shop/offer/${encodeURIComponent(offerId)}`,
 } as const;
 
 export const resolveProfileImageUrl = (path?: string | null) => {

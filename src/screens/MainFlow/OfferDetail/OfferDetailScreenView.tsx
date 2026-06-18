@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Image,
@@ -15,61 +16,68 @@ import LinearGradient from 'react-native-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnimatedScreen from '../../../components/AnimatedScreen';
+import OfferLocationMap from './OfferLocationMap';
 import { colors, fonts } from '../../../helpers/styles';
-import { ShopOffer, ShopWithOffers } from '../../../types/shop';
+import { OfferDetail, ShopWithOffers } from '../../../types/shop';
 import {
   buildOfferBadgeText,
   buildOfferDescription,
   buildOfferHeadline,
   buildOfferSummary,
+  buildOfferUrgencyText,
+  buildOperationalRuleLabels,
   buildRedeemSteps,
-  formatOfferCountdown,
+  formatOfferExpiryDate,
 } from '../../../utils/offer';
+import { formatShopAddress, isShopOpenNow } from '../../../utils/shop';
 
 const { width } = Dimensions.get('window');
-const SLIDER_HORIZONTAL_PADDING = 16;
+const SLIDER_HORIZONTAL_PADDING = 20;
 const SLIDER_TRACK_WIDTH = width - SLIDER_HORIZONTAL_PADDING * 2;
-const SLIDER_THUMB_SIZE = 56;
+const SLIDER_THUMB_SIZE = 54;
 const SLIDER_MAX_TRANSLATE = SLIDER_TRACK_WIDTH - SLIDER_THUMB_SIZE - 8;
-
-const OFFER_PLACEHOLDER =
-  'https://images.pexels.com/photos/1191531/pexels-photo-1191531.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=800';
-
-const SHOP_LOGO_PLACEHOLDER =
-  'https://images.pexels.com/photos/248077/pexels-photo-248077.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=200';
-
-const MAP_PLACEHOLDER =
-  'https://images.pexels.com/photos/2662116/pexels-photo-2662116.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=800';
 
 type OfferDetailScreenViewProps = {
   shop: ShopWithOffers;
-  offer: ShopOffer;
+  offer: OfferDetail;
+  merchantName: string;
   heroImageUri: string;
   shopLogoUri: string;
+  isLoading?: boolean;
   onBack: () => void;
+  resolveImageUrl: (path?: string | null) => string | undefined;
 };
 
 const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
   shop,
   offer,
+  merchantName,
   heroImageUri,
   shopLogoUri,
+  isLoading = false,
   onBack,
+  resolveImageUrl,
 }) => {
   const [isSaved, setIsSaved] = useState(false);
+  const [heroError, setHeroError] = useState(false);
   const [qrRevealed, setQrRevealed] = useState(false);
   const slideX = useRef(new Animated.Value(0)).current;
 
   const headline = useMemo(() => buildOfferHeadline(offer), [offer]);
   const summary = useMemo(() => buildOfferSummary(offer), [offer]);
-  const description = useMemo(() => buildOfferDescription(offer, shop.name), [offer, shop.name]);
+  const description = useMemo(() => buildOfferDescription(offer, merchantName), [offer, merchantName]);
   const redeemSteps = useMemo(() => buildRedeemSteps(offer, shop), [offer, shop]);
-  const countdown = useMemo(() => formatOfferCountdown(offer), [offer]);
   const badgeText = useMemo(() => buildOfferBadgeText(offer), [offer]);
+  const urgencyText = useMemo(() => buildOfferUrgencyText(offer), [offer]);
+  const ruleLabels = useMemo(() => buildOperationalRuleLabels(offer), [offer]);
+  const shopAddress = formatShopAddress(shop);
+  const openNow = isShopOpenNow(shop.openingHours) ?? shop.isOpen;
+  const showQrSlider = offer.operationalRules?.qrRequired !== false;
+  const showHeroImage = Boolean(heroImageUri) && !heroError;
 
   const panResponder = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: () => !qrRevealed,
+      onMoveShouldSetPanResponder: () => showQrSlider && !qrRevealed,
       onPanResponderMove: (_, gestureState) => {
         const nextValue = Math.max(0, Math.min(gestureState.dx, SLIDER_MAX_TRANSLATE));
         slideX.setValue(nextValue);
@@ -94,153 +102,308 @@ const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
   ).current;
 
   const handleGetDirections = () => {
-    const query = encodeURIComponent(shop.name);
+    const query = encodeURIComponent(shopAddress || merchantName);
     Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
   };
 
+  const renderMechanicCard = (
+    label: string,
+    description?: string,
+    iconUri?: string,
+    key?: string,
+  ) => (
+    <View key={key || label} style={styles.mechanicCard}>
+      {iconUri ? (
+        <Image source={{ uri: resolveImageUrl(iconUri) ?? iconUri }} style={styles.mechanicIcon} />
+      ) : (
+        <View style={styles.mechanicIconFallback}>
+          <MaterialCommunityIcons name="tag-outline" size={18} color={colors.primary} />
+        </View>
+      )}
+      <View style={styles.mechanicBody}>
+        <Text style={styles.mechanicTitle}>{label}</Text>
+        {description ? <Text style={styles.mechanicDescription}>{description}</Text> : null}
+      </View>
+    </View>
+  );
+
   return (
     <View style={styles.root}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.heroSection}>
-          <Image source={{ uri: heroImageUri }} style={styles.heroImage} />
-          <View style={styles.heroOverlay} />
-
-          <SafeAreaView edges={['top']} style={styles.heroActions}>
-            <TouchableOpacity style={styles.heroIconButton} onPress={onBack} activeOpacity={0.82}>
-              <MaterialCommunityIcons name="arrow-left" size={22} color="#202843" />
-            </TouchableOpacity>
-
-            <View style={styles.heroActionsRight}>
-              <TouchableOpacity style={styles.heroIconButton} activeOpacity={0.82}>
-                <MaterialCommunityIcons name="share-variant-outline" size={20} color="#202843" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.heroIconButton}
-                onPress={() => setIsSaved(prev => !prev)}
-                activeOpacity={0.82}
-              >
-                <MaterialCommunityIcons
-                  name={isSaved ? 'heart' : 'heart-outline'}
-                  size={20}
-                  color={isSaved ? colors.primary : '#202843'}
-                />
-              </TouchableOpacity>
-            </View>
-          </SafeAreaView>
-
-          <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>{badgeText}</Text>
-          </View>
-        </View>
-
-        <AnimatedScreen style={styles.sheetWrap}>
+      <View style={styles.heroSection}>
+        {showHeroImage ? (
+          <Image
+            source={{ uri: heroImageUri }}
+            style={styles.heroImage}
+            onError={() => setHeroError(true)}
+          />
+        ) : (
           <LinearGradient
-            colors={['#FFF8F1', '#F7FAFF', '#F3F8FF']}
+            colors={['#4F86F7', '#6BA3FF', '#D7E6FF']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.sheetGradient}
+            style={styles.heroGradient}
           >
-            <View style={styles.sheetHandle} />
-            <Text style={styles.offerTitle}>{headline}</Text>
+            <MaterialCommunityIcons name="tag-outline" size={52} color="rgba(255,255,255,0.4)" />
+          </LinearGradient>
+        )}
+        <LinearGradient
+          colors={['rgba(22,32,51,0.04)', 'rgba(22,32,51,0.5)']}
+          style={styles.heroOverlay}
+        />
 
-            <View style={styles.storeCard}>
-              <Image source={{ uri: shopLogoUri }} style={styles.storeLogo} />
-              <View style={styles.storeCardBody}>
-                <View style={styles.storeNameRow}>
-                  <Text style={styles.storeName}>{shop.name}</Text>
-                  {shop.isVerified ? (
-                    <MaterialCommunityIcons name="check-decagram" size={16} color={colors.primary} />
-                  ) : null}
-                </View>
-                <View style={styles.storeMetaRow}>
-                  {shop.distance ? (
-                    <View style={styles.storeMetaItem}>
-                      <MaterialCommunityIcons name="map-marker" size={13} color={colors.primary} />
-                      <Text style={styles.storeMetaText}>{shop.distance}</Text>
-                    </View>
-                  ) : null}
-                  {shop.isOpen ? (
-                    <View style={styles.openPill}>
-                      <Text style={styles.openPillText}>Open</Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-              {shop.rating ? (
-                <View style={styles.ratingPill}>
-                  <MaterialCommunityIcons name="star" size={12} color="#F2A900" />
-                  <Text style={styles.ratingPillText}>{shop.rating}</Text>
+        <SafeAreaView edges={['top']} style={styles.heroActions}>
+          <TouchableOpacity style={styles.heroIconButton} onPress={onBack} activeOpacity={0.85}>
+            <MaterialCommunityIcons name="arrow-left" size={22} color="#1A2238" />
+          </TouchableOpacity>
+
+          <View style={styles.heroActionsRight}>
+            <TouchableOpacity style={styles.heroIconButton} activeOpacity={0.85}>
+              <MaterialCommunityIcons name="share-variant-outline" size={19} color="#1A2238" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.heroIconButton}
+              onPress={() => setIsSaved(prev => !prev)}
+              activeOpacity={0.85}
+            >
+              <MaterialCommunityIcons
+                name={isSaved ? 'heart' : 'heart-outline'}
+                size={19}
+                color={isSaved ? colors.primary : '#1A2238'}
+              />
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+
+        <View style={styles.heroBadge}>
+          <Text style={styles.heroBadgeText}>{badgeText}</Text>
+        </View>
+      </View>
+
+      <ScrollView
+        style={styles.contentScroll}
+        contentContainerStyle={styles.contentScrollContainer}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+      >
+        <AnimatedScreen style={styles.sheet}>
+          {isLoading ? (
+            <View style={styles.loadingBlock}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={styles.loadingText}>Loading offer details...</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.offerTitle}>{headline}</Text>
+
+              {offer.code ? (
+                <View style={styles.codeCard}>
+                  <Text style={styles.codeLabel}>Offer code</Text>
+                  <Text style={styles.codeValue}>{offer.code}</Text>
                 </View>
               ) : null}
-            </View>
 
-            <Text style={styles.sectionTitle}>Offer Description</Text>
-            <Text style={styles.sectionSubtitle}>{summary}</Text>
-            <Text style={styles.descriptionText}>{description}</Text>
-
-            <View style={styles.urgencyBanner}>
-              <MaterialCommunityIcons name="clock-alert-outline" size={18} color="#D84B4B" />
-              <Text style={styles.urgencyText}>
-                Hurry! This exclusive offer expires in {countdown}
-              </Text>
-            </View>
-
-            <Text style={styles.sectionTitle}>How to redeem</Text>
-            <View style={styles.stepsList}>
-              {redeemSteps.map((step, index) => (
-                <View key={`${step.title}-${index}`} style={styles.stepRow}>
-                  <View style={styles.stepNumber}>
-                    <Text style={styles.stepNumberText}>{index + 1}</Text>
-                  </View>
-                  <View style={styles.stepBody}>
-                    <Text style={styles.stepTitle}>{step.title}</Text>
-                    <Text style={styles.stepDescription}>{step.description}</Text>
+              <View style={styles.storeCard}>
+                <Image source={{ uri: shopLogoUri }} style={styles.storeLogo} />
+                <View style={styles.storeCardBody}>
+                  <Text style={styles.storeName}>{merchantName}</Text>
+                  {shopAddress ? (
+                    <Text style={styles.storeAddress} numberOfLines={2}>
+                      {shopAddress}
+                    </Text>
+                  ) : null}
+                  <View style={styles.storeMetaRow}>
+                    {openNow !== undefined ? (
+                      <View style={[styles.statusPill, openNow ? styles.statusOpen : styles.statusClosed]}>
+                        <Text
+                          style={[styles.statusText, openNow ? styles.statusTextOpen : styles.statusTextClosed]}
+                        >
+                          {openNow ? 'Open now' : 'Closed'}
+                        </Text>
+                      </View>
+                    ) : null}
+                    {offer.minimumPurchaseAmount ? (
+                      <View style={styles.minPurchasePill}>
+                        <Text style={styles.minPurchaseText}>
+                          Min ₹{offer.minimumPurchaseAmount.toLocaleString('en-IN')}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
-              ))}
-            </View>
+              </View>
 
-            <View style={styles.mapCard}>
-              <Image source={{ uri: MAP_PLACEHOLDER }} style={styles.mapImage} />
-              <TouchableOpacity
-                style={styles.directionsButton}
-                onPress={handleGetDirections}
-                activeOpacity={0.85}
+              <View
+                style={[
+                  styles.urgencyBanner,
+                  offer.timeline?.isUpcoming && styles.urgencyUpcoming,
+                  offer.timeline?.isExpired && styles.urgencyExpired,
+                ]}
               >
-                <MaterialCommunityIcons name="navigation-variant-outline" size={16} color={colors.primary} />
-                <Text style={styles.directionsButtonText}>Get Directions</Text>
-              </TouchableOpacity>
-            </View>
-          </LinearGradient>
+                <MaterialCommunityIcons
+                  name={
+                    offer.timeline?.isExpired
+                      ? 'clock-remove-outline'
+                      : offer.timeline?.isUpcoming
+                        ? 'clock-start'
+                        : 'clock-alert-outline'
+                  }
+                  size={18}
+                  color={
+                    offer.timeline?.isExpired
+                      ? '#8B97AB'
+                      : offer.timeline?.isUpcoming
+                        ? '#366FE0'
+                        : '#D84B4B'
+                  }
+                />
+                <Text
+                  style={[
+                    styles.urgencyText,
+                    offer.timeline?.isUpcoming && styles.urgencyTextUpcoming,
+                    offer.timeline?.isExpired && styles.urgencyTextExpired,
+                  ]}
+                >
+                  {urgencyText}
+                </Text>
+              </View>
+
+              {offer.timeline?.endDate ? (
+                <Text style={styles.validityText}>
+                  Valid till {formatOfferExpiryDate(offer.timeline.endDate)}
+                </Text>
+              ) : null}
+
+              {(offer.mechanics?.parentType || offer.mechanics?.subType) && (
+                <View style={styles.sectionBlock}>
+                  <Text style={styles.sectionTitle}>How it works</Text>
+                  {offer.mechanics?.parentType
+                    ? renderMechanicCard(
+                        offer.mechanics.parentType.label || 'Offer type',
+                        offer.mechanics.parentType.description,
+                        offer.mechanics.parentType.icon,
+                        'parent',
+                      )
+                    : null}
+                  {offer.mechanics?.subType
+                    ? renderMechanicCard(
+                        offer.mechanics.subType.label || 'Offer detail',
+                        offer.mechanics.subType.description,
+                        offer.mechanics.subType.icon,
+                        'sub',
+                      )
+                    : null}
+                </View>
+              )}
+
+              <View style={styles.sectionBlock}>
+                <Text style={styles.sectionTitle}>About this offer</Text>
+                <Text style={styles.summaryText}>{summary}</Text>
+                <Text style={styles.descriptionText}>{description}</Text>
+              </View>
+
+              {ruleLabels.length > 0 || offer.mechanics?.campaignPoolWinners ? (
+                <View style={styles.chipsRow}>
+                  {ruleLabels.map(label => (
+                    <View key={label} style={styles.ruleChip}>
+                      <Text style={styles.ruleChipText}>{label}</Text>
+                    </View>
+                  ))}
+                  {offer.mechanics?.campaignPoolWinners ? (
+                    <View style={styles.ruleChip}>
+                      <Text style={styles.ruleChipText}>
+                        {offer.mechanics.campaignPoolWinners} winners
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
+              {offer.linkedProducts && offer.linkedProducts.length > 0 ? (
+                <View style={styles.sectionBlock}>
+                  <Text style={styles.sectionTitle}>Included products</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.productRow}>
+                    {offer.linkedProducts.map(product => (
+                      <View key={product.id} style={styles.productChip}>
+                        {product.image ? (
+                          <Image
+                            source={{ uri: resolveImageUrl(product.image) }}
+                            style={styles.productChipImage}
+                          />
+                        ) : null}
+                        <Text style={styles.productChipTitle} numberOfLines={2}>
+                          {product.title}
+                        </Text>
+                        {product.price ? <Text style={styles.productChipPrice}>{product.price}</Text> : null}
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : null}
+
+              <View style={styles.sectionBlock}>
+                <Text style={styles.sectionTitle}>How to redeem</Text>
+                <View style={styles.stepsList}>
+                  {redeemSteps.map((step, index) => (
+                    <View key={`${step.title}-${index}`} style={styles.stepRow}>
+                      <View style={styles.stepNumber}>
+                        <Text style={styles.stepNumberText}>{index + 1}</Text>
+                      </View>
+                      <View style={styles.stepBody}>
+                        <Text style={styles.stepTitle}>{step.title}</Text>
+                        <Text style={styles.stepDescription}>{step.description}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.sectionBlock}>
+                <Text style={styles.sectionTitle}>Store location</Text>
+                <OfferLocationMap
+                  address={shopAddress}
+                  label={merchantName}
+                  onGetDirections={handleGetDirections}
+                />
+              </View>
+            </>
+          )}
         </AnimatedScreen>
       </ScrollView>
 
-      <SafeAreaView edges={['bottom']} style={styles.bottomBar}>
-        {qrRevealed ? (
-          <View style={styles.qrCard}>
-            <View style={styles.qrIconWrap}>
-              <MaterialCommunityIcons name="qrcode" size={88} color={colors.text} />
+      {!isLoading ? (
+        <SafeAreaView edges={['bottom']} style={styles.bottomBar}>
+          {qrRevealed || !showQrSlider ? (
+            <View style={styles.redeemCard}>
+              <View style={styles.redeemIconWrap}>
+                <MaterialCommunityIcons
+                  name={showQrSlider ? 'qrcode' : 'ticket-confirmation-outline'}
+                  size={showQrSlider ? 72 : 40}
+                  color={colors.text}
+                />
+              </View>
+              <Text style={styles.redeemTitle}>
+                {showQrSlider ? 'Show this at checkout' : 'Use this offer code'}
+              </Text>
+              <Text style={styles.redeemCode}>{offer.code || offer.id}</Text>
             </View>
-            <Text style={styles.qrTitle}>Show this QR at checkout</Text>
-            <Text style={styles.qrCodeText}>{offer.id}</Text>
-          </View>
-        ) : (
-          <View style={styles.sliderTrack}>
-            <Text style={styles.sliderHint}>Slide to Reveal QR</Text>
-            <View style={styles.sliderChevrons}>
-              <MaterialCommunityIcons name="chevron-right" size={18} color="#99A4B8" />
-              <MaterialCommunityIcons name="chevron-right" size={18} color="#99A4B8" />
-              <MaterialCommunityIcons name="chevron-right" size={18} color="#99A4B8" />
+          ) : (
+            <View style={styles.sliderTrack}>
+              <Text style={styles.sliderHint}>Slide to reveal QR</Text>
+              <View style={styles.sliderChevrons}>
+                <MaterialCommunityIcons name="chevron-right" size={18} color="#B8C2D3" />
+                <MaterialCommunityIcons name="chevron-right" size={18} color="#B8C2D3" />
+                <MaterialCommunityIcons name="chevron-right" size={18} color="#B8C2D3" />
+              </View>
+              <Animated.View
+                style={[styles.sliderThumb, { transform: [{ translateX: slideX }] }]}
+                {...panResponder.panHandlers}
+              >
+                <MaterialCommunityIcons name="qrcode-scan" size={22} color={colors.white} />
+              </Animated.View>
             </View>
-            <Animated.View
-              style={[styles.sliderThumb, { transform: [{ translateX: slideX }] }]}
-              {...panResponder.panHandlers}
-            >
-              <MaterialCommunityIcons name="qrcode-scan" size={24} color={colors.white} />
-            </Animated.View>
-          </View>
-        )}
-      </SafeAreaView>
+          )}
+        </SafeAreaView>
+      ) : null}
     </View>
   );
 };
@@ -250,22 +413,32 @@ export default OfferDetailScreenView;
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#F7FAFF',
+    backgroundColor: '#F4F7FC',
   },
-  scrollContent: {
-    paddingBottom: 24,
+  contentScroll: {
+    flex: 1,
+    marginTop: -24,
+  },
+  contentScrollContainer: {
+    flexGrow: 1,
+    paddingBottom: 12,
   },
   heroSection: {
-    height: 280,
+    height: 240,
     backgroundColor: '#D8E2F0',
   },
   heroImage: {
     width: '100%',
     height: '100%',
   },
+  heroGradient: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   heroOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 32, 51, 0.16)',
   },
   heroActions: {
     position: 'absolute',
@@ -275,81 +448,95 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 8,
+    paddingTop: 6,
   },
   heroActionsRight: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
   },
   heroIconButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.white,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#1B2430',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
   },
   heroBadge: {
     position: 'absolute',
-    left: 16,
-    bottom: 42,
-    backgroundColor: '#FFD93D',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    left: 20,
+    bottom: 36,
+    backgroundColor: colors.primary,
+    borderRadius: 100,
+    paddingHorizontal: 14,
     paddingVertical: 8,
   },
   heroBadgeText: {
     fontSize: 12,
-    color: '#202843',
+    color: colors.white,
     fontFamily: fonts.BOLD,
-    letterSpacing: 0.4,
+    letterSpacing: 0.3,
   },
-  sheetWrap: {
-    marginTop: -24,
-  },
-  sheetGradient: {
+  sheet: {
+    backgroundColor: colors.white,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 28,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 24,
+    minHeight: 420,
   },
-  sheetHandle: {
-    alignSelf: 'center',
-    width: 44,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#D8E2F0',
-    marginBottom: 16,
+  loadingBlock: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 48,
+    gap: 10,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: colors.mutedText,
+    fontFamily: fonts.BOLD,
   },
   offerTitle: {
     fontSize: 24,
     lineHeight: 30,
     color: colors.text,
     fontFamily: fonts.BOLD,
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
+    marginBottom: 14,
+  },
+  codeCard: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.primarySoft,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+  },
+  codeLabel: {
+    fontSize: 11,
+    color: colors.primaryDark,
+    fontFamily: fonts.BOLD,
+    marginBottom: 2,
+  },
+  codeValue: {
+    fontSize: 18,
+    color: colors.primary,
+    fontFamily: fonts.BOLD,
+    letterSpacing: 1,
   },
   storeCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderRadius: 18,
-    padding: 12,
+    alignItems: 'flex-start',
+    backgroundColor: '#FAFBFE',
+    borderRadius: 16,
+    padding: 14,
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E8EDF5',
-    shadowColor: '#1B2430',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 3,
+    borderColor: '#EEF2F8',
   },
   storeLogo: {
     width: 52,
@@ -360,64 +547,102 @@ const styles = StyleSheet.create({
   storeCardBody: {
     flex: 1,
   },
-  storeNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
   storeName: {
     fontSize: 15,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
+  storeAddress: {
+    marginTop: 4,
+    fontSize: 12,
+    color: colors.mutedText,
+    lineHeight: 17,
+    fontFamily: fonts.BOLD,
+  },
   storeMetaRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
-    marginTop: 6,
+    marginTop: 10,
   },
-  storeMetaItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  storeMetaText: {
-    fontSize: 12,
-    color: '#667085',
-    fontFamily: fonts.BOLD,
-  },
-  openPill: {
-    backgroundColor: '#E7F8EF',
+  statusPill: {
     borderRadius: 100,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
-  openPillText: {
+  statusOpen: {
+    backgroundColor: '#ECF9F1',
+  },
+  statusClosed: {
+    backgroundColor: '#FDEEEE',
+  },
+  statusText: {
     fontSize: 11,
-    color: '#27AE60',
     fontFamily: fonts.BOLD,
   },
-  ratingPill: {
+  statusTextOpen: {
+    color: '#1F8B4C',
+  },
+  statusTextClosed: {
+    color: '#D84B4B',
+  },
+  minPurchasePill: {
+    backgroundColor: '#F4F7FC',
+    borderRadius: 100,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  minPurchaseText: {
+    fontSize: 11,
+    color: '#5E6B82',
+    fontFamily: fonts.BOLD,
+  },
+  urgencyBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#FFF8E8',
-    borderRadius: 100,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  ratingPillText: {
-    fontSize: 12,
-    color: colors.text,
-    fontFamily: fonts.BOLD,
-  },
-  sectionTitle: {
-    fontSize: 17,
-    color: colors.text,
-    fontFamily: fonts.BOLD,
+    gap: 10,
+    backgroundColor: '#FFF4F4',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     marginBottom: 8,
   },
-  sectionSubtitle: {
+  urgencyUpcoming: {
+    backgroundColor: '#EEF4FF',
+  },
+  urgencyExpired: {
+    backgroundColor: '#F4F7FC',
+  },
+  urgencyText: {
+    flex: 1,
+    fontSize: 13,
+    color: '#B42318',
+    fontFamily: fonts.BOLD,
+    lineHeight: 18,
+  },
+  urgencyTextUpcoming: {
+    color: colors.primaryDark,
+  },
+  urgencyTextExpired: {
+    color: '#8B97AB',
+  },
+  validityText: {
+    fontSize: 12,
+    color: colors.mutedText,
+    fontFamily: fonts.BOLD,
+    marginBottom: 18,
+  },
+  sectionBlock: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+    marginBottom: 12,
+    letterSpacing: -0.2,
+  },
+  summaryText: {
     fontSize: 14,
     color: colors.primaryDark,
     fontFamily: fonts.BOLD,
@@ -426,45 +651,114 @@ const styles = StyleSheet.create({
   descriptionText: {
     fontSize: 13,
     lineHeight: 20,
-    color: '#667085',
-    marginBottom: 16,
+    color: colors.mutedText,
+    fontFamily: fonts.BOLD,
   },
-  urgencyBanner: {
+  mechanicCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#FFF1F1',
-    borderWidth: 1,
-    borderColor: '#F6CACA',
+    gap: 12,
+    backgroundColor: '#FAFBFE',
     borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 22,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#EEF2F8',
   },
-  urgencyText: {
+  mechanicIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: '#F3F6FB',
+  },
+  mechanicIconFallback: {
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mechanicBody: {
     flex: 1,
-    fontSize: 13,
-    color: '#B42318',
+  },
+  mechanicTitle: {
+    fontSize: 14,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+    marginBottom: 4,
+  },
+  mechanicDescription: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: colors.mutedText,
+    fontFamily: fonts.BOLD,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 20,
+  },
+  ruleChip: {
+    backgroundColor: '#F4F7FC',
+    borderRadius: 100,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  ruleChipText: {
+    fontSize: 11,
+    color: '#5E6B82',
+    fontFamily: fonts.BOLD,
+  },
+  productRow: {
+    gap: 12,
+    paddingRight: 4,
+  },
+  productChip: {
+    width: 120,
+    backgroundColor: '#FAFBFE',
+    borderRadius: 14,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#EEF2F8',
+  },
+  productChipImage: {
+    width: '100%',
+    height: 72,
+    borderRadius: 10,
+    backgroundColor: '#F3F6FB',
+    marginBottom: 8,
+  },
+  productChipTitle: {
+    fontSize: 12,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+    minHeight: 30,
+    lineHeight: 15,
+  },
+  productChipPrice: {
+    marginTop: 4,
+    fontSize: 12,
+    color: colors.primary,
     fontFamily: fonts.BOLD,
   },
   stepsList: {
     gap: 14,
-    marginBottom: 20,
   },
   stepRow: {
     flexDirection: 'row',
     gap: 12,
   },
   stepNumber: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepNumberText: {
-    fontSize: 14,
+    fontSize: 13,
     color: colors.white,
     fontFamily: fonts.BOLD,
   },
@@ -481,39 +775,7 @@ const styles = StyleSheet.create({
   stepDescription: {
     fontSize: 12,
     lineHeight: 18,
-    color: '#667085',
-  },
-  mapCard: {
-    borderRadius: 18,
-    overflow: 'hidden',
-    height: 170,
-    backgroundColor: '#E8EDF5',
-    marginBottom: 8,
-  },
-  mapImage: {
-    width: '100%',
-    height: '100%',
-  },
-  directionsButton: {
-    position: 'absolute',
-    right: 12,
-    bottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: colors.white,
-    borderRadius: 100,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    shadowColor: '#1B2430',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  directionsButtonText: {
-    fontSize: 12,
-    color: colors.primary,
+    color: colors.mutedText,
     fontFamily: fonts.BOLD,
   },
   bottomBar: {
@@ -522,21 +784,21 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     backgroundColor: colors.white,
     borderTopWidth: 1,
-    borderTopColor: '#E8EDF5',
+    borderTopColor: '#EEF2F8',
   },
   sliderTrack: {
-    height: 64,
+    height: 60,
     borderRadius: 100,
-    backgroundColor: colors.white,
+    backgroundColor: '#F4F7FC',
     borderWidth: 1,
-    borderColor: '#D8E2F0',
+    borderColor: '#E3EAF5',
     justifyContent: 'center',
     overflow: 'hidden',
   },
   sliderHint: {
     textAlign: 'center',
-    fontSize: 15,
-    color: '#667085',
+    fontSize: 14,
+    color: colors.mutedText,
     fontFamily: fonts.BOLD,
   },
   sliderChevrons: {
@@ -555,38 +817,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.28,
-    shadowRadius: 10,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  qrCard: {
+  redeemCard: {
     alignItems: 'center',
-    backgroundColor: '#F8FAFD',
-    borderRadius: 18,
+    backgroundColor: '#FAFBFE',
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E8EDF5',
-    paddingVertical: 18,
+    borderColor: '#EEF2F8',
+    paddingVertical: 16,
     paddingHorizontal: 16,
   },
-  qrIconWrap: {
-    width: 120,
-    height: 120,
-    borderRadius: 16,
+  redeemIconWrap: {
+    width: 96,
+    height: 96,
+    borderRadius: 14,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10,
   },
-  qrTitle: {
+  redeemTitle: {
     fontSize: 14,
     color: colors.text,
     fontFamily: fonts.BOLD,
     marginBottom: 4,
   },
-  qrCodeText: {
-    fontSize: 12,
-    color: '#667085',
+  redeemCode: {
+    fontSize: 18,
+    color: colors.primary,
     fontFamily: fonts.BOLD,
+    letterSpacing: 1,
   },
 });

@@ -29,6 +29,8 @@ import { showAppAlert } from '../../../../services/appAlert';
 import { logApiEvent } from '../../../../services/apiClient';
 import { ShopOffer, ShopWithOffers } from '../../../../types/shop';
 import { MainStackParamList } from '../../../../navigation/types';
+import { shopApi } from '../../../../services/shopApi';
+import { extractCityFromGeocode, resolveShopCity } from '../../../../utils/location';
 import { formatOfferCountdown } from '../../../../utils/offer';
 
 const { width } = Dimensions.get('window');
@@ -186,64 +188,16 @@ const categoryChips: CategoryChip[] = [
   { id: 'food', label: 'Food', icon: 'food-fork-drink', color: '#366FE0', bg: '#EEF4FF' },
 ];
 
-const STATIC_SHOPS: ShopWithOffers[] = [
-  {
-    id: 'sharma-jewelers',
-    name: 'Sharma Jewelers',
-    logo: PLACEHOLDER_SHOP_LOGO,
-    coverImage:
-      'https://images.pexels.com/photos/248077/pexels-photo-248077.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=800',
-    tagline: 'Trusted since 1995',
-    rating: '4.8',
-    ratingCount: '57',
-    distance: '0.3 km',
-    isOpen: true,
-    isVerified: true,
-    categories: ['Jewelry', 'Gold', 'Wedding'],
-    offers: [
-      {
-        id: 'offer-gold-10',
-        shopId: 'sharma-jewelers',
-        title: 'FLAT 10% OFF',
-        subtitle: 'on Gold Jewelry',
-        discount: '10% OFF',
-        image:
-          'https://images.pexels.com/photos/1191531/pexels-photo-1191531.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400',
-        countdown: '02:12:51',
-      },
-      {
-        id: 'offer-silver-b1g1',
-        shopId: 'sharma-jewelers',
-        title: 'Buy 1 Get 1',
-        subtitle: 'on Silver Items',
-        discount: 'BUY 1 GET 1',
-        image:
-          'https://images.pexels.com/photos/145909/pexels-photo-145909.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400',
-        countdown: '02:12:51',
-      },
-      {
-        id: 'offer-polish-free',
-        shopId: 'sharma-jewelers',
-        title: 'Free Silver',
-        subtitle: 'Polishing',
-        discount: 'FREE SERVICE',
-        image:
-          'https://images.pexels.com/photos/265906/pexels-photo-265906.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400',
-        countdown: '02:12:51',
-      },
-    ],
-  },
-];
-
 const HomeScreenView = () => {
   const navigation = useNavigation();
   const { authToken, currentUser, clearSession, setSession } = useAppContext();
   const [selectedCategory, setSelectedCategory] = useState('hot-deals');
   const [selectedSidebarItem, setSelectedSidebarItem] = useState('Overview');
   const [sidebarVisible, setSidebarVisible] = useState(false);
-  const shops = STATIC_SHOPS;
-  const isLoadingShops = false;
-  const shopsError: string | null = null;
+  const [shopCity, setShopCity] = useState(() => resolveShopCity(undefined, currentUser?.address));
+  const [shops, setShops] = useState<ShopWithOffers[]>([]);
+  const [isLoadingShops, setIsLoadingShops] = useState(false);
+  const [shopsError, setShopsError] = useState<string | null>(null);
   const [isPhoneVisible, setIsPhoneVisible] = useState(false);
   const [profileImageLoadError, setProfileImageLoadError] = useState(false);
   const [headerAddress, setHeaderAddress] = useState(
@@ -336,6 +290,43 @@ const HomeScreenView = () => {
   }, [authToken, currentUser?._id]);
 
   useEffect(() => {
+    if (!shopCity.trim()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadShops = async () => {
+      try {
+        setIsLoadingShops(true);
+        setShopsError(null);
+        const result = await shopApi.fetchShopsWithOffersByCity(shopCity, authToken ?? undefined);
+
+        if (!cancelled) {
+          setShops(result);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setShops([]);
+          setShopsError(
+            error instanceof Error ? error.message : 'Failed to load shops for your city.',
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingShops(false);
+        }
+      }
+    };
+
+    loadShops();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [shopCity, authToken]);
+
+  useEffect(() => {
     const requestLocationPermission = async () => {
       if (Platform.OS !== 'android') {
         return true;
@@ -351,6 +342,7 @@ const HomeScreenView = () => {
     const fallbackAddress = currentUser?.address?.trim()
       ? `Work - ${currentUser.address.trim()}`
       : 'Work - New Delhi, India';
+    const profileCity = resolveShopCity(undefined, currentUser?.address);
 
     const formatAddress = (payload: any) => {
       const address = payload?.address ?? {};
@@ -374,6 +366,7 @@ const HomeScreenView = () => {
         const permitted = await requestLocationPermission();
         if (!permitted) {
           setHeaderAddress(fallbackAddress);
+          setShopCity(profileCity);
           return;
         }
 
@@ -409,6 +402,8 @@ const HomeScreenView = () => {
               });
               console.log('[Location] Reverse geocode response', payload);
               setHeaderAddress(formatAddress(payload));
+              const geocodeCity = extractCityFromGeocode(payload);
+              setShopCity(resolveShopCity(geocodeCity, currentUser?.address));
             } catch (error) {
               logApiEvent('GET network-error', {
                 url: 'https://nominatim.openstreetmap.org/reverse',
@@ -416,10 +411,12 @@ const HomeScreenView = () => {
                 error: error instanceof Error ? error.message : String(error),
               });
               setHeaderAddress(fallbackAddress);
+              setShopCity(profileCity);
             }
           },
           () => {
             setHeaderAddress(fallbackAddress);
+            setShopCity(profileCity);
           },
           {
             enableHighAccuracy: true,
@@ -429,6 +426,7 @@ const HomeScreenView = () => {
         );
       } catch {
         setHeaderAddress(fallbackAddress);
+        setShopCity(profileCity);
       }
     };
 
@@ -691,7 +689,7 @@ const HomeScreenView = () => {
             <View style={styles.localOffersSection}>
               <View style={styles.localOffersHeader}>
                 <View>
-                  <Text style={styles.localOffersKicker}>Near your area</Text>
+                  <Text style={styles.localOffersKicker}>Near {shopCity}</Text>
                   <Text style={styles.localOffersTitle}>Local Offers</Text>
                 </View>
                 <View style={styles.localOffersHeaderActions}>
@@ -729,7 +727,7 @@ const HomeScreenView = () => {
                 </View>
               ) : (
                 shops.map(shop => {
-                  const shopLogo = shop.logo ?? PLACEHOLDER_SHOP_LOGO;
+                  const shopLogo = shopApi.resolveImageUrl(shop.logo) ?? PLACEHOLDER_SHOP_LOGO;
 
                   return (
                     <View key={shop.id} style={styles.localOffersFeatureCard}>
@@ -797,7 +795,8 @@ const HomeScreenView = () => {
                           contentContainerStyle={styles.offersContent}
                         >
                           {shop.offers.map(offer => {
-                            const offerImage = offer.image ?? PLACEHOLDER_OFFER_IMAGE;
+                            const offerImage =
+                              shopApi.resolveImageUrl(offer.image) ?? PLACEHOLDER_OFFER_IMAGE;
 
                             return (
                               <TouchableOpacity

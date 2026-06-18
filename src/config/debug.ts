@@ -1,5 +1,11 @@
-/** Log every API request/response in Metro when true (defaults to dev builds). */
-export const API_DEBUG = __DEV__;
+/**
+ * Logs every API request/response in Metro or logcat.
+ * Keep this true while testing API integration in installed APKs.
+ * Set it back to false before production release builds.
+ */
+const FORCE_API_DEBUG = true;
+
+export const API_DEBUG = __DEV__ || FORCE_API_DEBUG;
 
 /**
  * Paste your Firebase App Check debug token here after the first dev run.
