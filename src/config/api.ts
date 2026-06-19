@@ -11,6 +11,8 @@ export const API_ENDPOINTS = {
   changePassword: '/password',
   loginPassword: '/auth/login-password',
   loginOtp: '/auth/login-otp',
+  logout: '/auth/logout',
+  deleteAccount: '/auth/delete-account',
   updateProfile: '/profile',
   getProfile: '/profile',
   profileImage: '/profile-image',
@@ -18,7 +20,15 @@ export const API_ENDPOINTS = {
   shopById: (shopId: string) => `/shop/${encodeURIComponent(shopId)}`,
   shopOffers: (shopId: string) => `/shop/offers/${shopId}`,
   offerById: (offerId: string) => `/shop/offer/${encodeURIComponent(offerId)}`,
+  shopLogo: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/logo`,
+  shopBanner: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/banner`,
 } as const;
+
+export const getShopLogoUrl = (shopId: string) =>
+  `${SHOPS_API_BASE_URL}${API_ENDPOINTS.shopLogo(shopId)}`;
+
+export const getShopBannerUrl = (shopId: string) =>
+  `${SHOPS_API_BASE_URL}${API_ENDPOINTS.shopBanner(shopId)}`;
 
 export const resolveProfileImageUrl = (path?: string | null) => {
   if (!path) {

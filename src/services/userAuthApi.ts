@@ -87,6 +87,20 @@ export const userAuthApi = {
     });
   },
 
+  logout(token: string) {
+    return apiRequest<{ success?: boolean; message?: string }>(API_ENDPOINTS.logout, {
+      method: 'POST',
+      token,
+    });
+  },
+
+  deleteAccount(token: string) {
+    return apiRequest<{ success?: boolean; message?: string }>(API_ENDPOINTS.deleteAccount, {
+      method: 'DELETE',
+      token,
+    });
+  },
+
   updateProfile(
     token: string,
     currentUser: UserProfile,

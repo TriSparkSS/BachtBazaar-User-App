@@ -29,9 +29,10 @@ import { showAppAlert } from '../../../../services/appAlert';
 import { logApiEvent } from '../../../../services/apiClient';
 import { ShopOffer, ShopWithOffers } from '../../../../types/shop';
 import { MainStackParamList } from '../../../../navigation/types';
+import { resetToAuthLogin } from '../../../../navigation';
 import { shopApi } from '../../../../services/shopApi';
 import { extractCityFromGeocode, resolveShopCity } from '../../../../utils/location';
-import { formatOfferCountdown } from '../../../../utils/offer';
+import OfferCountdownText from '../../../../components/OfferCountdownText';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min((width - 48) / 3 - 4, 118);
@@ -486,16 +487,62 @@ const HomeScreenView = () => {
 
   const handleLogout = () => {
     showAppAlert('Logout', 'Do you want to logout from this account?', [
-      { text: 'Cancel', style: 'cancel' },
+      { text: 'No', style: 'cancel' },
       {
-        text: 'Logout',
+        text: 'Yes',
         style: 'destructive',
         onPress: async () => {
-          await clearSession();
-          setSidebarVisible(false);
+          try {
+            if (authToken) {
+              await userAuthApi.logout(authToken);
+            }
+
+            await clearSession();
+            setSidebarVisible(false);
+            resetToAuthLogin();
+          } catch (error) {
+            showAppAlert(
+              'Logout failed',
+              error instanceof Error ? error.message : 'Could not logout. Please try again.',
+              [{ text: 'OK' }],
+            );
+          }
         },
       },
     ]);
+  };
+
+  const handleDeleteAccount = () => {
+    showAppAlert(
+      'Delete account',
+      'Are you sure you want to delete your account? This action cannot be undone.',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, delete',
+          style: 'destructive',
+          onPress: async () => {
+            if (!authToken) {
+              showAppAlert('Delete failed', 'You are not logged in.', [{ text: 'OK' }]);
+              return;
+            }
+
+            try {
+              await userAuthApi.deleteAccount(authToken);
+              await clearSession();
+              setSidebarVisible(false);
+              resetToAuthLogin();
+            } catch (error) {
+              showAppAlert(
+                'Delete failed',
+                error instanceof Error ? error.message : 'Could not delete your account. Please try again.',
+                [{ text: 'OK' }],
+              );
+            }
+          },
+        },
+      ],
+    );
   };
 
   const handleSidebarItemPress = (label: string) => {
@@ -513,11 +560,7 @@ const HomeScreenView = () => {
 
     if (label === 'Delete account') {
       setSidebarVisible(false);
-      showAppAlert(
-        'Delete account',
-        'Account deletion will be available soon. Contact support if you need help.',
-        [{ text: 'OK' }],
-      );
+      handleDeleteAccount();
       return;
     }
 
@@ -728,6 +771,7 @@ const HomeScreenView = () => {
               ) : (
                 shops.map(shop => {
                   const shopLogo = shopApi.resolveImageUrl(shop.logo) ?? PLACEHOLDER_SHOP_LOGO;
+                  const hasOffers = (shop.offerCount ?? shop.offers.length) > 0 && shop.offers.length > 0;
 
                   return (
                     <View key={shop.id} style={styles.localOffersFeatureCard}>
@@ -787,7 +831,7 @@ const HomeScreenView = () => {
                         </View>
                       </TouchableOpacity>
 
-                      {shop.offers.length > 0 ? (
+                      {hasOffers ? (
                         <ScrollView
                           horizontal
                           showsHorizontalScrollIndicator={false}
@@ -822,9 +866,12 @@ const HomeScreenView = () => {
                                       {offer.subtitle}
                                     </Text>
                                   ) : null}
-                                  <Text style={styles.cardCountdown}>
-                                    {offer.countdown?.trim() || `${formatOfferCountdown(offer)} remaining`}
-                                  </Text>
+                                  <OfferCountdownText
+                                    expiresAt={offer.expiresAt}
+                                    countdown={offer.countdown}
+                                    suffix=" remaining"
+                                    style={styles.cardCountdown}
+                                  />
                                 </View>
                               </TouchableOpacity>
                             );

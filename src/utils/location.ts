@@ -73,13 +73,8 @@ export type GeoCoordinates = {
   longitude: number;
 };
 
-export const geocodeAddress = async (address: string): Promise<GeoCoordinates | null> => {
-  const query = address.trim();
-  if (!query) {
-    return null;
-  }
-
-  const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`;
+const geocodeSingleQuery = async (query: string): Promise<GeoCoordinates | null> => {
+  const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=in&q=${encodeURIComponent(query)}`;
 
   try {
     const response = await fetch(geocodeUrl, {
@@ -111,4 +106,33 @@ export const geocodeAddress = async (address: string): Promise<GeoCoordinates | 
   } catch {
     return null;
   }
+};
+
+export const geocodeAddress = async (
+  address: string,
+  options?: { city?: string; label?: string },
+): Promise<GeoCoordinates | null> => {
+  const trimmedAddress = address.trim();
+  const city = options?.city?.trim();
+  const label = options?.label?.trim();
+
+  const queries = [
+    trimmedAddress && city ? `${trimmedAddress}, ${city}, India` : undefined,
+    label && trimmedAddress && city ? `${label}, ${trimmedAddress}, ${city}, India` : undefined,
+    label && trimmedAddress ? `${label}, ${trimmedAddress}, India` : undefined,
+    trimmedAddress ? `${trimmedAddress}, India` : undefined,
+    city && trimmedAddress ? `${city}, ${trimmedAddress}, India` : undefined,
+    city ? `${city}, India` : undefined,
+  ].filter((query): query is string => Boolean(query?.trim()));
+
+  const uniqueQueries = [...new Set(queries)];
+
+  for (const query of uniqueQueries) {
+    const result = await geocodeSingleQuery(query);
+    if (result) {
+      return result;
+    }
+  }
+
+  return null;
 };

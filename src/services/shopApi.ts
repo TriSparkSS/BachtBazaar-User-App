@@ -2,7 +2,11 @@ import { API_ENDPOINTS, resolveProfileImageUrl, SHOPS_API_BASE_URL } from '../co
 import { OfferDetail, ShopOffer, ShopWithOffers } from '../types/shop';
 import { apiRequest } from './apiClient';
 import { parseOfferDetailResponse } from './offerResponseParser';
-import { parseShopDetailResponse, parseShopOffersResponse, parseShopsResponse } from './shopResponseParser';
+import {
+  parseShopDetailResponse,
+  parseShopOffersResponse,
+  parseShopsWithOffersResponse,
+} from './shopResponseParser';
 
 export const shopApi = {
   fetchShopsByCity(city: string, token?: string) {
@@ -82,20 +86,39 @@ export const shopApi = {
   },
 
   async fetchShopsWithOffersByCity(city: string, token?: string): Promise<ShopWithOffers[]> {
-    const shops = await this.fetchShopsByCity(city, token);
+    const normalizedCity = city.trim();
+    if (!normalizedCity) {
+      return [];
+    }
 
-    const shopsWithOffers = await Promise.all(
+    const payload = await apiRequest<unknown>(API_ENDPOINTS.shopsByCity(normalizedCity), {
+      method: 'GET',
+      token,
+      baseUrl: SHOPS_API_BASE_URL,
+    });
+
+    const shops = parseShopsWithOffersResponse(payload);
+
+    return Promise.all(
       shops.map(async shop => {
-        try {
-          const offers = await this.fetchShopOffers(shop.id, token);
-          return { ...shop, offers };
-        } catch {
-          return { ...shop, offers: [] as ShopOffer[] };
+        const offerCount = shop.offerCount ?? shop.offers.length;
+
+        if (offerCount > 0 && shop.offers.length > 0) {
+          return shop;
         }
+
+        if (offerCount > 0) {
+          try {
+            const offers = await this.fetchShopOffers(shop.id, token);
+            return { ...shop, offers, offerCount: offers.length || offerCount };
+          } catch {
+            return shop;
+          }
+        }
+
+        return { ...shop, offers: [] as ShopOffer[] };
       }),
     );
-
-    return shopsWithOffers;
   },
 
   resolveImageUrl: resolveProfileImageUrl,

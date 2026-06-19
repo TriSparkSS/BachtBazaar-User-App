@@ -1,4 +1,8 @@
 import {
+  getShopBannerUrl,
+  getShopLogoUrl,
+} from '../config/api';
+import {
   Shop,
   ShopOffer,
   ShopOpeningDay,
@@ -58,6 +62,35 @@ const pickNumber = (...values: unknown[]): number | undefined => {
 const resolveImagePath = (value: unknown): string | undefined => {
   if (typeof value === 'string' && value.trim()) {
     return value.trim();
+  }
+
+  return undefined;
+};
+
+const isMediaBuffer = (value: unknown): boolean => {
+  if (!isRecord(value) || Array.isArray(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.contentType === 'string' ||
+    typeof value.content_type === 'string' ||
+    value.data != null
+  );
+};
+
+const resolveShopMediaField = (
+  shopId: string,
+  value: unknown,
+  kind: 'logo' | 'banner',
+): string | undefined => {
+  const directPath = resolveImagePath(value);
+  if (directPath) {
+    return directPath;
+  }
+
+  if (isMediaBuffer(value)) {
+    return kind === 'logo' ? getShopLogoUrl(shopId) : getShopBannerUrl(shopId);
   }
 
   return undefined;
@@ -133,36 +166,21 @@ const normalizeShop = (value: unknown): Shop | undefined => {
   const openingHours = normalizeOpeningHours(value.openingHours ?? value.opening_hours);
   const address = pickString(value.address);
   const address1 = pickString(value.address1, value.address_1);
+  const city = pickString(value.city);
 
   return {
     id,
     name,
-    logo: resolveImagePath(
-      pickString(
-        value.logo,
-        value.image,
-        value.shopImage,
-        value.shop_image,
-        value.profileImage,
-        value.profile_image,
-        value.avatar,
-        value.photo,
-        value.thumbnail,
-      ),
+    logo: resolveShopMediaField(id, value.logo, 'logo'),
+    coverImage: resolveShopMediaField(
+      id,
+      value.banner ?? value.coverImage ?? value.cover_image,
+      'banner',
     ),
-    coverImage: resolveImagePath(
-      pickString(
-        value.coverImage,
-        value.cover_image,
-        value.bannerImage,
-        value.banner_image,
-        value.heroImage,
-        value.hero_image,
-      ),
-    ),
-    tagline: pickString(value.tagline, value.about, merchant?.name),
+    tagline: pickString(value.tagline, value.description, value.about, merchant?.name),
     address,
     address1,
+    city,
     phone: pickString(value.phone, merchant?.phone),
     rating: pickNumberString(value.rating, value.avgRating, value.avg_rating),
     ratingCount: pickNumberString(
@@ -188,9 +206,11 @@ const normalizeShop = (value: unknown): Shop | undefined => {
     ),
     categories: Array.isArray(value.categories)
       ? value.categories.map(item => String(item).trim()).filter(Boolean)
-      : Array.isArray(value.tags)
-        ? value.tags.map(item => String(item).trim()).filter(Boolean)
-        : undefined,
+      : isRecord(value.categoryId)
+        ? [pickString(value.categoryId.label, value.categoryId.name)].filter(Boolean) as string[]
+        : Array.isArray(value.tags)
+          ? value.tags.map(item => String(item).trim()).filter(Boolean)
+          : undefined,
     openingHours,
     merchantName: pickString(merchant?.name),
   };
@@ -311,6 +331,46 @@ export const parseShopsResponse = (payload: unknown): Shop[] =>
   unwrapList(payload)
     .map(item => normalizeShop(item))
     .filter((shop): shop is Shop => Boolean(shop));
+
+const extractShopOffers = (record: Record<string, unknown>, shopId: string): ShopOffer[] => {
+  for (const key of ['offers', 'shopOffers', 'shop_offers', 'activeOffers', 'active_offers']) {
+    const value = record[key];
+    if (Array.isArray(value)) {
+      return value
+        .map(item => normalizeOffer(item, shopId))
+        .filter((offer): offer is ShopOffer => Boolean(offer));
+    }
+  }
+
+  return [];
+};
+
+export const parseShopsWithOffersResponse = (payload: unknown): ShopWithOffers[] =>
+  unwrapList(payload)
+    .map(item => {
+      if (!isRecord(item)) {
+        return undefined;
+      }
+
+      const shop = normalizeShop(item);
+      if (!shop) {
+        return undefined;
+      }
+
+      const shopId = shop.id;
+      const offers = extractShopOffers(item, shopId);
+      const offerCount = pickNumber(item.offerCount, item.offer_count) ?? offers.length;
+      const offerImage = offers.find(offer => offer.image)?.image;
+
+      return {
+        ...shop,
+        logo: shop.logo || offerImage,
+        coverImage: shop.coverImage || offerImage,
+        offers: offerCount > 0 ? offers : [],
+        offerCount,
+      } satisfies ShopWithOffers;
+    })
+    .filter((shop): shop is ShopWithOffers => Boolean(shop));
 
 export const parseShopOffersResponse = (payload: unknown, shopId: string): ShopOffer[] =>
   unwrapList(payload)

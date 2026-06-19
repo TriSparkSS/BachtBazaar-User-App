@@ -16,6 +16,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnimatedScreen from '../../../components/AnimatedScreen';
+import OfferUrgencyText from '../../../components/OfferUrgencyText';
 import OfferLocationMap from './OfferLocationMap';
 import { colors, fonts } from '../../../helpers/styles';
 import { OfferDetail, ShopWithOffers } from '../../../types/shop';
@@ -24,7 +25,6 @@ import {
   buildOfferDescription,
   buildOfferHeadline,
   buildOfferSummary,
-  buildOfferUrgencyText,
   buildOperationalRuleLabels,
   buildRedeemSteps,
   formatOfferExpiryDate,
@@ -68,7 +68,6 @@ const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
   const description = useMemo(() => buildOfferDescription(offer, merchantName), [offer, merchantName]);
   const redeemSteps = useMemo(() => buildRedeemSteps(offer, shop), [offer, shop]);
   const badgeText = useMemo(() => buildOfferBadgeText(offer), [offer]);
-  const urgencyText = useMemo(() => buildOfferUrgencyText(offer), [offer]);
   const ruleLabels = useMemo(() => buildOperationalRuleLabels(offer), [offer]);
   const shopAddress = formatShopAddress(shop);
   const openNow = isShopOpenNow(shop.openingHours) ?? shop.isOpen;
@@ -256,15 +255,14 @@ const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
                         : '#D84B4B'
                   }
                 />
-                <Text
+                <OfferUrgencyText
+                  offer={offer}
                   style={[
                     styles.urgencyText,
                     offer.timeline?.isUpcoming && styles.urgencyTextUpcoming,
                     offer.timeline?.isExpired && styles.urgencyTextExpired,
                   ]}
-                >
-                  {urgencyText}
-                </Text>
+                />
               </View>
 
               {offer.timeline?.endDate ? (
@@ -361,6 +359,7 @@ const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
                 <Text style={styles.sectionTitle}>Store location</Text>
                 <OfferLocationMap
                   address={shopAddress}
+                  city={shop.city}
                   label={merchantName}
                   onGetDirections={handleGetDirections}
                 />

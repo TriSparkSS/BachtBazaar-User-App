@@ -14,11 +14,23 @@ import { geocodeAddress } from '../../../utils/location';
 
 type OfferLocationMapProps = {
   address?: string;
+  city?: string;
   label: string;
   onGetDirections?: () => void;
 };
 
-const buildMapHtml = (latitude: number, longitude: number, label: string) => `<!DOCTYPE html>
+const buildMapHtml = (latitude: number, longitude: number) => {
+  const delta = 0.012;
+  const bbox = [
+    longitude - delta,
+    latitude - delta,
+    longitude + delta,
+    latitude + delta,
+  ].join('%2C');
+  const marker = `${latitude}%2C${longitude}`;
+  const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${marker}`;
+
+  return `<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8" />
@@ -26,50 +38,44 @@ const buildMapHtml = (latitude: number, longitude: number, label: string) => `<!
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-      html, body, #map {
+      html, body {
         width: 100%;
         height: 100%;
         margin: 0;
         padding: 0;
+        overflow: hidden;
         background: #eef2f8;
       }
-      .leaflet-control-attribution {
-        font-size: 9px;
+      iframe {
+        border: 0;
+        width: 100%;
+        height: 100%;
       }
     </style>
   </head>
   <body>
-    <div id="map"></div>
-    <script>
-      const map = L.map('map', {
-        zoomControl: true,
-        attributionControl: true,
-      }).setView([${latitude}, ${longitude}], 15);
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors',
-      }).addTo(map);
-
-      const marker = L.marker([${latitude}, ${longitude}]).addTo(map);
-      marker.bindPopup(${JSON.stringify(label)}).openPopup();
-    </script>
+    <iframe src="${embedUrl}" title="Store location"></iframe>
   </body>
 </html>`;
+};
 
-const OfferLocationMap: React.FC<OfferLocationMapProps> = ({ address, label, onGetDirections }) => {
+const OfferLocationMap: React.FC<OfferLocationMapProps> = ({
+  address,
+  city,
+  label,
+  onGetDirections,
+}) => {
   const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [isLoading, setIsLoading] = useState(Boolean(address?.trim()));
+  const [isLoading, setIsLoading] = useState(Boolean(address?.trim() || city?.trim()));
   const [hasError, setHasError] = useState(false);
+  const [webViewFailed, setWebViewFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     const resolveCoordinates = async () => {
-      if (!address?.trim()) {
+      if (!address?.trim() && !city?.trim()) {
         setIsLoading(false);
         setHasError(true);
         return;
@@ -77,8 +83,12 @@ const OfferLocationMap: React.FC<OfferLocationMapProps> = ({ address, label, onG
 
       setIsLoading(true);
       setHasError(false);
+      setWebViewFailed(false);
 
-      const result = await geocodeAddress(`${label}, ${address}`);
+      const result = await geocodeAddress(address?.trim() || city || '', {
+        city,
+        label,
+      });
 
       if (cancelled) {
         return;
@@ -100,15 +110,15 @@ const OfferLocationMap: React.FC<OfferLocationMapProps> = ({ address, label, onG
     return () => {
       cancelled = true;
     };
-  }, [address, label]);
+  }, [address, city, label]);
 
   const mapHtml = useMemo(() => {
     if (!coordinates) {
       return null;
     }
 
-    return buildMapHtml(coordinates.latitude, coordinates.longitude, label);
-  }, [coordinates, label]);
+    return buildMapHtml(coordinates.latitude, coordinates.longitude);
+  }, [coordinates]);
 
   const openExternalMap = () => {
     if (onGetDirections) {
@@ -116,9 +126,12 @@ const OfferLocationMap: React.FC<OfferLocationMapProps> = ({ address, label, onG
       return;
     }
 
-    const query = encodeURIComponent(address ? `${label}, ${address}` : label);
+    const parts = [label, address, city].filter(Boolean).join(', ');
+    const query = encodeURIComponent(parts || label);
     Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
   };
+
+  const showMapUnavailable = hasError || !mapHtml || webViewFailed;
 
   return (
     <View style={styles.card}>
@@ -128,7 +141,7 @@ const OfferLocationMap: React.FC<OfferLocationMapProps> = ({ address, label, onG
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={styles.stateText}>Loading map...</Text>
           </View>
-        ) : hasError || !mapHtml ? (
+        ) : showMapUnavailable ? (
           <View style={styles.centerState}>
             <MaterialCommunityIcons name="map-marker-off-outline" size={28} color="#B8C2D3" />
             <Text style={styles.stateTitle}>Map unavailable</Text>
@@ -142,8 +155,11 @@ const OfferLocationMap: React.FC<OfferLocationMapProps> = ({ address, label, onG
             nestedScrollEnabled
             javaScriptEnabled
             domStorageEnabled
+            mixedContentMode="always"
             androidLayerType="hardware"
             startInLoadingState
+            onError={() => setWebViewFailed(true)}
+            onHttpError={() => setWebViewFailed(true)}
             renderLoading={() => (
               <View style={styles.centerState}>
                 <ActivityIndicator size="small" color={colors.primary} />
@@ -152,7 +168,7 @@ const OfferLocationMap: React.FC<OfferLocationMapProps> = ({ address, label, onG
           />
         )}
 
-        {!isLoading && coordinates ? (
+        {!isLoading && coordinates && !showMapUnavailable ? (
           <View style={styles.pinBadge}>
             <MaterialCommunityIcons name="map-marker" size={14} color={colors.primary} />
             <Text style={styles.pinBadgeText} numberOfLines={1}>

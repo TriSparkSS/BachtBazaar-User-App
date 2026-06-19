@@ -31,6 +31,7 @@ export interface Shop {
   categories?: string[];
   openingHours?: ShopOpeningHours;
   merchantName?: string;
+  city?: string;
 }
 
 export interface ShopProduct {

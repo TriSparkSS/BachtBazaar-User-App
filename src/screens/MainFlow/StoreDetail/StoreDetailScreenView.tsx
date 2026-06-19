@@ -13,9 +13,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import LinearGradient from 'react-native-linear-gradient';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnimatedScreen from '../../../components/AnimatedScreen';
+import OfferCountdownText from '../../../components/OfferCountdownText';
 import { colors, fonts } from '../../../helpers/styles';
 import { ShopOffer, ShopProduct, ShopWithOffers } from '../../../types/shop';
-import { formatOfferCountdown, formatOfferExpiryDate } from '../../../utils/offer';
 import {
   formatShopAddress,
   formatTodayOpeningHours,
@@ -55,8 +55,10 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
   const [activeTab, setActiveTab] = useState<StoreTab>('Overview');
   const [isSaved, setIsSaved] = useState(false);
   const [heroError, setHeroError] = useState(false);
+  const [logoError, setLogoError] = useState(false);
 
   const shopAddress = formatShopAddress(shop);
+  const shopLogoUri = resolveImageUrl(shop.logo);
   const openNow = isShopOpenNow(shop.openingHours) ?? shop.isOpen;
   const todayHours = formatTodayOpeningHours(shop.openingHours);
   const featuredProducts = useMemo(() => getFeaturedProducts(products), [products]);
@@ -101,6 +103,12 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
                 {offer.description}
               </Text>
             ) : null}
+            <OfferCountdownText
+              expiresAt={offer.expiresAt}
+              countdown={offer.countdown}
+              suffix=" left"
+              style={styles.offerCompactTimer}
+            />
           </View>
         </TouchableOpacity>
       );
@@ -146,11 +154,19 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
             ) : null}
             <View style={styles.offerExpiryRow}>
               <MaterialCommunityIcons name="clock-outline" size={13} color="#8B97AB" />
-              <Text style={styles.offerExpiryText}>
-                {offer.expiresAt
-                  ? `Valid till ${formatOfferExpiryDate(offer.expiresAt)}`
-                  : offer.countdown?.trim() || `${formatOfferCountdown(offer)} left`}
-              </Text>
+              {offer.expiresAt ? (
+                <OfferCountdownText
+                  expiresAt={offer.expiresAt}
+                  countdown={offer.countdown}
+                  prefix="Ends in "
+                  expiredText="Offer expired"
+                  style={styles.offerExpiryText}
+                />
+              ) : (
+                <Text style={styles.offerExpiryText}>
+                  {offer.countdown?.trim() || 'Limited time offer'}
+                </Text>
+              )}
             </View>
           </View>
         </View>
@@ -392,7 +408,15 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
           <View style={styles.avatarWrap}>
             <LinearGradient colors={['#EEF4FF', '#FFFFFF']} style={styles.avatarRing}>
               <View style={styles.avatarCircle}>
-                <Text style={styles.avatarInitial}>{getShopInitial(shop.name)}</Text>
+                {shopLogoUri && !logoError ? (
+                  <Image
+                    source={{ uri: shopLogoUri }}
+                    style={styles.avatarImage}
+                    onError={() => setLogoError(true)}
+                  />
+                ) : (
+                  <Text style={styles.avatarInitial}>{getShopInitial(shop.name)}</Text>
+                )}
               </View>
             </LinearGradient>
           </View>
@@ -548,8 +572,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
     borderWidth: 3,
     borderColor: colors.white,
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   avatarInitial: {
     fontSize: 28,
@@ -978,6 +1007,12 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 11,
     color: 'rgba(255,255,255,0.82)',
+    fontFamily: fonts.BOLD,
+  },
+  offerCompactTimer: {
+    marginTop: 4,
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.9)',
     fontFamily: fonts.BOLD,
   },
   galleryGrid: {

@@ -18,8 +18,17 @@ export const formatOfferCountdown = (offer: {
   if (offer.expiresAt) {
     const expiresAt = new Date(offer.expiresAt).getTime();
     if (!Number.isNaN(expiresAt)) {
-      const remainingMs = Math.max(0, expiresAt - Date.now());
+      const remainingMs = expiresAt - Date.now();
+      if (remainingMs <= 0) {
+        return 'Expired';
+      }
+
       const totalSeconds = Math.floor(remainingMs / 1000);
+      const days = Math.floor(totalSeconds / 86400);
+      if (days > 0) {
+        return days === 1 ? '1 day' : `${days} days`;
+      }
+
       const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
       const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
       const seconds = String(totalSeconds % 60).padStart(2, '0');

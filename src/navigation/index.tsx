@@ -1,6 +1,11 @@
 import React from 'react';
 import { BackHandler } from 'react-native';
-import { NavigationContainer, createNavigationContainerRef, StackActions } from '@react-navigation/native';
+import {
+  CommonActions,
+  NavigationContainer,
+  createNavigationContainerRef,
+  StackActions,
+} from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { enableScreens } from 'react-native-screens';
@@ -52,6 +57,27 @@ export function replace(name: string, params?: any) {
     // @ts-ignore
     navigationRef.dispatch(StackActions.replace(name, params));
   }
+}
+
+export function resetToAuthLogin() {
+  if (!navigationRef.isReady()) {
+    return;
+  }
+
+  navigationRef.dispatch(
+    CommonActions.reset({
+      index: 0,
+      routes: [
+        {
+          name: 'AuthFlow',
+          state: {
+            index: 0,
+            routes: [{ name: 'Login' }],
+          },
+        },
+      ],
+    }),
+  );
 }
 
 export function goBack() {

@@ -11,7 +11,9 @@ const DAY_KEYS = [
 ] as const;
 
 export const formatShopAddress = (shop: Shop): string | undefined => {
-  const parts = [shop.address, shop.address1].map(value => value?.trim()).filter(Boolean) as string[];
+  const parts = [shop.address, shop.address1, shop.city]
+    .map(value => value?.trim())
+    .filter(Boolean) as string[];
 
   return parts.length ? parts.join(', ') : undefined;
 };
