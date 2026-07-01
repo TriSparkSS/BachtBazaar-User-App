@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import LoginScreenView from './LoginScreenView';
 import { useAppContext } from '../../../context/AppContext';
@@ -9,16 +9,12 @@ import {
   validatePhoneInput,
 } from '../../../services/firebasePhoneAuth';
 import { showAppAlert } from '../../../services/appAlert';
-import { configureGoogleSignIn, signInWithApple, signInWithGoogle } from '../../../services/firebaseSocialAuth';
+import { signInWithApple, signInWithGoogle } from '../../../services/firebaseSocialAuth';
 
 const Login = () => {
   const navigation = useNavigation();
   const { setPendingAuth, setSession } = useAppContext();
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    configureGoogleSignIn();
-  }, []);
 
   const navigateToOtp = async (
     phone: string,
@@ -158,20 +154,32 @@ const Login = () => {
     const run = async () => {
       try {
         setIsSubmitting(true);
-        const response = await signInWithGoogle();
-        if (!response) {
+        const googleSignIn = await signInWithGoogle();
+        if (!googleSignIn) {
           return;
         }
 
+        const response = await userAuthApi.loginWithGoogle(googleSignIn.firebaseToken, {
+          uid: googleSignIn.uid,
+          googleIdToken: googleSignIn.googleIdToken,
+          email: googleSignIn.email,
+          displayName: googleSignIn.displayName,
+          photoUrl: googleSignIn.photoUrl,
+        });
+
         await setSession(response.token, response.user);
-        const root = navigation.getParent();
-        if (root) {
-          // @ts-ignore
-          root.navigate('MainStack');
-        }
+
+        // @ts-ignore
+        navigation.navigate('Successfull', {
+          isNewUser: response.isNewUser ?? true,
+        });
       } catch (error) {
         const message =
-          error instanceof Error ? error.message : 'Unable to sign in with Google.';
+          error instanceof Error
+            ? error.message
+            : typeof error === 'string'
+              ? error
+              : 'Unable to sign in with Google.';
         showAppAlert('Google login failed', message);
       } finally {
         setIsSubmitting(false);

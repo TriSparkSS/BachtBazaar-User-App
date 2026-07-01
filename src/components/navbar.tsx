@@ -8,6 +8,10 @@ interface NavbarProps {
   title?: string;
   subtitle?: string;
   showSearch?: boolean;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  onSearchSubmit?: () => void;
+  onClearSearch?: () => void;
 }
 
 const Navbar: React.FC<NavbarProps> = ({
@@ -15,6 +19,10 @@ const Navbar: React.FC<NavbarProps> = ({
   title = 'Bacht Bazaar',
   subtitle = 'Work - Mohan Sharn',
   showSearch = true,
+  searchValue = '',
+  onSearchChange,
+  onSearchSubmit,
+  onClearSearch,
 }) => {
   const searchInputRef = useRef<TextInput>(null);
   const formattedSubtitle = subtitle.replace(/^Work\s*-\s*/i, '').trim();
@@ -62,12 +70,27 @@ const Navbar: React.FC<NavbarProps> = ({
             <AppTextInput
               ref={searchInputRef}
               containerStyle={styles.searchInputWrap}
+              focusedContainerStyle={styles.searchInputFocused}
               style={styles.searchInput}
               placeholder="Search Product..."
               placeholderTextColor={colors.lighterGray}
               returnKeyType="search"
+              value={searchValue}
+              onChangeText={onSearchChange}
+              onSubmitEditing={onSearchSubmit}
             />
-          </TouchableOpacity>          <TouchableOpacity style={styles.qrButton} activeOpacity={0.82}>
+            {searchValue.trim() ? (
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={onClearSearch}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
+                <MaterialCommunityIcons name="close-circle" size={18} color={colors.lightGray} />
+              </TouchableOpacity>
+            ) : null}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.qrButton} activeOpacity={0.82}>
             <MaterialCommunityIcons name="qrcode-scan" size={22} color={colors.white} />
           </TouchableOpacity>
         </View>
@@ -168,6 +191,13 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     backgroundColor: 'transparent',
     shadowOpacity: 0,
+    elevation: 0,
+  },
+  searchInputFocused: {
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+    shadowOpacity: 0,
+    shadowRadius: 0,
     elevation: 0,
   },
   searchInput: {

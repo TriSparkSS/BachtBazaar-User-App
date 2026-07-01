@@ -13,6 +13,10 @@ interface RequestOptions {
 
 type ApiLogPayload = Record<string, unknown>;
 
+type NativeLoggingGlobal = typeof globalThis & {
+  nativeLoggingHook?: (message: string, level: number) => void;
+};
+
 const SENSITIVE_KEYS = new Set([
   'authorization',
   'firebasetoken',
@@ -51,6 +55,25 @@ const redactForLogs = (value: unknown, key?: string): unknown => {
   return value;
 };
 
+const formatLogValue = (value: unknown) => {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+};
+
+const writeNativeApiLog = (message: string) => {
+  const nativeLoggingHook = (globalThis as NativeLoggingGlobal).nativeLoggingHook;
+
+  if (typeof nativeLoggingHook === 'function') {
+    nativeLoggingHook(message, 2);
+    return;
+  }
+
+  console.log(message);
+};
+
 const buildHeaders = (options: RequestOptions) => {
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -74,11 +97,11 @@ export const logApiEvent = (label: string, payload?: ApiLogPayload) => {
   }
 
   if (payload === undefined) {
-    console.log(`[API] ${label}`);
+    writeNativeApiLog(`[API] ${label}`);
     return;
   }
 
-  console.log(`[API] ${label}`, redactForLogs(payload));
+  writeNativeApiLog(`[API] ${label} ${formatLogValue(redactForLogs(payload))}`);
 };
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {

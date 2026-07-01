@@ -14,6 +14,7 @@ export interface AuthResponse {
   success: boolean;
   token: string;
   user: UserProfile;
+  isNewUser?: boolean;
 }
 
 export interface SendOtpResponse {

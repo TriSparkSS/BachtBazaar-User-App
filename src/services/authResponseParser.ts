@@ -221,6 +221,28 @@ export type VerifyOtpResult =
       user?: UserProfile;
     };
 
+const extractIsNewUser = (records: Record<string, unknown>[]): boolean | undefined => {
+  for (const record of records) {
+    if (typeof record.isNewUser === 'boolean') {
+      return record.isNewUser;
+    }
+
+    if (typeof record.is_new_user === 'boolean') {
+      return record.is_new_user;
+    }
+
+    if (typeof record.newUser === 'boolean') {
+      return record.newUser;
+    }
+
+    if (typeof record.exists === 'boolean') {
+      return !record.exists;
+    }
+  }
+
+  return undefined;
+};
+
 export const parseAuthResponse = (
   payload: unknown,
   fallbackPhone?: string,
@@ -253,6 +275,20 @@ export const parseAuthResponse = (
     success: Boolean(root.success ?? true),
     token,
     user,
+  };
+};
+
+export const parseGoogleAuthResponse = (
+  payload: unknown,
+  fallbackEmail?: string,
+): AuthResponse => {
+  const auth = parseAuthResponse(payload, fallbackEmail);
+  const records = collectRecords(payload);
+  const isNewUser = extractIsNewUser(records);
+
+  return {
+    ...auth,
+    isNewUser: isNewUser ?? !auth.user.name?.trim(),
   };
 };
 

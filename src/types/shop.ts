@@ -29,6 +29,7 @@ export interface Shop {
   isOpen?: boolean;
   isVerified?: boolean;
   categories?: string[];
+  categoryIds?: string[];
   openingHours?: ShopOpeningHours;
   merchantName?: string;
   city?: string;

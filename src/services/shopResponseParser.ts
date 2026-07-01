@@ -207,10 +207,17 @@ const normalizeShop = (value: unknown): Shop | undefined => {
     categories: Array.isArray(value.categories)
       ? value.categories.map(item => String(item).trim()).filter(Boolean)
       : isRecord(value.categoryId)
-        ? [pickString(value.categoryId.label, value.categoryId.name)].filter(Boolean) as string[]
+        ? [pickString(value.categoryId.label, value.categoryId.name, value.categoryId.value)].filter(
+            Boolean,
+          ) as string[]
         : Array.isArray(value.tags)
           ? value.tags.map(item => String(item).trim()).filter(Boolean)
           : undefined,
+    categoryIds: isRecord(value.categoryId)
+      ? ([pickString(value.categoryId._id, value.categoryId.id)].filter(Boolean) as string[])
+      : Array.isArray(value.categoryIds)
+        ? value.categoryIds.map(item => String(item).trim()).filter(Boolean)
+        : undefined,
     openingHours,
     merchantName: pickString(merchant?.name),
   };
@@ -362,13 +369,15 @@ export const parseShopsWithOffersResponse = (payload: unknown): ShopWithOffers[]
       const offerCount = pickNumber(item.offerCount, item.offer_count) ?? offers.length;
       const offerImage = offers.find(offer => offer.image)?.image;
 
-      return {
+      const normalizedShop: ShopWithOffers = {
         ...shop,
         logo: shop.logo || offerImage,
         coverImage: shop.coverImage || offerImage,
-        offers: offerCount > 0 ? offers : [],
-        offerCount,
-      } satisfies ShopWithOffers;
+        offers,
+        offerCount: offerCount ?? offers.length,
+      };
+
+      return normalizedShop;
     })
     .filter((shop): shop is ShopWithOffers => Boolean(shop));
 

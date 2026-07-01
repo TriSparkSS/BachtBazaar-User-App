@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -28,11 +28,16 @@ import { userAuthApi } from '../../../../services/userAuthApi';
 import { showAppAlert } from '../../../../services/appAlert';
 import { logApiEvent } from '../../../../services/apiClient';
 import { ShopOffer, ShopWithOffers } from '../../../../types/shop';
+import { SearchResults } from '../../../../types/search';
 import { MainStackParamList } from '../../../../navigation/types';
 import { resetToAuthLogin } from '../../../../navigation';
 import { shopApi } from '../../../../services/shopApi';
+import { categoryApi } from '../../../../services/categoryApi';
+import { Category } from '../../../../types/category';
+import { OfferBanner } from '../../../../types/offerBanner';
 import { extractCityFromGeocode, resolveShopCity } from '../../../../utils/location';
 import OfferCountdownText from '../../../../components/OfferCountdownText';
+import PromoBannerCarousel from '../../../../components/PromoBannerCarousel';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min((width - 48) / 3 - 4, 118);
@@ -57,13 +62,44 @@ type CategoryChip = {
   icon: string;
   color: string;
   bg: string;
+  image?: string;
 };
+
+const CATEGORY_CHIP_PALETTE = [
+  { color: '#E65A24', bg: '#FFF0EB' },
+  { color: '#8A5A00', bg: '#FFF4D8' },
+  { color: '#0F6B4F', bg: '#E9F8EF' },
+  { color: '#366FE0', bg: '#EEF4FF' },
+  { color: '#8B5CF6', bg: '#F1EAFE' },
+  { color: '#D84B4B', bg: '#FFF0F0' },
+];
+
+const ALL_CATEGORY_CHIP: CategoryChip = {
+  id: 'all',
+  label: 'All',
+  icon: 'view-grid-outline',
+  color: '#366FE0',
+  bg: '#EEF4FF',
+};
+
+const MAX_VISIBLE_CATEGORY_CHIPS = 5;
 
 const PLACEHOLDER_SHOP_LOGO =
   'https://images.pexels.com/photos/248077/pexels-photo-248077.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=200';
 
 const PLACEHOLDER_OFFER_IMAGE =
   'https://images.pexels.com/photos/1191531/pexels-photo-1191531.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400';
+
+const EMPTY_SEARCH_RESULTS: SearchResults = {
+  query: '',
+  totalShopsFound: 0,
+  totalProductsFound: 0,
+  totalServicesFound: 0,
+  shops: [],
+  products: [],
+  services: [],
+  offers: [],
+};
 
 const sidebarIconPalette: Record<string, string> = {
   Overview: '#F7DCA8',
@@ -182,28 +218,38 @@ const sidebarGroups: SidebarGroup[] = [
   },
 ];
 
-const categoryChips: CategoryChip[] = [
-  { id: 'hot-deals', label: 'Hot Deals', icon: 'fire', color: '#E65A24', bg: '#FFF0EB' },
-  { id: 'jewelry', label: 'Jewelry', icon: 'diamond-stone', color: '#8A5A00', bg: '#FFF4D8' },
-  { id: 'grocery', label: 'Grocery', icon: 'cart-outline', color: '#0F6B4F', bg: '#E9F8EF' },
-  { id: 'food', label: 'Food', icon: 'food-fork-drink', color: '#366FE0', bg: '#EEF4FF' },
-];
-
 const HomeScreenView = () => {
   const navigation = useNavigation();
   const { authToken, currentUser, clearSession, setSession } = useAppContext();
-  const [selectedCategory, setSelectedCategory] = useState('hot-deals');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(false);
+  const [offerBanners, setOfferBanners] = useState<OfferBanner[]>([]);
+  const [isLoadingBanners, setIsLoadingBanners] = useState(false);
+  const [categoriesModalVisible, setCategoriesModalVisible] = useState(false);
   const [selectedSidebarItem, setSelectedSidebarItem] = useState('Overview');
   const [sidebarVisible, setSidebarVisible] = useState(false);
   const [shopCity, setShopCity] = useState(() => resolveShopCity(undefined, currentUser?.address));
   const [shops, setShops] = useState<ShopWithOffers[]>([]);
   const [isLoadingShops, setIsLoadingShops] = useState(false);
   const [shopsError, setShopsError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResults>(EMPTY_SEARCH_RESULTS);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [isPhoneVisible, setIsPhoneVisible] = useState(false);
   const [profileImageLoadError, setProfileImageLoadError] = useState(false);
   const [headerAddress, setHeaderAddress] = useState(
     currentUser?.address?.trim() ? `Work - ${currentUser.address.trim()}` : 'Work - Fetching location...',
   );
+  const bannerFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bannerRequestIdRef = useRef(0);
+  const searchRequestIdRef = useRef(0);
+  const authTokenRef = useRef(authToken);
+
+  useEffect(() => {
+    authTokenRef.current = authToken;
+  }, [authToken]);
 
   const quickActions = [
     {
@@ -326,6 +372,158 @@ const HomeScreenView = () => {
       cancelled = true;
     };
   }, [shopCity, authToken]);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    const requestId = ++searchRequestIdRef.current;
+
+    if (query.length < 2) {
+      setSearchResults(EMPTY_SEARCH_RESULTS);
+      setSearchError(null);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    setSearchError(null);
+
+    const timeoutId = setTimeout(async () => {
+      try {
+        const result = await shopApi.searchShopsProductsAndOffers(
+          query,
+          authTokenRef.current ?? undefined,
+        );
+
+        if (searchRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setSearchResults(result);
+      } catch (error) {
+        if (searchRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        setSearchResults(EMPTY_SEARCH_RESULTS);
+        setSearchError(error instanceof Error ? error.message : 'Search failed. Please try again.');
+      } finally {
+        if (searchRequestIdRef.current === requestId) {
+          setIsSearching(false);
+        }
+      }
+    }, 350);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCategories = async () => {
+      try {
+        setIsLoadingCategories(true);
+        const result = await categoryApi.fetchCategories(authToken ?? undefined);
+
+        if (!cancelled) {
+          setCategories(result);
+        }
+      } catch {
+        if (!cancelled) {
+          setCategories([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingCategories(false);
+        }
+      }
+    };
+
+    loadCategories();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken]);
+
+  const categoryChips = useMemo<CategoryChip[]>(() => {
+    const apiChips = categories.map((category, index) => {
+      const palette = CATEGORY_CHIP_PALETTE[index % CATEGORY_CHIP_PALETTE.length];
+
+      return {
+        id: category.id,
+        label: category.label,
+        icon: category.type === 'service' ? 'hand-heart-outline' : 'tag-outline',
+        color: palette.color,
+        bg: palette.bg,
+        image: categoryApi.resolveImageUrl(category.image),
+      };
+    });
+
+    return [ALL_CATEGORY_CHIP, ...apiChips];
+  }, [categories]);
+
+  const visibleCategoryChips = useMemo(
+    () => categoryChips.slice(0, MAX_VISIBLE_CATEGORY_CHIPS),
+    [categoryChips],
+  );
+
+  const hasMoreCategories = categoryChips.length > MAX_VISIBLE_CATEGORY_CHIPS;
+  const isSearchActive = searchQuery.trim().length >= 2;
+  const displayedShops = isSearchActive ? searchResults.shops : shops;
+  const searchResultCount =
+    Math.max(searchResults.totalShopsFound, searchResults.shops.length) +
+    Math.max(searchResults.totalProductsFound, searchResults.products.length) +
+    Math.max(searchResults.totalServicesFound, searchResults.services.length) +
+    searchResults.offers.length;
+
+  useEffect(() => {
+    if (selectedCategory !== 'all' && !shopCity.trim()) {
+      return;
+    }
+
+    if (bannerFetchTimerRef.current) {
+      clearTimeout(bannerFetchTimerRef.current);
+    }
+
+    bannerFetchTimerRef.current = setTimeout(() => {
+      const requestId = ++bannerRequestIdRef.current;
+
+      const loadBanners = async () => {
+        try {
+          setIsLoadingBanners(true);
+          const result = await shopApi.fetchHomeBanners(
+            shopCity,
+            selectedCategory,
+            authTokenRef.current ?? undefined,
+          );
+
+          if (bannerRequestIdRef.current !== requestId) {
+            return;
+          }
+
+          setOfferBanners(result);
+        } catch {
+          if (bannerRequestIdRef.current !== requestId) {
+            return;
+          }
+
+          setOfferBanners([]);
+        } finally {
+          if (bannerRequestIdRef.current === requestId) {
+            setIsLoadingBanners(false);
+          }
+        }
+      };
+
+      loadBanners();
+    }, 200);
+
+    return () => {
+      if (bannerFetchTimerRef.current) {
+        clearTimeout(bannerFetchTimerRef.current);
+      }
+    };
+  }, [selectedCategory, shopCity]);
 
   useEffect(() => {
     const requestLocationPermission = async () => {
@@ -472,7 +670,7 @@ const HomeScreenView = () => {
       return;
     }
 
-    navigation.navigate('OfferDetail' as never, { shop, offer } as never);
+    (navigation as any).navigate('OfferDetail', { shop, offer });
   };
 
   const openStoreDetail = (shop: ShopWithOffers) => {
@@ -482,7 +680,7 @@ const HomeScreenView = () => {
       return;
     }
 
-    navigation.navigate('StoreDetail' as never, { shop } as never);
+    (navigation as any).navigate('StoreDetail', { shop });
   };
 
   const handleLogout = () => {
@@ -575,6 +773,94 @@ const HomeScreenView = () => {
     ]);
   };
 
+  const handleCategorySelect = (categoryId: string) => {
+    setSelectedCategory(categoryId);
+    setCategoriesModalVisible(false);
+  };
+
+  const renderCategoryChip = (chip: CategoryChip) => {
+    const isSelected = selectedCategory === chip.id;
+
+    return (
+      <TouchableOpacity
+        key={chip.id}
+        style={[
+          styles.categoryPill,
+          isSelected && styles.categoryPillSelected,
+          isSelected && { backgroundColor: chip.bg, borderColor: chip.color },
+        ]}
+        activeOpacity={0.82}
+        onPress={() => handleCategorySelect(chip.id)}
+      >
+        <View
+          style={[
+            styles.categoryIconWrap,
+            { backgroundColor: isSelected ? colors.white : chip.bg },
+          ]}
+        >
+          {chip.image ? (
+            <Image source={{ uri: chip.image }} style={styles.categoryChipImage} />
+          ) : (
+            <MaterialCommunityIcons name={chip.icon} size={15} color={chip.color} />
+          )}
+        </View>
+        <Text
+          style={[
+            styles.categoryPillText,
+            isSelected && styles.categoryPillTextSelected,
+            isSelected && { color: chip.color },
+          ]}
+        >
+          {chip.label}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderSearchItem = (
+    item: SearchResults['products'][number],
+    type: 'product' | 'service',
+  ) => {
+    const imageUri = shopApi.resolveImageUrl(item.image) ?? PLACEHOLDER_OFFER_IMAGE;
+
+    return (
+      <View key={`${type}-${item.id}`} style={styles.searchResultCard}>
+        <View style={styles.searchResultImageWrap}>
+          <Image source={{ uri: imageUri }} style={styles.searchResultImage} />
+          {item.isFeatured ? (
+            <View style={styles.searchFeaturedBadge}>
+              <Text style={styles.searchFeaturedText}>Featured</Text>
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.searchResultBody}>
+          <View style={styles.searchResultTypeRow}>
+            <MaterialCommunityIcons
+              name={type === 'service' ? 'hand-heart-outline' : 'package-variant-closed'}
+              size={13}
+              color={colors.primary}
+            />
+            <Text style={styles.searchResultTypeText}>
+              {type === 'service' ? 'Service' : 'Product'}
+            </Text>
+          </View>
+          <Text style={styles.searchResultTitle} numberOfLines={2}>
+            {item.title}
+          </Text>
+          <View style={styles.searchPriceRow}>
+            {item.price ? <Text style={styles.searchPrice}>{item.price}</Text> : null}
+            {item.originalPrice ? (
+              <Text style={styles.searchOriginalPrice}>{item.originalPrice}</Text>
+            ) : null}
+          </View>
+          {item.stock != null ? (
+            <Text style={styles.searchStockText}>Stock: {item.stock}</Text>
+          ) : null}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.bgAccent} />
@@ -585,6 +871,10 @@ const HomeScreenView = () => {
           title="Bacht Bazaar"
           subtitle={headerAddress}
           showSearch
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          onSearchSubmit={() => setSearchQuery(prev => prev.trim())}
+          onClearSearch={() => setSearchQuery('')}
         />
 
         <ScrollView
@@ -593,62 +883,11 @@ const HomeScreenView = () => {
           contentContainerStyle={styles.scrollContent}
         >
           <AnimatedScreen>
-            <View style={styles.promoBannerSection}>
-              <View style={styles.promoBanner}>
-                <View style={styles.promoBannerGlow} />
-                <View style={styles.promoBannerGlowSecondary} />
-                <View style={styles.promoBannerCopy}>
-                  <View style={styles.promoBannerBadge}>
-                    <MaterialCommunityIcons name="fire" size={15} color="#FFE28A" />
-                    <Text style={styles.promoBannerBadgeText}>LIMITED TIME</Text>
-                  </View>
-                  <Text style={styles.promoBannerTitle}>50% OFF</Text>
-                  <Text style={styles.promoBannerSubtitle}>Nearby Stores</Text>
-                  <View style={styles.promoBannerCountdown}>
-                    <MaterialCommunityIcons
-                      name="clock-outline"
-                      size={15}
-                      color={colors.white}
-                    />
-                    <Text style={styles.promoBannerCountdownText}>02:12:51 remaining</Text>
-                  </View>
-                </View>
-
-                <View style={styles.promoArtwork}>
-                  <View style={[styles.promoGiftBox, styles.promoGiftBoxLarge]}>
-                    <MaterialCommunityIcons
-                      name="store-outline"
-                      size={34}
-                      color={DINEOUT_GREEN}
-                    />
-                  </View>
-                  <View style={[styles.promoGiftBox, styles.promoGiftBoxSmall]}>
-                    <MaterialCommunityIcons name="gift-outline" size={25} color="#9A6500" />
-                  </View>
-                  <View style={styles.promoCoin}>
-                    <Text style={styles.promoCoinText}>₹</Text>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.walletSavingsStrip}>
-                <View style={styles.walletSavingsIcon}>
-                  <MaterialCommunityIcons
-                    name="wallet-outline"
-                    size={19}
-                    color={colors.primary}
-                  />
-                </View>
-                <Text style={styles.walletSavingsText}>
-                  Save extra when you pay with Bachat Wallet
-                </Text>
-                <MaterialCommunityIcons
-                  name="chevron-right"
-                  size={20}
-                  color={colors.primary}
-                />
-              </View>
-            </View>
+            <PromoBannerCarousel
+              banners={offerBanners}
+              isLoading={isLoadingBanners}
+              resolveImageUrl={shopApi.resolveImageUrl}
+            />
 
             <ScrollView
               horizontal
@@ -682,60 +921,46 @@ const HomeScreenView = () => {
             </ScrollView>
 
             <View style={styles.categoriesSection}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.categoriesScroll}
-              contentContainerStyle={styles.categoriesContent}
-            >
-              {categoryChips.map(chip => {
-                const isSelected = selectedCategory === chip.id;
-
-                return (
+              <View style={styles.categoriesHeaderRow}>
+                <Text style={styles.categoriesTitle}>Categories</Text>
+                {hasMoreCategories ? (
                   <TouchableOpacity
-                    key={chip.id}
-                    style={[
-                      styles.categoryPill,
-                      isSelected && styles.categoryPillSelected,
-                      isSelected && { backgroundColor: chip.bg, borderColor: chip.color },
-                    ]}
-                    activeOpacity={0.82}
-                    onPress={() => setSelectedCategory(chip.id)}
+                    activeOpacity={0.8}
+                    onPress={() => setCategoriesModalVisible(true)}
                   >
-                    <View
-                      style={[
-                        styles.categoryIconWrap,
-                        { backgroundColor: isSelected ? colors.white : chip.bg },
-                      ]}
-                    >
-                      <MaterialCommunityIcons
-                        name={chip.icon}
-                        size={18}
-                        color={chip.color}
-                      />
-                    </View>
-                    <Text
-                      style={[
-                        styles.categoryPillText,
-                        isSelected && styles.categoryPillTextSelected,
-                        isSelected && { color: chip.color },
-                      ]}
-                    >
-                      {chip.label}
-                    </Text>
+                    <Text style={styles.viewAllCategoriesText}>View all</Text>
                   </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+                ) : null}
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.categoriesScroll}
+                contentContainerStyle={styles.categoriesContent}
+              >
+                {visibleCategoryChips.map(renderCategoryChip)}
+                {isLoadingCategories && categoryChips.length <= 1 ? (
+                  <View style={styles.categoryLoadingPill}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  </View>
+                ) : null}
+              </ScrollView>
             </View>
 
             <View style={styles.localOffersSection}>
               <View style={styles.localOffersHeader}>
                 <View>
-                  <Text style={styles.localOffersKicker}>Near {shopCity}</Text>
-                  <Text style={styles.localOffersTitle}>Local Offers</Text>
+                  <Text style={styles.localOffersTitle}>
+                    {isSearchActive ? 'Search Results' : 'Local Offers'}
+                  </Text>
+                  {isSearchActive ? (
+                    <Text style={styles.searchSummaryText}>
+                      Showing results for "{searchQuery.trim()}"
+                    </Text>
+                  ) : null}
                 </View>
-                <View style={styles.localOffersHeaderActions}>
+                {!isSearchActive ? (
+                  <View style={styles.localOffersHeaderActions}>
                   <TouchableOpacity style={styles.filterOfferButton} activeOpacity={0.78}>
                     <MaterialCommunityIcons
                       name="filter-variant"
@@ -748,30 +973,100 @@ const HomeScreenView = () => {
                     <Text style={styles.viewAllHeaderText}>View all</Text>
                     <MaterialCommunityIcons name="chevron-right" size={20} color={colors.primary} />
                   </TouchableOpacity>
-                </View>
+                  </View>
+                ) : null}
               </View>
 
-              {isLoadingShops ? (
+              {isSearchActive && isSearching ? (
+                <View style={styles.shopsLoadingCard}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                  <Text style={styles.shopsLoadingText}>Searching...</Text>
+                </View>
+              ) : isSearchActive && searchError ? (
+                <View style={styles.shopsEmptyCard}>
+                  <MaterialCommunityIcons name="magnify-close" size={28} color="#99A4B8" />
+                  <Text style={styles.shopsEmptyTitle}>Search failed</Text>
+                  <Text style={styles.shopsEmptyText}>{searchError}</Text>
+                </View>
+              ) : !isSearchActive && isLoadingShops ? (
                 <View style={styles.shopsLoadingCard}>
                   <ActivityIndicator size="small" color={colors.primary} />
                   <Text style={styles.shopsLoadingText}>Loading nearby shops...</Text>
                 </View>
-              ) : shopsError ? (
+              ) : !isSearchActive && shopsError ? (
                 <View style={styles.shopsEmptyCard}>
                   <MaterialCommunityIcons name="store-off-outline" size={28} color="#99A4B8" />
                   <Text style={styles.shopsEmptyTitle}>Could not load shops</Text>
                   <Text style={styles.shopsEmptyText}>{shopsError}</Text>
                 </View>
-              ) : shops.length === 0 ? (
+              ) : isSearchActive && searchResultCount === 0 ? (
+                <View style={styles.shopsEmptyCard}>
+                  <MaterialCommunityIcons name="magnify-close" size={28} color="#99A4B8" />
+                  <Text style={styles.shopsEmptyTitle}>No results found</Text>
+                  <Text style={styles.shopsEmptyText}>Try searching for another store, offer, product, or service.</Text>
+                </View>
+              ) : !isSearchActive && shops.length === 0 ? (
                 <View style={styles.shopsEmptyCard}>
                   <MaterialCommunityIcons name="store-off-outline" size={28} color="#99A4B8" />
                   <Text style={styles.shopsEmptyTitle}>No shops nearby</Text>
                   <Text style={styles.shopsEmptyText}>Check back soon for local offers.</Text>
                 </View>
               ) : (
-                shops.map(shop => {
+                <>
+                  {isSearchActive && searchResults.products.length > 0 ? (
+                    <View style={styles.searchSection}>
+                      <Text style={styles.searchSectionTitle}>Products</Text>
+                      {searchResults.products.map(item => renderSearchItem(item, 'product'))}
+                    </View>
+                  ) : null}
+
+                  {isSearchActive && searchResults.services.length > 0 ? (
+                    <View style={styles.searchSection}>
+                      <Text style={styles.searchSectionTitle}>Services</Text>
+                      {searchResults.services.map(item => renderSearchItem(item, 'service'))}
+                    </View>
+                  ) : null}
+
+                  {isSearchActive && searchResults.offers.length > 0 ? (
+                    <View style={styles.searchSection}>
+                      <Text style={styles.searchSectionTitle}>Offers</Text>
+                      {searchResults.offers.map(offer => {
+                        const offerImage =
+                          shopApi.resolveImageUrl(offer.image) ?? PLACEHOLDER_OFFER_IMAGE;
+
+                        return (
+                          <View key={`search-offer-${offer.id}`} style={styles.searchResultCard}>
+                            <View style={styles.searchResultImageWrap}>
+                              <Image source={{ uri: offerImage }} style={styles.searchResultImage} />
+                              {offer.discount ? (
+                                <View style={styles.searchFeaturedBadge}>
+                                  <Text style={styles.searchFeaturedText}>{offer.discount}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                            <View style={styles.searchResultBody}>
+                              <View style={styles.searchResultTypeRow}>
+                                <MaterialCommunityIcons name="tag-outline" size={13} color={colors.primary} />
+                                <Text style={styles.searchResultTypeText}>Offer</Text>
+                              </View>
+                              <Text style={styles.searchResultTitle} numberOfLines={2}>
+                                {offer.title}
+                              </Text>
+                              {offer.description ? (
+                                <Text style={styles.searchStockText} numberOfLines={2}>
+                                  {offer.description}
+                                </Text>
+                              ) : null}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+
+                  {displayedShops.map(shop => {
                   const shopLogo = shopApi.resolveImageUrl(shop.logo) ?? PLACEHOLDER_SHOP_LOGO;
-                  const hasOffers = (shop.offerCount ?? shop.offers.length) > 0 && shop.offers.length > 0;
+                  const hasOffers = shop.offers.length > 0;
 
                   return (
                     <View key={shop.id} style={styles.localOffersFeatureCard}>
@@ -797,6 +1092,10 @@ const HomeScreenView = () => {
                           </View>
                           {shop.tagline ? (
                             <Text style={styles.storeTagline}>{shop.tagline}</Text>
+                          ) : shop.address ? (
+                            <Text style={styles.storeTagline} numberOfLines={1}>
+                              {shop.address}
+                            </Text>
                           ) : null}
                         </View>
                         <View style={styles.storeMeta}>
@@ -882,12 +1181,45 @@ const HomeScreenView = () => {
                       )}
                     </View>
                   );
-                })
+                  })}
+                </>
               )}
             </View>
           </AnimatedScreen>
         </ScrollView>
       </SafeAreaView>
+
+      <Modal
+        visible={categoriesModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCategoriesModalVisible(false)}
+      >
+        <Pressable style={styles.categoriesModalBackdrop} onPress={() => setCategoriesModalVisible(false)}>
+          <Pressable style={styles.categoriesModalCard} onPress={() => undefined}>
+            <View style={styles.categoriesModalHeader}>
+              <Text style={styles.categoriesModalTitle}>All Categories</Text>
+              <TouchableOpacity
+                onPress={() => setCategoriesModalVisible(false)}
+                style={styles.sidebarCloseButton}
+                accessibilityRole="button"
+                accessibilityLabel="Close categories"
+              >
+                <MaterialCommunityIcons name="close" size={22} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.categoriesModalContent}
+            >
+              <View style={styles.categoriesModalGrid}>
+                {categoryChips.map(renderCategoryChip)}
+              </View>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={sidebarVisible}
@@ -1128,39 +1460,39 @@ const styles = StyleSheet.create({
   },
   promoBannerSection: {
     marginHorizontal: 16,
-    marginBottom: 18,
+    marginBottom: 17,
   },
   promoBanner: {
-    minHeight: 188,
-    borderRadius: 25,
+    minHeight: 175,
+    borderRadius: 23,
     overflow: 'hidden',
     backgroundColor: DINEOUT_GREEN,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 20,
+    paddingHorizontal: 17,
+    paddingVertical: 19,
     shadowColor: DINEOUT_GREEN,
-    shadowOffset: { width: 0, height: 12 },
+    shadowOffset: { width: 0, height: 11 },
     shadowOpacity: 0.32,
-    shadowRadius: 20,
+    shadowRadius: 19,
     elevation: 8,
   },
   promoBannerGlow: {
     position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
-    right: -70,
-    top: -48,
+    width: 205,
+    height: 205,
+    borderRadius: 103,
+    right: -65,
+    top: -45,
     backgroundColor: 'rgba(255,255,255,0.12)',
   },
   promoBannerGlowSecondary: {
     position: 'absolute',
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    left: -40,
-    bottom: -50,
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    left: -37,
+    bottom: -47,
     backgroundColor: 'rgba(15,107,79,0.55)',
   },
   promoBannerCopy: {
@@ -1173,27 +1505,27 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: 5,
     backgroundColor: 'rgba(255,255,255,0.16)',
-    borderRadius: 14,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    marginBottom: 8,
+    borderRadius: 13,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginBottom: 7,
   },
   promoBannerBadgeText: {
     color: '#FFE28A',
-    fontSize: 10,
+    fontSize: 9,
     fontFamily: fonts.BOLD,
-    letterSpacing: 1.2,
+    letterSpacing: 1.1,
   },
   promoBannerTitle: {
     color: colors.white,
-    fontSize: 38,
-    lineHeight: 42,
+    fontSize: 35,
+    lineHeight: 39,
     fontFamily: fonts.BOLD,
-    letterSpacing: -1.4,
+    letterSpacing: -1.3,
   },
   promoBannerSubtitle: {
     color: 'rgba(255,255,255,0.86)',
-    fontSize: 18,
+    fontSize: 17,
     fontFamily: fonts.BOLD,
     marginTop: 2,
   },
@@ -1203,19 +1535,19 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     gap: 6,
     backgroundColor: 'rgba(0,0,0,0.28)',
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-    borderRadius: 16,
-    marginTop: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 15,
+    marginTop: 11,
   },
   promoBannerCountdownText: {
     color: colors.white,
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: fonts.BOLD,
   },
   promoArtwork: {
-    width: 126,
-    height: 142,
+    width: 117,
+    height: 132,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1228,16 +1560,16 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255,255,255,0.52)',
   },
   promoGiftBoxLarge: {
-    width: 78,
-    height: 92,
+    width: 73,
+    height: 86,
     right: 4,
     bottom: 8,
     backgroundColor: '#E7FFF3',
     transform: [{ rotate: '5deg' }],
   },
   promoGiftBoxSmall: {
-    width: 58,
-    height: 67,
+    width: 54,
+    height: 62,
     left: 3,
     bottom: 2,
     backgroundColor: '#FFE5A6',
@@ -1246,10 +1578,10 @@ const styles = StyleSheet.create({
   promoCoin: {
     position: 'absolute',
     top: 6,
-    right: 26,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    right: 24,
+    width: 39,
+    height: 39,
+    borderRadius: 20,
     backgroundColor: '#D7A44E',
     borderWidth: 3,
     borderColor: '#F6D990',
@@ -1258,7 +1590,7 @@ const styles = StyleSheet.create({
   },
   promoCoinText: {
     color: '#513B0D',
-    fontSize: 21,
+    fontSize: 20,
     fontFamily: fonts.BOLD,
   },
   walletSavingsStrip: {
@@ -1408,6 +1740,57 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     paddingBottom: 4,
   },
+  categoriesHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginBottom: 2,
+  },
+  categoriesTitle: {
+    fontSize: 15,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+  },
+  viewAllCategoriesText: {
+    fontSize: 13,
+    color: colors.primary,
+    fontFamily: fonts.BOLD,
+  },
+  categoriesModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(22, 32, 51, 0.42)',
+    justifyContent: 'flex-end',
+  },
+  categoriesModalCard: {
+    maxHeight: '72%',
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  categoriesModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  categoriesModalTitle: {
+    fontSize: 18,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+  },
+  categoriesModalContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+  },
+  categoriesModalGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
   categoriesScroll: {
     flexGrow: 0,
   },
@@ -1421,31 +1804,43 @@ const styles = StyleSheet.create({
   categoryPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 22,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: '#E7ECF5',
     backgroundColor: colors.white,
-    gap: 8,
+    gap: 6,
     shadowColor: '#1B2430',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.04,
-    shadowRadius: 8,
+    shadowRadius: 6,
     elevation: 2,
   },
   categoryIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+    width: 24,
+    height: 24,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  categoryChipImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+  },
+  categoryLoadingPill: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   categoryPillSelected: {
     borderWidth: 1.5,
   },
   categoryPillText: {
-    fontSize: 12,
+    fontSize: 10,
     color: colors.darkGray,
     fontFamily: fonts.BOLD,
   },
@@ -1490,6 +1885,103 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
     color: colors.text,
     letterSpacing: -0.5,
+  },
+  searchSummaryText: {
+    marginTop: 3,
+    fontSize: 12,
+    color: '#667085',
+    fontFamily: fonts.BOLD,
+  },
+  searchSection: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  searchSectionTitle: {
+    fontSize: 15,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+  },
+  searchResultCard: {
+    flexDirection: 'row',
+    backgroundColor: colors.white,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E7ECF5',
+    overflow: 'hidden',
+    shadowColor: '#1B2430',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  searchResultImageWrap: {
+    width: 96,
+    minHeight: 106,
+    backgroundColor: '#EEF2F8',
+  },
+  searchResultImage: {
+    width: '100%',
+    height: '100%',
+  },
+  searchFeaturedBadge: {
+    position: 'absolute',
+    left: 7,
+    top: 7,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+  },
+  searchFeaturedText: {
+    color: colors.white,
+    fontSize: 9,
+    fontFamily: fonts.BOLD,
+  },
+  searchResultBody: {
+    flex: 1,
+    padding: 12,
+    justifyContent: 'center',
+  },
+  searchResultTypeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 5,
+  },
+  searchResultTypeText: {
+    color: colors.primary,
+    fontSize: 10,
+    fontFamily: fonts.BOLD,
+    textTransform: 'uppercase',
+  },
+  searchResultTitle: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 18,
+    fontFamily: fonts.BOLD,
+  },
+  searchPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: 8,
+  },
+  searchPrice: {
+    color: colors.text,
+    fontSize: 14,
+    fontFamily: fonts.BOLD,
+  },
+  searchOriginalPrice: {
+    color: '#99A4B8',
+    fontSize: 11,
+    fontFamily: fonts.BOLD,
+    textDecorationLine: 'line-through',
+  },
+  searchStockText: {
+    marginTop: 5,
+    color: '#667085',
+    fontSize: 11,
+    fontFamily: fonts.BOLD,
   },
   localOffersKicker: {
     fontSize: 12,

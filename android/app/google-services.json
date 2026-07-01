@@ -7,12 +7,25 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:921834163028:android:f8ae0dc2f5e2aabbdb56c1",
+        "mobilesdk_app_id": "1:921834163028:android:2b7a84cc9931a5c8db56c1",
         "android_client_info": {
-          "package_name": "com.bachatbazaar"
+          "package_name": "com.bachatbazaarseller"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "921834163028-jiv1vsr7bsllpggq548v82imr00n1mp2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.bachatbazaarseller",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "921834163028-cao4is9obbqoom8jh1jd9hppr21ad991.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAHTzQhdH1UHSamXmxe38SHbMnSjX7DzUU"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "921834163028-cao4is9obbqoom8jh1jd9hppr21ad991.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     },
@@ -31,7 +49,20 @@
           "package_name": "com.bachatbazaaruser"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "921834163028-p55gpr4ndj5dumbvie157a8p8kd7crtm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.bachatbazaaruser",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "921834163028-cao4is9obbqoom8jh1jd9hppr21ad991.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAHTzQhdH1UHSamXmxe38SHbMnSjX7DzUU"
@@ -39,26 +70,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
-        }
-      }
-    },
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:921834163028:android:3dde45ec5c26288edb56c1",
-        "android_client_info": {
-          "package_name": "com.ecommers"
-        }
-      },
-      "oauth_client": [],
-      "api_key": [
-        {
-          "current_key": "AIzaSyAHTzQhdH1UHSamXmxe38SHbMnSjX7DzUU"
-        }
-      ],
-      "services": {
-        "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "921834163028-cao4is9obbqoom8jh1jd9hppr21ad991.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

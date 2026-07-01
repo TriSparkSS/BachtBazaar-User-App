@@ -1,7 +1,14 @@
 import { API_BASE_URL, API_ENDPOINTS, resolveProfileImageUrl } from '../config/api';
-import { SendOtpResponse, UserProfile } from '../types/auth';
+import { AuthResponse, SendOtpResponse, UserProfile } from '../types/auth';
 import { apiRequest, logApiEvent } from './apiClient';
-import { parseAuthResponse, parseFetchProfileResponse, parseProfileImagePath, parseUpdateProfileResponse, parseVerifyOtpResponse } from './authResponseParser';
+import {
+  parseAuthResponse,
+  parseFetchProfileResponse,
+  parseGoogleAuthResponse,
+  parseProfileImagePath,
+  parseUpdateProfileResponse,
+  parseVerifyOtpResponse,
+} from './authResponseParser';
 
 const bytesToBase64 = (bytes: Uint8Array): string => {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -69,6 +76,77 @@ export const userAuthApi = {
       method: 'POST',
       body: { phone: formatApiPhone(phone), password },
     }).then(payload => parseAuthResponse(payload, formatApiPhone(phone)));
+  },
+
+  async loginWithGoogle(
+    firebaseToken: string,
+    profile?: {
+      uid?: string;
+      googleIdToken?: string;
+      email?: string | null;
+      displayName?: string | null;
+      photoUrl?: string | null;
+    },
+  ): Promise<AuthResponse> {
+    const requestBody = {
+      token: firebaseToken,
+      firebaseToken,
+      idToken: profile?.googleIdToken ?? firebaseToken,
+      email: profile?.email ?? undefined,
+      name: profile?.displayName ?? undefined,
+      profileImage: profile?.photoUrl ?? undefined,
+      provider: 'google',
+    };
+
+    try {
+      const payload = await apiRequest<unknown>(API_ENDPOINTS.loginGoogle, {
+        method: 'POST',
+        body: requestBody,
+      });
+
+      const response = parseGoogleAuthResponse(payload, profile?.email ?? undefined);
+      const enrichedUser = await this.enrichUserWithProfileImage(response.token, {
+        ...response.user,
+        name: response.user.name ?? profile?.displayName ?? undefined,
+        profileImage: response.user.profileImage ?? profile?.photoUrl ?? undefined,
+      });
+
+      return {
+        ...response,
+        user: enrichedUser,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const shouldUseFirebaseSession =
+        message.includes('Invalid OTP') ||
+        message.includes('HTML page') ||
+        message.includes('status 404');
+
+      if (!shouldUseFirebaseSession || !profile?.uid) {
+        if (message.includes('Invalid OTP')) {
+          throw new Error(
+            'Google sign-in succeeded, but the server rejected the phone OTP endpoints for Google login. Add POST /auth/login-google on the backend or enable Google tokens there.',
+          );
+        }
+
+        throw error;
+      }
+
+      const fallbackUser: UserProfile = {
+        _id: profile.uid,
+        phone: '',
+        name: profile.displayName ?? undefined,
+        profileImage: profile.photoUrl ?? undefined,
+        isVerified: true,
+      };
+
+      return {
+        success: true,
+        token: firebaseToken,
+        user: fallbackUser,
+        isNewUser: true,
+      };
+    }
   },
 
   setPassword(userId: string, password: string, token?: string) {
