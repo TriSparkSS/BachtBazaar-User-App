@@ -14,13 +14,13 @@ import {
 } from './shopResponseParser';
 
 export const shopApi = {
-  fetchShopsByCity(city: string, token?: string) {
+  fetchShopsByCity(city: string, categoryId?: string, token?: string) {
     const normalizedCity = city.trim();
     if (!normalizedCity) {
       return Promise.resolve([]);
     }
 
-    return apiRequest<unknown>(API_ENDPOINTS.shopsByCity(normalizedCity), {
+    return apiRequest<unknown>(API_ENDPOINTS.shopsByCity(normalizedCity, categoryId), {
       method: 'GET',
       token,
       baseUrl: SHOPS_API_BASE_URL,
@@ -134,17 +134,24 @@ export const shopApi = {
     return this.fetchOfferBanners(city, categoryId, token);
   },
 
-  async fetchShopsWithOffersByCity(city: string, token?: string): Promise<ShopWithOffers[]> {
+  async fetchShopsWithOffersByCity(
+    city: string,
+    categoryId?: string,
+    token?: string,
+  ): Promise<ShopWithOffers[]> {
     const normalizedCity = city.trim();
     if (!normalizedCity) {
       return [];
     }
 
-    const payload = await apiRequest<unknown>(API_ENDPOINTS.shopsByCity(normalizedCity), {
+    const payload = await apiRequest<unknown>(
+      API_ENDPOINTS.shopsByCity(normalizedCity, categoryId),
+      {
       method: 'GET',
       token,
       baseUrl: SHOPS_API_BASE_URL,
-    });
+      },
+    );
 
     const shops = parseShopsWithOffersResponse(payload);
 

@@ -10,7 +10,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import OfferCountdownText from './OfferCountdownText';
 import { colors, fonts } from '../helpers/styles';
 import { OfferBanner } from '../types/offerBanner';
@@ -18,16 +17,6 @@ import { OfferBanner } from '../types/offerBanner';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_WIDTH = SCREEN_WIDTH - 32;
 const AUTO_SCROLL_MS = 4500;
-const DINEOUT_GREEN = '#004B36';
-
-const FALLBACK_BANNERS: OfferBanner[] = [
-  {
-    id: 'fallback',
-    title: '50% OFF',
-    subtitle: 'Nearby Stores',
-    badgeLabel: 'LIMITED TIME',
-  },
-];
 
 type PromoBannerCarouselProps = {
   banners: OfferBanner[];
@@ -42,10 +31,7 @@ const PromoBannerCarousel: React.FC<PromoBannerCarouselProps> = ({
 }) => {
   const scrollRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-  const slides = useMemo(
-    () => (banners.length > 0 ? banners : FALLBACK_BANNERS),
-    [banners],
-  );
+  const slides = useMemo(() => banners.filter(banner => Boolean(resolveImageUrl(banner.image))), [banners, resolveImageUrl]);
 
   useEffect(() => {
     setActiveIndex(0);
@@ -75,16 +61,18 @@ const PromoBannerCarousel: React.FC<PromoBannerCarouselProps> = ({
 
   const renderSlide = (banner: OfferBanner) => {
     const imageUri = resolveImageUrl(banner.image);
+    if (!imageUri) {
+      return null;
+    }
 
-    const content = (
-      <>
-        <View style={styles.promoBannerGlow} />
-        <View style={styles.promoBannerGlowSecondary} />
-        <View style={styles.promoBannerCopy}>
-          <View style={styles.promoBannerBadge}>
-            <MaterialCommunityIcons name="fire" size={14} color="#FFE28A" />
-            <Text style={styles.promoBannerBadgeText}>{banner.badgeLabel || 'LIMITED TIME'}</Text>
-          </View>
+    return (
+      <ImageBackground source={{ uri: imageUri }} style={styles.promoBanner} imageStyle={styles.promoBannerImage}>
+        <View style={styles.promoBannerCopyWrap}>
+          {banner.badgeLabel ? (
+            <View style={styles.promoBannerBadge}>
+              <Text style={styles.promoBannerBadgeText}>{banner.badgeLabel}</Text>
+            </View>
+          ) : null}
           <Text style={styles.promoBannerTitle} numberOfLines={1}>
             {banner.title}
           </Text>
@@ -94,7 +82,6 @@ const PromoBannerCarousel: React.FC<PromoBannerCarouselProps> = ({
             </Text>
           ) : null}
           <View style={styles.promoBannerCountdown}>
-            <MaterialCommunityIcons name="clock-outline" size={14} color={colors.white} />
             {banner.expiresAt ? (
               <OfferCountdownText
                 expiresAt={banner.expiresAt}
@@ -106,30 +93,8 @@ const PromoBannerCarousel: React.FC<PromoBannerCarouselProps> = ({
             )}
           </View>
         </View>
-
-        <View style={styles.promoArtwork}>
-          <View style={[styles.promoGiftBox, styles.promoGiftBoxLarge]}>
-            <MaterialCommunityIcons name="store-outline" size={32} color={DINEOUT_GREEN} />
-          </View>
-          <View style={[styles.promoGiftBox, styles.promoGiftBoxSmall]}>
-            <MaterialCommunityIcons name="gift-outline" size={23} color="#9A6500" />
-          </View>
-          <View style={styles.promoCoin}>
-            <Text style={styles.promoCoinText}>₹</Text>
-          </View>
-        </View>
-      </>
+      </ImageBackground>
     );
-
-    if (imageUri) {
-      return (
-        <ImageBackground source={{ uri: imageUri }} style={styles.promoBanner} imageStyle={styles.promoBannerImage}>
-          <View style={styles.promoBannerImageOverlay}>{content}</View>
-        </ImageBackground>
-      );
-    }
-
-    return <View style={styles.promoBanner}>{content}</View>;
   };
 
   return (
@@ -192,14 +157,11 @@ const styles = StyleSheet.create({
     minHeight: 175,
     borderRadius: 23,
     overflow: 'hidden',
-    backgroundColor: DINEOUT_GREEN,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 17,
-    paddingVertical: 19,
-    shadowColor: DINEOUT_GREEN,
+    justifyContent: 'flex-end',
+    backgroundColor: '#D9E2F2',
+    shadowColor: colors.primary,
     shadowOffset: { width: 0, height: 11 },
-    shadowOpacity: 0.32,
+    shadowOpacity: 0.18,
     shadowRadius: 19,
     elevation: 8,
   },
@@ -210,44 +172,13 @@ const styles = StyleSheet.create({
   promoBannerImage: {
     borderRadius: 23,
   },
-  promoBannerImageOverlay: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 75, 54, 0.72)',
-    borderRadius: 23,
+  promoBannerCopyWrap: {
     paddingHorizontal: 17,
     paddingVertical: 19,
-    minHeight: 175,
-  },
-  promoBannerGlow: {
-    position: 'absolute',
-    width: 205,
-    height: 205,
-    borderRadius: 103,
-    right: -65,
-    top: -45,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-  },
-  promoBannerGlowSecondary: {
-    position: 'absolute',
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    left: -37,
-    bottom: -47,
-    backgroundColor: 'rgba(15,107,79,0.55)',
-  },
-  promoBannerCopy: {
-    flex: 1,
-    zIndex: 2,
   },
   promoBannerBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
     alignSelf: 'flex-start',
-    gap: 5,
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: 'rgba(0,0,0,0.16)',
     borderRadius: 13,
     paddingHorizontal: 8,
     paddingVertical: 5,
@@ -261,22 +192,19 @@ const styles = StyleSheet.create({
   },
   promoBannerTitle: {
     color: colors.white,
-    fontSize: 35,
-    lineHeight: 39,
+    fontSize: 27,
+    lineHeight: 31,
     fontFamily: fonts.BOLD,
-    letterSpacing: -1.3,
+    letterSpacing: -0.6,
   },
   promoBannerSubtitle: {
     color: 'rgba(255,255,255,0.86)',
-    fontSize: 17,
+    fontSize: 16,
     fontFamily: fonts.BOLD,
     marginTop: 2,
   },
   promoBannerCountdown: {
-    flexDirection: 'row',
-    alignItems: 'center',
     alignSelf: 'flex-start',
-    gap: 6,
     backgroundColor: 'rgba(0,0,0,0.28)',
     paddingHorizontal: 9,
     paddingVertical: 6,
@@ -286,54 +214,6 @@ const styles = StyleSheet.create({
   promoBannerCountdownText: {
     color: colors.white,
     fontSize: 10,
-    fontFamily: fonts.BOLD,
-  },
-  promoArtwork: {
-    width: 117,
-    height: 132,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  promoGiftBox: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 18,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.52)',
-  },
-  promoGiftBoxLarge: {
-    width: 73,
-    height: 86,
-    right: 4,
-    bottom: 8,
-    backgroundColor: '#E7FFF3',
-    transform: [{ rotate: '5deg' }],
-  },
-  promoGiftBoxSmall: {
-    width: 54,
-    height: 62,
-    left: 3,
-    bottom: 2,
-    backgroundColor: '#FFE5A6',
-    transform: [{ rotate: '-8deg' }],
-  },
-  promoCoin: {
-    position: 'absolute',
-    top: 6,
-    right: 24,
-    width: 39,
-    height: 39,
-    borderRadius: 20,
-    backgroundColor: '#D7A44E',
-    borderWidth: 3,
-    borderColor: '#F6D990',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  promoCoinText: {
-    color: '#513B0D',
-    fontSize: 20,
     fontFamily: fonts.BOLD,
   },
   dotsRow: {

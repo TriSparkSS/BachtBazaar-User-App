@@ -20,7 +20,12 @@ export const API_ENDPOINTS = {
   updateProfile: '/profile',
   getProfile: '/profile',
   profileImage: '/profile-image',
-  shopsByCity: (city: string) => `/shop?city=${encodeURIComponent(city)}`,
+  shopsByCity: (city: string, categoryId?: string) =>
+    `/shop?city=${encodeURIComponent(city)}${
+      categoryId && categoryId.trim() && categoryId !== 'all'
+        ? `&category_id=${encodeURIComponent(categoryId.trim())}`
+        : ''
+    }`,
   shopSearch: (query: string) => `/shop/search?q=${encodeURIComponent(query.trim())}`,
   shopById: (shopId: string) => `/shop/${encodeURIComponent(shopId)}`,
   shopOffers: (shopId: string) => `/shop/offers/${shopId}`,
@@ -30,7 +35,7 @@ export const API_ENDPOINTS = {
   categories: '/others/categories',
   offerBanners: (city: string, categoryId: string) =>
     `/shop/offers/banners?city=${encodeURIComponent(city.trim())}&category_id=${encodeURIComponent(categoryId.trim())}`,
-  adminBannerActiveFeed: '/adminbaners/active-feed',
+  adminBannerActiveFeed: '/adminbanners/active-feed',
 } as const;
 
 export const getShopLogoUrl = (shopId: string) =>

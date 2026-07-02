@@ -347,7 +347,11 @@ const HomeScreenView = () => {
       try {
         setIsLoadingShops(true);
         setShopsError(null);
-        const result = await shopApi.fetchShopsWithOffersByCity(shopCity, authToken ?? undefined);
+        const result = await shopApi.fetchShopsWithOffersByCity(
+          shopCity,
+          selectedCategory,
+          authToken ?? undefined,
+        );
 
         if (!cancelled) {
           setShops(result);
@@ -371,7 +375,7 @@ const HomeScreenView = () => {
     return () => {
       cancelled = true;
     };
-  }, [shopCity, authToken]);
+  }, [shopCity, selectedCategory, authToken]);
 
   useEffect(() => {
     const query = searchQuery.trim();
