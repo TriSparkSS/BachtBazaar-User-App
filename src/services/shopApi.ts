@@ -14,13 +14,8 @@ import {
 } from './shopResponseParser';
 
 export const shopApi = {
-  fetchShopsByCity(city: string, categoryId?: string, token?: string) {
-    const normalizedCity = city.trim();
-    if (!normalizedCity) {
-      return Promise.resolve([]);
-    }
-
-    return apiRequest<unknown>(API_ENDPOINTS.shopsByCity(normalizedCity, categoryId), {
+  fetchShopsByLocation(latitude: number, longitude: number, categoryId?: string, token?: string) {
+    return apiRequest<unknown>(API_ENDPOINTS.shopsByLocation(latitude, longitude, categoryId), {
       method: 'GET',
       token,
       baseUrl: SHOPS_API_BASE_URL,
@@ -126,30 +121,75 @@ export const shopApi = {
     }).then(parseOfferBannersResponse);
   },
 
-  fetchHomeBanners(city: string, categoryId: string, token?: string): Promise<OfferBanner[]> {
-    if (categoryId === 'all') {
-      return this.fetchAdminActiveBanners(token);
-    }
-
-    return this.fetchOfferBanners(city, categoryId, token);
-  },
-
-  async fetchShopsWithOffersByCity(
-    city: string,
-    categoryId?: string,
+  fetchOfferBannersByLocation(
+    latitude: number,
+    longitude: number,
+    categoryId: string,
     token?: string,
-  ): Promise<ShopWithOffers[]> {
-    const normalizedCity = city.trim();
-    if (!normalizedCity) {
-      return [];
+  ): Promise<OfferBanner[]> {
+    const normalizedCategoryId = categoryId.trim();
+    if (!normalizedCategoryId || normalizedCategoryId === 'all') {
+      return Promise.resolve([]);
     }
 
-    const payload = await apiRequest<unknown>(
-      API_ENDPOINTS.shopsByCity(normalizedCity, categoryId),
-      {
+    return apiRequest<unknown>(API_ENDPOINTS.offerBanners2(latitude, longitude, normalizedCategoryId), {
       method: 'GET',
       token,
       baseUrl: SHOPS_API_BASE_URL,
+    }).then(parseOfferBannersResponse);
+  },
+
+  fetchHomeBanners(
+    latitude: number | undefined,
+    longitude: number | undefined,
+    categoryId: string,
+    token?: string,
+  ): Promise<OfferBanner[]> {
+    const normalizedCategoryId = categoryId.trim();
+
+    if (!normalizedCategoryId || normalizedCategoryId === 'all') {
+      return this.fetchAdminActiveBanners(token);
+    }
+
+    if (latitude == null || longitude == null) {
+      return Promise.resolve([]);
+    }
+
+    return this.fetchOfferBannersByLocation(latitude, longitude, normalizedCategoryId, token);
+  },
+
+  async enrichShopListLogo(shop: ShopWithOffers, token?: string): Promise<ShopWithOffers> {
+    if (shop.logo) {
+      return shop;
+    }
+
+    try {
+      const detail = await this.fetchShopById(shop.id, token);
+      if (!detail.logo) {
+        return shop;
+      }
+
+      return {
+        ...shop,
+        logo: detail.logo,
+      };
+    } catch {
+      return shop;
+    }
+  },
+
+  async fetchShopsWithOffersByLocation(
+    latitude: number,
+    longitude: number,
+    categoryId?: string,
+    token?: string,
+  ): Promise<ShopWithOffers[]> {
+    const payload = await apiRequest<unknown>(
+      API_ENDPOINTS.shopsByLocation(latitude, longitude, categoryId),
+      {
+        method: 'GET',
+        token,
+        baseUrl: SHOPS_API_BASE_URL,
       },
     );
 
@@ -157,19 +197,21 @@ export const shopApi = {
 
     return Promise.all(
       shops.map(async shop => {
-        if (shop.offers.length > 0) {
-          return shop;
+        let enrichedShop = await this.enrichShopListLogo(shop, token);
+
+        if (enrichedShop.offers.length > 0) {
+          return enrichedShop;
         }
 
         try {
-          const offers = await this.fetchShopOffers(shop.id, token);
+          const offers = await this.fetchShopOffers(enrichedShop.id, token);
           return {
-            ...shop,
+            ...enrichedShop,
             offers,
-            offerCount: offers.length || shop.offerCount || 0,
+            offerCount: offers.length || enrichedShop.offerCount || 0,
           };
         } catch {
-          return shop;
+          return enrichedShop;
         }
       }),
     );

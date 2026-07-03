@@ -1,8 +1,4 @@
 import {
-  getShopBannerUrl,
-  getShopLogoUrl,
-} from '../config/api';
-import {
   Shop,
   ShopOffer,
   ShopOpeningDay,
@@ -67,34 +63,72 @@ const resolveImagePath = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const isMediaBuffer = (value: unknown): boolean => {
-  if (!isRecord(value) || Array.isArray(value)) {
-    return false;
+const bytesToBase64 = (bytes: number[]): string => {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let output = '';
+
+  for (let index = 0; index < bytes.length; index += 3) {
+    const byte1 = bytes[index];
+    const byte2 = bytes[index + 1];
+    const byte3 = bytes[index + 2];
+
+    output += alphabet[byte1 >> 2];
+    output += alphabet[((byte1 & 0x03) << 4) | (byte2 >> 4)];
+    output += Number.isFinite(byte2) ? alphabet[((byte2 & 0x0f) << 2) | (byte3 >> 6)] : '=';
+    output += Number.isFinite(byte3) ? alphabet[byte3 & 0x3f] : '=';
   }
 
-  return (
-    typeof value.contentType === 'string' ||
-    typeof value.content_type === 'string' ||
-    value.data != null
-  );
+  return output;
 };
 
-const resolveShopMediaField = (
-  shopId: string,
-  value: unknown,
-  kind: 'logo' | 'banner',
-): string | undefined => {
+const extractBase64Payload = (data: unknown): string | undefined => {
+  if (typeof data === 'string' && data.trim()) {
+    return data.trim();
+  }
+
+  if (!isRecord(data) || data.type !== 'Buffer' || !Array.isArray(data.data)) {
+    return undefined;
+  }
+
+  const bytes = data.data.filter(
+    (byte): byte is number => typeof byte === 'number' && byte >= 0 && byte <= 255,
+  );
+
+  if (!bytes.length) {
+    return undefined;
+  }
+
+  return bytesToBase64(bytes);
+};
+
+const resolveBase64ImageData = (value: unknown): string | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const rawData = extractBase64Payload(value.data);
+  if (!rawData) {
+    return undefined;
+  }
+
+  if (rawData.startsWith('data:image/')) {
+    return rawData;
+  }
+
+  const contentType = pickString(value.contentType, value.content_type) ?? 'image/jpeg';
+  return `data:${contentType};base64,${rawData}`;
+};
+
+const resolveShopMediaField = (value: unknown): string | undefined => {
   const directPath = resolveImagePath(value);
   if (directPath) {
     return directPath;
   }
 
-  if (isMediaBuffer(value)) {
-    return kind === 'logo' ? getShopLogoUrl(shopId) : getShopBannerUrl(shopId);
-  }
-
-  return undefined;
+  return resolveBase64ImageData(value);
 };
+
+export const resolveShopMediaFromApiValue = resolveShopMediaField;
 
 const normalizeOpeningDay = (value: unknown): ShopOpeningDay | undefined => {
   if (!isRecord(value)) {
@@ -171,11 +205,9 @@ const normalizeShop = (value: unknown): Shop | undefined => {
   return {
     id,
     name,
-    logo: resolveShopMediaField(id, value.logo, 'logo'),
+    logo: resolveShopMediaField(value.logo),
     coverImage: resolveShopMediaField(
-      id,
       value.banner ?? value.coverImage ?? value.cover_image,
-      'banner',
     ),
     tagline: pickString(value.tagline, value.description, value.about, merchant?.name),
     address,
@@ -368,10 +400,11 @@ export const parseShopsWithOffersResponse = (payload: unknown): ShopWithOffers[]
       const offers = extractShopOffers(item, shopId);
       const offerCount = pickNumber(item.offerCount, item.offer_count) ?? offers.length;
       const offerImage = offers.find(offer => offer.image)?.image;
+      const listLogo = resolveShopMediaField(item.logo);
 
       const normalizedShop: ShopWithOffers = {
         ...shop,
-        logo: shop.logo || offerImage,
+        logo: listLogo,
         coverImage: shop.coverImage || offerImage,
         offers,
         offerCount: offerCount ?? offers.length,
@@ -424,6 +457,14 @@ export const parseShopDetailResponse = (payload: unknown, fallbackShopId?: strin
     return null;
   }
 
+  const logo = resolveShopMediaField(isRecord(shopRecord) ? shopRecord.logo : undefined) ?? shop.logo;
+  const coverImageFromBanner =
+    resolveShopMediaField(
+      isRecord(shopRecord)
+        ? shopRecord.banner ?? shopRecord.coverImage ?? shopRecord.cover_image
+        : undefined,
+    ) ?? shop.coverImage;
+
   const inventory = extractInventory(data);
   let offers = inventory.offers.map(offer => ({ ...offer, shopId }));
   let products = inventory.products.map(product => ({ ...product, shopId }));
@@ -445,13 +486,14 @@ export const parseShopDetailResponse = (payload: unknown, fallbackShopId?: strin
   }
 
   const coverImage =
-    shop.coverImage ||
+    coverImageFromBanner ||
     products.find(product => product.image)?.image ||
     offers.find(offer => offer.image)?.image;
 
   return {
     ...shop,
     id: shopId,
+    logo,
     coverImage,
     offers,
     products,

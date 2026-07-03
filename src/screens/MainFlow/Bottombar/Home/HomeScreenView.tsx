@@ -2,7 +2,6 @@ import {
   Dimensions,
   Image,
   Modal,
-  PermissionsAndroid,
   Platform,
   Pressable,
   ScrollView,
@@ -17,7 +16,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import Geolocation from 'react-native-geolocation-service';
 import AnimatedScreen from '../../../../components/AnimatedScreen';
 import { AppIconName } from '../../../../components/AppIcon';
 import Navbar from '../../../../components/navbar';
@@ -35,7 +33,8 @@ import { shopApi } from '../../../../services/shopApi';
 import { categoryApi } from '../../../../services/categoryApi';
 import { Category } from '../../../../types/category';
 import { OfferBanner } from '../../../../types/offerBanner';
-import { extractCityFromGeocode, resolveShopCity } from '../../../../utils/location';
+import { geocodeAddress, GeoCoordinates, resolveShopCity } from '../../../../utils/location';
+import { getCurrentDeviceCoordinates, requestLocationPermission } from '../../../../utils/deviceLocation';
 import OfferCountdownText from '../../../../components/OfferCountdownText';
 import PromoBannerCarousel from '../../../../components/PromoBannerCarousel';
 
@@ -229,7 +228,6 @@ const HomeScreenView = () => {
   const [categoriesModalVisible, setCategoriesModalVisible] = useState(false);
   const [selectedSidebarItem, setSelectedSidebarItem] = useState('Overview');
   const [sidebarVisible, setSidebarVisible] = useState(false);
-  const [shopCity, setShopCity] = useState(() => resolveShopCity(undefined, currentUser?.address));
   const [shops, setShops] = useState<ShopWithOffers[]>([]);
   const [isLoadingShops, setIsLoadingShops] = useState(false);
   const [shopsError, setShopsError] = useState<string | null>(null);
@@ -242,6 +240,7 @@ const HomeScreenView = () => {
   const [headerAddress, setHeaderAddress] = useState(
     currentUser?.address?.trim() ? `Work - ${currentUser.address.trim()}` : 'Work - Fetching location...',
   );
+  const [deviceCoordinates, setDeviceCoordinates] = useState<GeoCoordinates | null>(null);
   const bannerFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bannerRequestIdRef = useRef(0);
   const searchRequestIdRef = useRef(0);
@@ -337,7 +336,7 @@ const HomeScreenView = () => {
   }, [authToken, currentUser?._id]);
 
   useEffect(() => {
-    if (!shopCity.trim()) {
+    if (!deviceCoordinates) {
       return;
     }
 
@@ -347,8 +346,9 @@ const HomeScreenView = () => {
       try {
         setIsLoadingShops(true);
         setShopsError(null);
-        const result = await shopApi.fetchShopsWithOffersByCity(
-          shopCity,
+        const result = await shopApi.fetchShopsWithOffersByLocation(
+          deviceCoordinates.latitude,
+          deviceCoordinates.longitude,
           selectedCategory,
           authToken ?? undefined,
         );
@@ -360,7 +360,7 @@ const HomeScreenView = () => {
         if (!cancelled) {
           setShops([]);
           setShopsError(
-            error instanceof Error ? error.message : 'Failed to load shops for your city.',
+            error instanceof Error ? error.message : 'Failed to load nearby shops.',
           );
         }
       } finally {
@@ -375,7 +375,7 @@ const HomeScreenView = () => {
     return () => {
       cancelled = true;
     };
-  }, [shopCity, selectedCategory, authToken]);
+  }, [deviceCoordinates, selectedCategory, authToken]);
 
   useEffect(() => {
     const query = searchQuery.trim();
@@ -481,7 +481,9 @@ const HomeScreenView = () => {
     searchResults.offers.length;
 
   useEffect(() => {
-    if (selectedCategory !== 'all' && !shopCity.trim()) {
+    const isAllCategory = selectedCategory === 'all';
+
+    if (!isAllCategory && !deviceCoordinates) {
       return;
     }
 
@@ -496,7 +498,8 @@ const HomeScreenView = () => {
         try {
           setIsLoadingBanners(true);
           const result = await shopApi.fetchHomeBanners(
-            shopCity,
+            deviceCoordinates?.latitude,
+            deviceCoordinates?.longitude,
             selectedCategory,
             authTokenRef.current ?? undefined,
           );
@@ -527,21 +530,9 @@ const HomeScreenView = () => {
         clearTimeout(bannerFetchTimerRef.current);
       }
     };
-  }, [selectedCategory, shopCity]);
+  }, [selectedCategory, deviceCoordinates]);
 
   useEffect(() => {
-    const requestLocationPermission = async () => {
-      if (Platform.OS !== 'android') {
-        return true;
-      }
-
-      const granted = await PermissionsAndroid.request(
-        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-      );
-
-      return granted === PermissionsAndroid.RESULTS.GRANTED;
-    };
-
     const fallbackAddress = currentUser?.address?.trim()
       ? `Work - ${currentUser.address.trim()}`
       : 'Work - New Delhi, India';
@@ -564,72 +555,72 @@ const HomeScreenView = () => {
       return `Work - ${pieces.slice(0, 2).join(', ')}`;
     };
 
+    const applyFallbackLocation = async () => {
+      setHeaderAddress(fallbackAddress);
+
+      const geocoded = await geocodeAddress(profileCity);
+      if (geocoded) {
+        setDeviceCoordinates(geocoded);
+      }
+    };
+
     const loadCurrentLocation = async () => {
       try {
         const permitted = await requestLocationPermission();
-        if (!permitted) {
-          setHeaderAddress(fallbackAddress);
-          setShopCity(profileCity);
+        const coordinates = await getCurrentDeviceCoordinates();
+
+        if (coordinates) {
+          setDeviceCoordinates(coordinates);
+          console.log('[Location] Current coordinates', coordinates);
+
+          try {
+            const { latitude, longitude } = coordinates;
+            const reverseGeocodeUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`;
+            const reverseGeocodeStartedAt = Date.now();
+            const reverseGeocodeHeaders = {
+              Accept: 'application/json',
+            };
+
+            logApiEvent('GET request', {
+              url: reverseGeocodeUrl,
+              method: 'GET',
+              headers: reverseGeocodeHeaders,
+            });
+
+            const response = await fetch(reverseGeocodeUrl, {
+              headers: reverseGeocodeHeaders,
+            });
+
+            const payload = await response.json();
+            logApiEvent(response.ok ? 'GET response' : 'GET error-response', {
+              url: reverseGeocodeUrl,
+              method: 'GET',
+              status: response.status,
+              durationMs: Date.now() - reverseGeocodeStartedAt,
+              responseBody: payload,
+            });
+            console.log('[Location] Reverse geocode response', payload);
+            setHeaderAddress(formatAddress(payload));
+          } catch (error) {
+            logApiEvent('GET network-error', {
+              url: 'https://nominatim.openstreetmap.org/reverse',
+              method: 'GET',
+              error: error instanceof Error ? error.message : String(error),
+            });
+            setHeaderAddress(fallbackAddress);
+          }
+
           return;
         }
 
-        Geolocation.getCurrentPosition(
-          async position => {
-            try {
-              const { latitude, longitude } = position.coords;
-              console.log('[Location] Current coordinates', { latitude, longitude });
+        if (!permitted) {
+          await applyFallbackLocation();
+          return;
+        }
 
-              const reverseGeocodeUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`;
-              const reverseGeocodeStartedAt = Date.now();
-              const reverseGeocodeHeaders = {
-                Accept: 'application/json',
-              };
-
-              logApiEvent('GET request', {
-                url: reverseGeocodeUrl,
-                method: 'GET',
-                headers: reverseGeocodeHeaders,
-              });
-
-              const response = await fetch(reverseGeocodeUrl, {
-                headers: reverseGeocodeHeaders,
-              });
-
-              const payload = await response.json();
-              logApiEvent(response.ok ? 'GET response' : 'GET error-response', {
-                url: reverseGeocodeUrl,
-                method: 'GET',
-                status: response.status,
-                durationMs: Date.now() - reverseGeocodeStartedAt,
-                responseBody: payload,
-              });
-              console.log('[Location] Reverse geocode response', payload);
-              setHeaderAddress(formatAddress(payload));
-              const geocodeCity = extractCityFromGeocode(payload);
-              setShopCity(resolveShopCity(geocodeCity, currentUser?.address));
-            } catch (error) {
-              logApiEvent('GET network-error', {
-                url: 'https://nominatim.openstreetmap.org/reverse',
-                method: 'GET',
-                error: error instanceof Error ? error.message : String(error),
-              });
-              setHeaderAddress(fallbackAddress);
-              setShopCity(profileCity);
-            }
-          },
-          () => {
-            setHeaderAddress(fallbackAddress);
-            setShopCity(profileCity);
-          },
-          {
-            enableHighAccuracy: true,
-            timeout: 15000,
-            maximumAge: 10000,
-          },
-        );
+        await applyFallbackLocation();
       } catch {
-        setHeaderAddress(fallbackAddress);
-        setShopCity(profileCity);
+        await applyFallbackLocation();
       }
     };
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Dimensions,
   Image,
@@ -63,6 +63,14 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
   const todayHours = formatTodayOpeningHours(shop.openingHours);
   const featuredProducts = useMemo(() => getFeaturedProducts(products), [products]);
   const showHeroImage = Boolean(heroImageUri) && !heroError;
+
+  useEffect(() => {
+    setLogoError(false);
+  }, [shop.logo]);
+
+  useEffect(() => {
+    setHeroError(false);
+  }, [heroImageUri]);
 
   const galleryImages = useMemo(() => {
     const images = [
@@ -355,6 +363,7 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
       <View style={styles.heroSection}>
         {showHeroImage ? (
           <Image
+            key={heroImageUri}
             source={{ uri: heroImageUri }}
             style={styles.heroImage}
             onError={() => setHeroError(true)}
@@ -410,6 +419,7 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
               <View style={styles.avatarCircle}>
                 {shopLogoUri && !logoError ? (
                   <Image
+                    key={shopLogoUri}
                     source={{ uri: shopLogoUri }}
                     style={styles.avatarImage}
                     onError={() => setLogoError(true)}

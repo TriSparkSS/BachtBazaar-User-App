@@ -49,12 +49,20 @@ const StoreDetail = () => {
   }, [authToken, initialShop.id]);
 
   const heroImageUri = useMemo(() => {
+    const bannerUri = shopApi.resolveImageUrl(shop.coverImage);
+    if (bannerUri) {
+      return bannerUri;
+    }
+
+    if (isLoadingShop) {
+      return undefined;
+    }
+
     return (
-      shopApi.resolveImageUrl(shop.coverImage) ??
       shopApi.resolveImageUrl(shop.products?.find(product => product.image)?.image) ??
       GROCERY_HERO_PLACEHOLDER
     );
-  }, [shop.coverImage, shop.products]);
+  }, [shop.coverImage, shop.products, isLoadingShop]);
 
   const products = shop.products ?? [];
 
