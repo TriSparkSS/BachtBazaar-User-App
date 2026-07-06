@@ -106,56 +106,28 @@ export const shopApi = {
     }).then(parseAdminBannersResponse);
   },
 
-  fetchOfferBanners(city: string, categoryId: string, token?: string): Promise<OfferBanner[]> {
-    const normalizedCity = city.trim();
+  fetchOfferBanners(categoryId: string, token?: string): Promise<OfferBanner[]> {
     const normalizedCategoryId = categoryId.trim();
 
-    if (!normalizedCity || !normalizedCategoryId || normalizedCategoryId === 'all') {
-      return Promise.resolve([]);
-    }
-
-    return apiRequest<unknown>(API_ENDPOINTS.offerBanners(normalizedCity, normalizedCategoryId), {
-      method: 'GET',
-      token,
-      baseUrl: SHOPS_API_BASE_URL,
-    }).then(parseOfferBannersResponse);
-  },
-
-  fetchOfferBannersByLocation(
-    latitude: number,
-    longitude: number,
-    categoryId: string,
-    token?: string,
-  ): Promise<OfferBanner[]> {
-    const normalizedCategoryId = categoryId.trim();
     if (!normalizedCategoryId || normalizedCategoryId === 'all') {
       return Promise.resolve([]);
     }
 
-    return apiRequest<unknown>(API_ENDPOINTS.offerBanners2(latitude, longitude, normalizedCategoryId), {
+    return apiRequest<unknown>(API_ENDPOINTS.offerBanners(normalizedCategoryId), {
       method: 'GET',
       token,
       baseUrl: SHOPS_API_BASE_URL,
     }).then(parseOfferBannersResponse);
   },
 
-  fetchHomeBanners(
-    latitude: number | undefined,
-    longitude: number | undefined,
-    categoryId: string,
-    token?: string,
-  ): Promise<OfferBanner[]> {
+  fetchHomeBanners(categoryId: string, token?: string): Promise<OfferBanner[]> {
     const normalizedCategoryId = categoryId.trim();
 
     if (!normalizedCategoryId || normalizedCategoryId === 'all') {
       return this.fetchAdminActiveBanners(token);
     }
 
-    if (latitude == null || longitude == null) {
-      return Promise.resolve([]);
-    }
-
-    return this.fetchOfferBannersByLocation(latitude, longitude, normalizedCategoryId, token);
+    return this.fetchOfferBanners(normalizedCategoryId, token);
   },
 
   async enrichShopListLogo(shop: ShopWithOffers, token?: string): Promise<ShopWithOffers> {
@@ -178,20 +150,28 @@ export const shopApi = {
     }
   },
 
-  async fetchShopsWithOffersByLocation(
-    latitude: number,
-    longitude: number,
-    categoryId?: string,
+  async fetchHomeShops(
+    categoryId: string,
     token?: string,
+    coordinates?: { latitude: number; longitude: number } | null,
   ): Promise<ShopWithOffers[]> {
-    const payload = await apiRequest<unknown>(
-      API_ENDPOINTS.shopsByLocation(latitude, longitude, categoryId),
-      {
-        method: 'GET',
-        token,
-        baseUrl: SHOPS_API_BASE_URL,
-      },
-    );
+    const normalizedCategoryId = categoryId.trim();
+    const endpoint =
+      normalizedCategoryId && normalizedCategoryId !== 'all'
+        ? API_ENDPOINTS.shopsAllByCategory(normalizedCategoryId)
+        : coordinates
+          ? API_ENDPOINTS.shopsByLocation(coordinates.latitude, coordinates.longitude)
+          : null;
+
+    if (!endpoint) {
+      return [];
+    }
+
+    const payload = await apiRequest<unknown>(endpoint, {
+      method: 'GET',
+      token,
+      baseUrl: SHOPS_API_BASE_URL,
+    });
 
     const shops = parseShopsWithOffersResponse(payload);
 

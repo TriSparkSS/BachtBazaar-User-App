@@ -1,3 +1,5 @@
+import { GOOGLE_MAPS_API_KEY } from '../config/maps';
+
 export const extractCityFromAddress = (address?: string | null): string | undefined => {
   if (!address?.trim()) {
     return undefined;
@@ -74,29 +76,40 @@ export type GeoCoordinates = {
 };
 
 const geocodeSingleQuery = async (query: string): Promise<GeoCoordinates | null> => {
-  const geocodeUrl = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=in&q=${encodeURIComponent(query)}`;
+  if (!GOOGLE_MAPS_API_KEY) {
+    return null;
+  }
+
+  const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+    query,
+  )}&components=country:IN&key=${encodeURIComponent(GOOGLE_MAPS_API_KEY)}`;
 
   try {
-    const response = await fetch(geocodeUrl, {
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': 'BachatBazaarUserApp/1.0',
-      },
-    });
+    const response = await fetch(geocodeUrl);
 
     if (!response.ok) {
       return null;
     }
 
-    const results = (await response.json()) as Array<{ lat?: string; lon?: string }>;
-    const first = results[0];
+    const payload = (await response.json()) as {
+      status?: string;
+      results?: Array<{
+        geometry?: {
+          location?: {
+            lat?: number;
+            lng?: number;
+          };
+        };
+      }>;
+    };
+    const location = payload.results?.[0]?.geometry?.location;
 
-    if (!first?.lat || !first?.lon) {
+    if (payload.status && payload.status !== 'OK') {
       return null;
     }
 
-    const latitude = Number(first.lat);
-    const longitude = Number(first.lon);
+    const latitude = Number(location?.lat);
+    const longitude = Number(location?.lng);
 
     if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
       return null;

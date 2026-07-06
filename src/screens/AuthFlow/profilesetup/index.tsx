@@ -13,6 +13,17 @@ import { userAuthApi } from '../../../services/userAuthApi';
 import { resolveProfileImageUrl } from '../../../config/api';
 import { showAppAlert } from '../../../services/appAlert';
 import { GenderUi, mapGenderToApi, mapGenderToUi } from '../../../utils/profile';
+import type { PoiClickEvent } from '../../../utils/mapPoi';
+import {
+  formatCoordinate,
+  parseCoordinateInput,
+  reverseGeocodeWithGoogle,
+} from '../../../utils/googleGeocoding';
+import { parsePoiClickEvent } from '../../../utils/mapPoi';
+import {
+  getCurrentDeviceCoordinates,
+  requestLocationPermission,
+} from '../../../utils/deviceLocation';
 
 type ProfileImageFile = {
   uri: string;
@@ -27,6 +38,14 @@ const ProfileSetup = () => {
   const [name, setName] = useState(currentUser?.name ?? '');
   const [gender, setGender] = useState<GenderUi>(() => mapGenderToUi(currentUser?.gender));
   const [address, setAddress] = useState(currentUser?.address ?? '');
+  const [city, setCity] = useState(currentUser?.city ?? '');
+  const [latitude, setLatitude] = useState(
+    currentUser?.latitude != null ? formatCoordinate(currentUser.latitude) : '',
+  );
+  const [longitude, setLongitude] = useState(
+    currentUser?.longitude != null ? formatCoordinate(currentUser.longitude) : '',
+  );
+  const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [profileImage, setProfileImage] = useState<ProfileImageFile | null>(null);
   const [fetchedProfileImage, setFetchedProfileImage] = useState<string | undefined>(
     currentUser?.profileImage,
@@ -61,6 +80,9 @@ const ProfileSetup = () => {
         await setSession(authToken, nextUser);
         setName(nextUser.name ?? '');
         setAddress(nextUser.address ?? '');
+        setCity(nextUser.city ?? '');
+        setLatitude(nextUser.latitude != null ? formatCoordinate(nextUser.latitude) : '');
+        setLongitude(nextUser.longitude != null ? formatCoordinate(nextUser.longitude) : '');
         setGender(mapGenderToUi(nextUser.gender));
         setFetchedProfileImage(nextUser.profileImage);
       } catch {
@@ -78,6 +100,84 @@ const ProfileSetup = () => {
       cancelled = true;
     };
   }, [authToken, currentUser?._id]);
+
+  const applyCoordinates = async (coords: { latitude: number; longitude: number }) => {
+    setLatitude(formatCoordinate(coords.latitude));
+    setLongitude(formatCoordinate(coords.longitude));
+
+    const geocoded = await reverseGeocodeWithGoogle(coords.latitude, coords.longitude);
+    if (geocoded.address) {
+      setAddress(geocoded.address);
+    }
+    if (geocoded.city) {
+      setCity(geocoded.city);
+    }
+  };
+
+  useEffect(() => {
+    if (
+      latitude.trim() ||
+      longitude.trim() ||
+      currentUser?.latitude != null ||
+      currentUser?.longitude != null
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSavedOrCurrentLocation = async () => {
+      try {
+        setIsLoadingLocation(true);
+        const permitted = await requestLocationPermission();
+        if (!permitted) {
+          return;
+        }
+
+        const coordinates = await getCurrentDeviceCoordinates();
+        if (!coordinates || cancelled) {
+          return;
+        }
+
+        await applyCoordinates(coordinates);
+      } catch {
+        // Ignore auto-location errors; user can tap the button manually.
+      } finally {
+        if (!cancelled) {
+          setIsLoadingLocation(false);
+        }
+      }
+    };
+
+    loadSavedOrCurrentLocation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.latitude, currentUser?.longitude, latitude, longitude]);
+
+  const handleUseCurrentLocation = async () => {
+    try {
+      setIsLoadingLocation(true);
+      const permitted = await requestLocationPermission();
+      if (!permitted) {
+        showAppAlert('Permission needed', 'Location permission is required to pin your current location.');
+        return;
+      }
+
+      const coordinates = await getCurrentDeviceCoordinates();
+      if (!coordinates) {
+        showAppAlert('Location unavailable', 'Could not detect your current location. Please try again.');
+        return;
+      }
+
+      await applyCoordinates(coordinates);
+    } catch {
+      showAppAlert('Location failed', 'Could not update your location. Please try again.');
+    } finally {
+      setIsLoadingLocation(false);
+    }
+  };
 
   const imagePickerOptions: ImageLibraryOptions & CameraOptions = {
     mediaType: 'photo',
@@ -195,10 +295,16 @@ const ProfileSetup = () => {
     try {
       setIsSubmitting(true);
 
+      const parsedLatitude = parseCoordinateInput(latitude);
+      const parsedLongitude = parseCoordinateInput(longitude);
+
       const response = await userAuthApi.updateProfile(authToken, currentUser, {
         name: name.trim(),
         gender: mapGenderToApi(gender),
         address: address.trim(),
+        city: city.trim(),
+        latitude: parsedLatitude,
+        longitude: parsedLongitude,
         profileImage: profileImage ?? undefined,
       });
 
@@ -221,6 +327,19 @@ const ProfileSetup = () => {
     }
   };
 
+  const handleMapPoiClick = async (event: PoiClickEvent) => {
+    const poi = parsePoiClickEvent(event);
+    await applyCoordinates({
+      latitude: poi.latitude,
+      longitude: poi.longitude,
+    });
+    showAppAlert(
+      poi.name || 'Location updated',
+      'Selected place has been set as your location.',
+      [{ text: 'OK' }],
+    );
+  };
+
   return (
     <ProfileSetupScreenView
       name={name}
@@ -229,6 +348,15 @@ const ProfileSetup = () => {
       setGender={setGender}
       address={address}
       setAddress={setAddress}
+      city={city}
+      setCity={setCity}
+      latitude={latitude}
+      setLatitude={setLatitude}
+      longitude={longitude}
+      setLongitude={setLongitude}
+      onUseCurrentLocation={handleUseCurrentLocation}
+      onMapPoiClick={handleMapPoiClick}
+      isLoadingLocation={isLoadingLocation}
       profileImageUri={profileImageUri}
       onAvatarPress={handleAvatarPress}
       onBack={handleBack}

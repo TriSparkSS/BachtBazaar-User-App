@@ -11,7 +11,7 @@ import {
   View,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { CommonActions, useNavigation } from '@react-navigation/native';
@@ -28,12 +28,13 @@ import { logApiEvent } from '../../../../services/apiClient';
 import { ShopOffer, ShopWithOffers } from '../../../../types/shop';
 import { SearchResults } from '../../../../types/search';
 import { MainStackParamList } from '../../../../navigation/types';
-import { resetToAuthLogin } from '../../../../navigation';
+import { resetToAuthLogin } from '../../../../navigation/navigationService';
 import { shopApi } from '../../../../services/shopApi';
 import { categoryApi } from '../../../../services/categoryApi';
 import { Category } from '../../../../types/category';
 import { OfferBanner } from '../../../../types/offerBanner';
 import { geocodeAddress, GeoCoordinates, resolveShopCity } from '../../../../utils/location';
+import { reverseGeocodeWithGoogle } from '../../../../utils/googleGeocoding';
 import { getCurrentDeviceCoordinates, requestLocationPermission } from '../../../../utils/deviceLocation';
 import OfferCountdownText from '../../../../components/OfferCountdownText';
 import PromoBannerCarousel from '../../../../components/PromoBannerCarousel';
@@ -218,6 +219,7 @@ const sidebarGroups: SidebarGroup[] = [
 ];
 
 const HomeScreenView = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { authToken, currentUser, clearSession, setSession } = useAppContext();
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -336,7 +338,9 @@ const HomeScreenView = () => {
   }, [authToken, currentUser?._id]);
 
   useEffect(() => {
-    if (!deviceCoordinates) {
+    const isAllCategory = selectedCategory === 'all';
+
+    if (isAllCategory && !deviceCoordinates) {
       return;
     }
 
@@ -346,11 +350,10 @@ const HomeScreenView = () => {
       try {
         setIsLoadingShops(true);
         setShopsError(null);
-        const result = await shopApi.fetchShopsWithOffersByLocation(
-          deviceCoordinates.latitude,
-          deviceCoordinates.longitude,
+        const result = await shopApi.fetchHomeShops(
           selectedCategory,
           authToken ?? undefined,
+          deviceCoordinates,
         );
 
         if (!cancelled) {
@@ -481,12 +484,6 @@ const HomeScreenView = () => {
     searchResults.offers.length;
 
   useEffect(() => {
-    const isAllCategory = selectedCategory === 'all';
-
-    if (!isAllCategory && !deviceCoordinates) {
-      return;
-    }
-
     if (bannerFetchTimerRef.current) {
       clearTimeout(bannerFetchTimerRef.current);
     }
@@ -498,8 +495,6 @@ const HomeScreenView = () => {
         try {
           setIsLoadingBanners(true);
           const result = await shopApi.fetchHomeBanners(
-            deviceCoordinates?.latitude,
-            deviceCoordinates?.longitude,
             selectedCategory,
             authTokenRef.current ?? undefined,
           );
@@ -530,7 +525,7 @@ const HomeScreenView = () => {
         clearTimeout(bannerFetchTimerRef.current);
       }
     };
-  }, [selectedCategory, deviceCoordinates]);
+  }, [selectedCategory]);
 
   useEffect(() => {
     const fallbackAddress = currentUser?.address?.trim()
@@ -538,21 +533,16 @@ const HomeScreenView = () => {
       : 'Work - New Delhi, India';
     const profileCity = resolveShopCity(undefined, currentUser?.address);
 
-    const formatAddress = (payload: any) => {
-      const address = payload?.address ?? {};
-      const pieces = [
-        address.house_number ? `${address.house_number} ${address.road ?? ''}`.trim() : address.road,
-        address.suburb || address.neighbourhood,
-        address.city || address.town || address.village,
-      ].filter(Boolean);
-
-      if (!pieces.length) {
-        return payload?.display_name
-          ? `Work - ${payload.display_name.split(',').slice(0, 2).join(', ')}`
-          : fallbackAddress;
+    const formatAddress = (address?: string, city?: string) => {
+      if (city?.trim()) {
+        return `Work - ${city.trim()}`;
       }
 
-      return `Work - ${pieces.slice(0, 2).join(', ')}`;
+      if (address?.trim()) {
+        return `Work - ${address.split(',').slice(0, 2).join(', ')}`;
+      }
+
+      return fallbackAddress;
     };
 
     const applyFallbackLocation = async () => {
@@ -575,35 +565,26 @@ const HomeScreenView = () => {
 
           try {
             const { latitude, longitude } = coordinates;
-            const reverseGeocodeUrl = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`;
+            const reverseGeocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=***`;
             const reverseGeocodeStartedAt = Date.now();
-            const reverseGeocodeHeaders = {
-              Accept: 'application/json',
-            };
 
             logApiEvent('GET request', {
               url: reverseGeocodeUrl,
               method: 'GET',
-              headers: reverseGeocodeHeaders,
             });
 
-            const response = await fetch(reverseGeocodeUrl, {
-              headers: reverseGeocodeHeaders,
-            });
-
-            const payload = await response.json();
-            logApiEvent(response.ok ? 'GET response' : 'GET error-response', {
+            const result = await reverseGeocodeWithGoogle(latitude, longitude);
+            logApiEvent(result.address || result.city ? 'GET response' : 'GET error-response', {
               url: reverseGeocodeUrl,
               method: 'GET',
-              status: response.status,
               durationMs: Date.now() - reverseGeocodeStartedAt,
-              responseBody: payload,
+              responseBody: result,
             });
-            console.log('[Location] Reverse geocode response', payload);
-            setHeaderAddress(formatAddress(payload));
+            console.log('[Location] Reverse geocode response', result);
+            setHeaderAddress(formatAddress(result.address, result.city));
           } catch (error) {
             logApiEvent('GET network-error', {
-              url: 'https://nominatim.openstreetmap.org/reverse',
+              url: 'https://maps.googleapis.com/maps/api/geocode/json',
               method: 'GET',
               error: error instanceof Error ? error.message : String(error),
             });
@@ -875,7 +856,11 @@ const HomeScreenView = () => {
         <ScrollView
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+          nestedScrollEnabled
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: Math.max(insets.bottom, 12) + 40 },
+          ]}
         >
           <AnimatedScreen>
             <PromoBannerCarousel
@@ -944,7 +929,7 @@ const HomeScreenView = () => {
 
             <View style={styles.localOffersSection}>
               <View style={styles.localOffersHeader}>
-                <View>
+                <View style={styles.localOffersTitleWrap}>
                   <Text style={styles.localOffersTitle}>
                     {isSearchActive ? 'Search Results' : 'Local Offers'}
                   </Text>
@@ -1405,8 +1390,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 176,
-    paddingTop: 8,
+    paddingTop: 4,
   },
   shopsLoadingCard: {
     marginHorizontal: 16,
@@ -1641,7 +1625,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 18,
     minHeight: 122,
-    marginBottom: 16,
+    marginBottom: 12,
     overflow: 'hidden',
   },
   bannerGradientFallback: {
@@ -1692,7 +1676,7 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   quickActionsScroll: {
-    marginBottom: 14,
+    marginBottom: 8,
   },
   quickActionsContent: {
     flexDirection: 'row',
@@ -1732,8 +1716,8 @@ const styles = StyleSheet.create({
     lineHeight: 13,
   },
   categoriesSection: {
-    marginBottom: 18,
-    paddingBottom: 4,
+    marginBottom: 10,
+    paddingBottom: 2,
   },
   categoriesHeaderRow: {
     flexDirection: 'row',
@@ -1792,8 +1776,8 @@ const styles = StyleSheet.create({
   categoriesContent: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 10,
+    paddingTop: 4,
+    paddingBottom: 12,
     gap: 10,
   },
   categoryPill: {
@@ -1844,13 +1828,13 @@ const styles = StyleSheet.create({
   },
   localOffersSection: {
     paddingHorizontal: 16,
-    marginTop: 6,
+    marginTop: 2,
   },
   localOffersHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 14,
+    marginBottom: 10,
     gap: 10,
   },
   localOffersHeaderActions: {
@@ -1858,6 +1842,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flexShrink: 0,
+  },
+  localOffersTitleWrap: {
+    flex: 1,
+    flexShrink: 1,
   },
   filterOfferButton: {
     flexDirection: 'row',
@@ -1876,10 +1864,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
   },
   localOffersTitle: {
-    fontSize: 24,
+    fontSize: 19,
     fontFamily: fonts.BOLD,
     color: colors.text,
-    letterSpacing: -0.5,
+    letterSpacing: -0.4,
   },
   searchSummaryText: {
     marginTop: 3,

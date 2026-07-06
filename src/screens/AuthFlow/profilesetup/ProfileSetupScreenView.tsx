@@ -13,10 +13,14 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnimatedScreen from '../../../components/AnimatedScreen';
 import { AppTextInput } from '../../../components/AppTextInput';
+import ProfileLocationMap from '../../../components/ProfileLocationMap';
 import { ScreenScaffold } from '../../../components/ScreenScaffold';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
+import { parseCoordinateInput } from '../../../utils/googleGeocoding';
+import type { PoiClickEvent } from '../../../utils/mapPoi';
 
 import { GenderUi } from '../../../utils/profile';
 
@@ -29,6 +33,15 @@ interface ProfileSetupScreenViewProps {
   setGender: (gender: GenderUi) => void;
   address: string;
   setAddress: (address: string) => void;
+  city: string;
+  setCity: (city: string) => void;
+  latitude: string;
+  setLatitude: (latitude: string) => void;
+  longitude: string;
+  setLongitude: (longitude: string) => void;
+  onUseCurrentLocation: () => void;
+  onMapPoiClick?: (event: PoiClickEvent) => void;
+  isLoadingLocation?: boolean;
   profileImageUri?: string;
   onAvatarPress: () => void;
   onBack: () => void;
@@ -53,6 +66,15 @@ const ProfileSetupScreenView: React.FC<ProfileSetupScreenViewProps> = ({
   setGender,
   address,
   setAddress,
+  city,
+  setCity,
+  latitude,
+  setLatitude,
+  longitude,
+  setLongitude,
+  onUseCurrentLocation,
+  onMapPoiClick,
+  isLoadingLocation = false,
   profileImageUri,
   onAvatarPress,
   onBack,
@@ -61,12 +83,31 @@ const ProfileSetupScreenView: React.FC<ProfileSetupScreenViewProps> = ({
   isSubmitting = false,
   isLoadingProfile = false,
 }) => {
+  const insets = useSafeAreaInsets();
   const nameInputRef = useRef<TextInput>(null);
   const addressInputRef = useRef<TextInput>(null);
+  const cityInputRef = useRef<TextInput>(null);
+  const latitudeInputRef = useRef<TextInput>(null);
+  const longitudeInputRef = useRef<TextInput>(null);
+
+  const parsedLatitude = parseCoordinateInput(latitude);
+  const parsedLongitude = parseCoordinateInput(longitude);
+  const showMap =
+    parsedLatitude != null &&
+    parsedLongitude != null &&
+    parsedLatitude >= -90 &&
+    parsedLatitude <= 90 &&
+    parsedLongitude >= -180 &&
+    parsedLongitude <= 180;
+  const mapCoordinates = showMap
+    ? { latitude: parsedLatitude as number, longitude: parsedLongitude as number }
+    : undefined;
 
   return (
     <ScreenScaffold
       onBack={onBack}
+      centerContent={false}
+      contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 12) + 36 }}
       background={
         <>
           <View style={styles.heroWash} />
@@ -188,6 +229,94 @@ const ProfileSetupScreenView: React.FC<ProfileSetupScreenViewProps> = ({
             }
           />
 
+          <Text style={styles.fieldLabel}>City</Text>
+          <AppTextInput
+            ref={cityInputRef}
+            containerStyle={styles.inputField}
+            focusedContainerStyle={styles.inputFieldFocused}
+            style={styles.inputText}
+            placeholder="Enter your city"
+            placeholderTextColor="#99A4B8"
+            value={city}
+            onChangeText={setCity}
+            returnKeyType="next"
+            onSubmitEditing={() => latitudeInputRef.current?.focus()}
+            editable={!isSubmitting}
+            autoCapitalize="words"
+            leftAdornment={
+              <View style={styles.inputIcon} pointerEvents="none">
+                <MaterialCommunityIcons name="city-variant-outline" size={20} color="#99A4B8" />
+              </View>
+            }
+          />
+
+          <Text style={styles.fieldLabel}>Latitude</Text>
+          <AppTextInput
+            ref={latitudeInputRef}
+            containerStyle={styles.inputField}
+            focusedContainerStyle={styles.inputFieldFocused}
+            style={styles.inputText}
+            placeholder="30.720218"
+            placeholderTextColor="#99A4B8"
+            value={latitude}
+            onChangeText={setLatitude}
+            returnKeyType="next"
+            onSubmitEditing={() => longitudeInputRef.current?.focus()}
+            editable={!isSubmitting}
+            keyboardType="decimal-pad"
+            leftAdornment={
+              <View style={styles.inputIcon} pointerEvents="none">
+                <MaterialCommunityIcons name="crosshairs-gps" size={20} color="#99A4B8" />
+              </View>
+            }
+          />
+
+          <Text style={styles.fieldLabel}>Longitude</Text>
+          <AppTextInput
+            ref={longitudeInputRef}
+            containerStyle={styles.inputField}
+            focusedContainerStyle={styles.inputFieldFocused}
+            style={styles.inputText}
+            placeholder="76.677846"
+            placeholderTextColor="#99A4B8"
+            value={longitude}
+            onChangeText={setLongitude}
+            editable={!isSubmitting}
+            keyboardType="decimal-pad"
+            leftAdornment={
+              <View style={styles.inputIcon} pointerEvents="none">
+                <MaterialCommunityIcons name="crosshairs" size={20} color="#99A4B8" />
+              </View>
+            }
+          />
+
+          <TouchableOpacity
+            style={[styles.locationButton, (isSubmitting || isLoadingLocation) && styles.locationButtonDisabled]}
+            onPress={onUseCurrentLocation}
+            disabled={isSubmitting || isLoadingLocation}
+            activeOpacity={0.85}>
+            {isLoadingLocation ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <MaterialCommunityIcons name="map-marker-radius" size={18} color={colors.primary} />
+            )}
+            <Text style={styles.locationButtonText}>
+              {isLoadingLocation ? 'Fetching location...' : 'Use current location'}
+            </Text>
+          </TouchableOpacity>
+
+          {mapCoordinates ? (
+            <View style={styles.mapSection}>
+              <Text style={styles.fieldLabel}>Location on map</Text>
+              <ProfileLocationMap
+                latitude={mapCoordinates.latitude}
+                longitude={mapCoordinates.longitude}
+                height={160}
+                onPoiClick={onMapPoiClick}
+              />
+            </View>
+          ) : null}
+
           <TouchableOpacity
             style={[styles.actionButton, isSubmitting && styles.actionButtonDisabled]}
             disabled={isSubmitting}
@@ -257,18 +386,18 @@ const styles = StyleSheet.create({
   },
   headerBlock: {
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 12,
     maxWidth: 390,
     paddingHorizontal: 12,
   },
   logoHalo: {
-    width: 80,
-    height: 80,
-    borderRadius: 26,
+    width: 72,
+    height: 72,
+    borderRadius: 24,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.95)',
     shadowColor: '#2457B8',
@@ -307,18 +436,18 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
   },
   title: {
-    fontSize: 25,
+    fontSize: 22,
     color: colors.text,
     fontFamily: fonts.BOLD,
     letterSpacing: -0.4,
     textAlign: 'center',
   },
   subtitle: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     color: '#5F6D84',
     textAlign: 'center',
-    marginTop: 6,
+    marginTop: 4,
     maxWidth: 320,
     fontFamily: fonts.BOLD,
   },
@@ -453,6 +582,31 @@ const styles = StyleSheet.create({
   },
   genderTextActive: {
     color: colors.white,
+  },
+  locationButton: {
+    width: '100%',
+    minHeight: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+    backgroundColor: colors.primarySoft,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 14,
+    paddingHorizontal: 12,
+  },
+  locationButtonDisabled: {
+    opacity: 0.7,
+  },
+  locationButtonText: {
+    fontSize: 13,
+    fontFamily: fonts.BOLD,
+    color: colors.primary,
+  },
+  mapSection: {
+    marginBottom: 14,
   },
   actionButton: {
     width: '100%',

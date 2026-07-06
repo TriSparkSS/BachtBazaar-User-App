@@ -4,6 +4,9 @@ export interface UserProfile {
   name?: string;
   gender?: 'male' | 'female' | 'other';
   address?: string;
+  city?: string;
+  latitude?: number;
+  longitude?: number;
   profileImage?: string;
   isVerified: boolean;
   createdAt?: string;

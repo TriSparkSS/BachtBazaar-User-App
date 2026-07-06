@@ -32,6 +32,8 @@ export const API_ENDPOINTS = {
         ? `&category_id=${encodeURIComponent(categoryId.trim())}`
         : ''
     }`,
+  shopsAllByCategory: (categoryId: string) =>
+    `/shop/all?category=${encodeURIComponent(categoryId.trim())}`,
   shopSearch: (query: string) => `/shop/search?q=${encodeURIComponent(query.trim())}`,
   shopById: (shopId: string) => `/shop/${encodeURIComponent(shopId)}`,
   shopOffers: (shopId: string) => `/shop/offers/${shopId}`,
@@ -39,14 +41,8 @@ export const API_ENDPOINTS = {
   shopLogo: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/logo`,
   shopBanner: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/banner`,
   categories: '/others/categories',
-  offerBanners: (city: string, categoryId: string) =>
-    `/shop/offers/banners?city=${encodeURIComponent(city.trim())}&category_id=${encodeURIComponent(categoryId.trim())}`,
-  offerBanners2: (lat: number, lng: number, categoryId?: string) =>
-    `/shop/offers/banners2?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}${
-      categoryId && categoryId.trim() && categoryId !== 'all'
-        ? `&category_id=${encodeURIComponent(categoryId.trim())}`
-        : ''
-    }`,
+  offerBanners: (categoryId: string) =>
+    `/shop/offers/banners?category=${encodeURIComponent(categoryId.trim())}`,
   adminBannerActiveFeed: '/adminbanners/active-feed',
 } as const;
 

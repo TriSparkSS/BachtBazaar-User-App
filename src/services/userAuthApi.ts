@@ -186,6 +186,9 @@ export const userAuthApi = {
       name?: string;
       gender?: 'male' | 'female' | 'other';
       address?: string;
+      city?: string;
+      latitude?: number;
+      longitude?: number;
       profileImage?: {
         uri: string;
         name: string;
@@ -207,6 +210,18 @@ export const userAuthApi = {
       formData.append('address', payload.address);
     }
 
+    if (payload.city) {
+      formData.append('city', payload.city);
+    }
+
+    if (payload.latitude != null && !Number.isNaN(payload.latitude)) {
+      formData.append('latitude', String(payload.latitude));
+    }
+
+    if (payload.longitude != null && !Number.isNaN(payload.longitude)) {
+      formData.append('longitude', String(payload.longitude));
+    }
+
     if (payload.profileImage) {
       formData.append('profileImage', {
         uri: payload.profileImage.uri,
@@ -219,6 +234,9 @@ export const userAuthApi = {
       name: payload.name,
       gender: payload.gender,
       address: payload.address,
+      city: payload.city,
+      latitude: payload.latitude,
+      longitude: payload.longitude,
     };
 
     return apiRequest<unknown>(API_ENDPOINTS.updateProfile, {

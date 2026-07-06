@@ -16,6 +16,7 @@ import { OfferBanner } from '../types/offerBanner';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_WIDTH = SCREEN_WIDTH - 32;
+const BANNER_RADIUS = 30;
 const AUTO_SCROLL_MS = 4500;
 
 type PromoBannerCarouselProps = {
@@ -66,7 +67,9 @@ const PromoBannerCarousel: React.FC<PromoBannerCarouselProps> = ({
     }
 
     return (
-      <ImageBackground source={{ uri: imageUri }} style={styles.promoBanner} imageStyle={styles.promoBannerImage}>
+      <View style={styles.promoBannerShadow}>
+      <View style={styles.promoBannerShell}>
+        <ImageBackground source={{ uri: imageUri }} style={styles.promoBanner} imageStyle={styles.promoBannerImage}>
         <View style={styles.promoBannerCopyWrap}>
           {banner.badgeLabel ? (
             <View style={styles.promoBannerBadge}>
@@ -93,15 +96,21 @@ const PromoBannerCarousel: React.FC<PromoBannerCarouselProps> = ({
             )}
           </View>
         </View>
-      </ImageBackground>
+        </ImageBackground>
+      </View>
+      </View>
     );
   };
 
   return (
     <View style={styles.promoBannerSection}>
       {isLoading ? (
-        <View style={[styles.promoBanner, styles.promoBannerLoading]}>
-          <ActivityIndicator size="small" color={colors.white} />
+        <View style={styles.promoBannerShadow}>
+          <View style={styles.promoBannerShell}>
+            <View style={[styles.promoBanner, styles.promoBannerLoading]}>
+              <ActivityIndicator size="small" color={colors.white} />
+            </View>
+          </View>
         </View>
       ) : (
         <>
@@ -145,36 +154,46 @@ export default PromoBannerCarousel;
 const styles = StyleSheet.create({
   promoBannerSection: {
     marginHorizontal: 16,
-    marginBottom: 17,
+    marginBottom: 16,
   },
   carouselContent: {
     alignItems: 'stretch',
   },
   slide: {
     width: BANNER_WIDTH,
+    paddingVertical: 3,
+  },
+  promoBannerShadow: {
+    borderRadius: BANNER_RADIUS,
+    backgroundColor: '#FFF4EA',
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 13 },
+    shadowOpacity: 0.18,
+    shadowRadius: 21,
+    elevation: 8,
+  },
+  promoBannerShell: {
+    borderRadius: BANNER_RADIUS,
+    overflow: 'hidden',
+    backgroundColor: '#FFF4EA',
   },
   promoBanner: {
-    minHeight: 175,
-    borderRadius: 23,
+    minHeight: 160,
+    borderRadius: BANNER_RADIUS,
     overflow: 'hidden',
     justifyContent: 'flex-end',
     backgroundColor: '#D9E2F2',
-    shadowColor: colors.primary,
-    shadowOffset: { width: 0, height: 11 },
-    shadowOpacity: 0.18,
-    shadowRadius: 19,
-    elevation: 8,
   },
   promoBannerLoading: {
     justifyContent: 'center',
     alignItems: 'center',
   },
   promoBannerImage: {
-    borderRadius: 23,
+    borderRadius: BANNER_RADIUS,
   },
   promoBannerCopyWrap: {
     paddingHorizontal: 17,
-    paddingVertical: 19,
+    paddingVertical: 14,
   },
   promoBannerBadge: {
     alignSelf: 'flex-start',

@@ -17,6 +17,23 @@ const pickString = (...values: unknown[]): string | undefined => {
   return undefined;
 };
 
+const pickNumber = (...values: unknown[]): number | undefined => {
+  for (const value of values) {
+    if (typeof value === 'number' && !Number.isNaN(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Number(value);
+      if (!Number.isNaN(parsed)) {
+        return parsed;
+      }
+    }
+  }
+
+  return undefined;
+};
+
 const collectRecords = (payload: unknown): Record<string, unknown>[] => {
   if (!isRecord(payload)) {
     return [];
@@ -118,6 +135,9 @@ const normalizeUser = (value: unknown, fallbackPhone?: string): UserProfile | un
     name: pickString(value.name),
     gender: normalizeGenderValue(value.gender ?? value.sex),
     address: pickString(value.address),
+    city: pickString(value.city),
+    latitude: pickNumber(value.latitude, value.lat),
+    longitude: pickNumber(value.longitude, value.lng, value.lon),
     profileImage: pickString(
       value.profileImage,
       value.profile_image,
@@ -384,6 +404,9 @@ const extractProfileFields = (
       merged.phone = merged.phone ?? pickString(source.phone, fallbackPhone);
       merged.name = merged.name ?? pickString(source.name);
       merged.address = merged.address ?? pickString(source.address);
+      merged.city = merged.city ?? pickString(source.city);
+      merged.latitude = merged.latitude ?? pickNumber(source.latitude, source.lat);
+      merged.longitude = merged.longitude ?? pickNumber(source.longitude, source.lng, source.lon);
       merged.gender =
         merged.gender ?? normalizeGenderValue(source.gender ?? source.sex);
       merged.profileImage =
@@ -428,6 +451,9 @@ export const parseFetchProfileResponse = (
     phone: parsedUser?.phone ?? profileFields.phone ?? fallbackUser.phone,
     name: parsedUser?.name ?? profileFields.name ?? fallbackUser.name,
     address: parsedUser?.address ?? profileFields.address ?? fallbackUser.address,
+    city: parsedUser?.city ?? profileFields.city ?? fallbackUser.city,
+    latitude: parsedUser?.latitude ?? profileFields.latitude ?? fallbackUser.latitude,
+    longitude: parsedUser?.longitude ?? profileFields.longitude ?? fallbackUser.longitude,
     gender:
       normalizeGenderValue(parsedUser?.gender) ??
       normalizeGenderValue(profileFields.gender) ??
