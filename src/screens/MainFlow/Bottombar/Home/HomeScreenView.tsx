@@ -828,6 +828,12 @@ const HomeScreenView = () => {
       setDailyRewardsVisible(true);
       return;
     }
+
+    showAppAlert(label.replace('\n', ' '), 'This feature will be available in an upcoming update.', [
+      { text: 'OK' },
+    ]);
+  };
+
   const handleDailyRewardDateSelect = (date: string) => {
     setSelectedDailyRewardDate(date);
     const cachedRewards = dailyRewardsByDate[date];
@@ -849,12 +855,6 @@ const HomeScreenView = () => {
       }, {}),
     [dailyRewardsByDate],
   );
-
-
-    showAppAlert(label.replace('\n', ' '), 'This feature will be available in an upcoming update.', [
-      { text: 'OK' },
-    ]);
-  };
 
   const renderCategoryChip = (chip: CategoryChip) => {
     const isSelected = selectedCategory === chip.id;
