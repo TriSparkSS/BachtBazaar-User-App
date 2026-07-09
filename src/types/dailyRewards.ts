@@ -28,9 +28,19 @@ export interface DailyRewardHistoryItem {
   statusLabel: string;
 }
 
+export interface DailyCalendarDay {
+  date: string;
+  dayLabel: string;
+  dayNumber: string;
+  image?: string;
+  isLocked?: boolean;
+  isClaimed?: boolean;
+}
+
 export interface DailyRewardsCalendar {
   title: string;
   selectedDate: string;
+  calendarDays: DailyCalendarDay[];
   entries: DailyRewardEntry[];
   history: DailyRewardHistoryItem[];
 }

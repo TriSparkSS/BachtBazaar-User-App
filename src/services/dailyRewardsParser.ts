@@ -1,4 +1,5 @@
 import {
+  DailyCalendarDay,
   DailyRewardEntry,
   DailyRewardHistoryItem,
   DailyRewardsCalendar,
@@ -157,6 +158,73 @@ const normalizeRewardEntry = (
   };
 };
 
+const normalizeCalendarDay = (
+  value: unknown,
+  fallbackDate: string,
+): DailyCalendarDay | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const entryDate = normalizeDate(
+    value.date ?? value.rewardDate ?? value.reward_date ?? value.dayDate ?? value.day_date,
+    fallbackDate,
+  );
+  const parsedDate = parseDate(entryDate);
+
+  return {
+    date: entryDate,
+    dayLabel:
+      pickString(value.dayLabel, value.day_label, value.dayName, value.day_name) ??
+      formatDayLabel(parsedDate),
+    dayNumber:
+      pickString(value.dayNumber, value.day_number, value.dateNumber, value.date_number) ??
+      formatDayNumber(parsedDate),
+    image: resolveRewardImage(value),
+    isLocked: pickBoolean(value.isLocked, value.is_locked, value.locked) ?? false,
+    isClaimed:
+      pickBoolean(value.isClaimed, value.is_claimed, value.claimed, value.status) ?? false,
+  };
+};
+
+const unwrapCalendarDaysList = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (!isRecord(payload)) {
+    return [];
+  }
+
+  const root = isRecord(payload.data) ? payload.data : payload;
+
+  for (const key of [
+    'calendar',
+    'calender',
+    'days',
+    'calendarDays',
+    'calendar_days',
+    'week',
+    'dates',
+  ]) {
+    const value = root[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    if (isRecord(value)) {
+      for (const nestedKey of ['days', 'items', 'calendar', 'entries', 'dates']) {
+        const nested = value[nestedKey];
+        if (Array.isArray(nested)) {
+          return nested;
+        }
+      }
+    }
+  }
+
+  return [];
+};
+
 const normalizeHistoryItem = (value: unknown): DailyRewardHistoryItem | null => {
   if (!isRecord(value)) {
     return null;
@@ -272,12 +340,29 @@ export const parseDailyRewardsCalendarResponse = (
             statusLabel: 'Claimed',
           }));
 
+  const parsedCalendarDays = unwrapCalendarDaysList(root)
+    .map(item => normalizeCalendarDay(item, selectedDate))
+    .filter((day): day is DailyCalendarDay => Boolean(day));
+
+  const calendarDays =
+    parsedCalendarDays.length > 0
+      ? parsedCalendarDays
+      : entries.map(entry => ({
+          date: entry.date,
+          dayLabel: entry.dayLabel,
+          dayNumber: entry.dayNumber,
+          image: entry.image,
+          isLocked: entry.isLocked,
+          isClaimed: entry.isClaimed,
+        }));
+
   return {
     title: pickString(
       isRecord(root) ? root.title : undefined,
       isRecord(root) ? root.heading : undefined,
     ) ?? 'Daily Rewards',
     selectedDate,
+    calendarDays,
     entries,
     history: derivedHistory,
   };

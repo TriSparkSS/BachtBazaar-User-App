@@ -1,5 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Dimensions,
   Image,
   Modal,
   Pressable,
@@ -9,13 +11,19 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { colors, fonts } from '../helpers/styles';
-import { DailyRewardEntry, DailyRewardsCalendar } from '../types/dailyRewards';
+import { DailyCalendarDay, DailyRewardEntry, DailyRewardsCalendar } from '../types/dailyRewards';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const QR_GRID_SIZE = 21;
+const SELECTED_PURPLE = '#5D55E6';
 
 type DailyRewardsSheetProps = {
   visible: boolean;
   rewards: DailyRewardsCalendar | null;
+  calendarDays: DailyCalendarDay[];
   selectedDate: string;
   rewardPreviewByDate: Record<string, string | undefined>;
   isLoading: boolean;
@@ -23,9 +31,8 @@ type DailyRewardsSheetProps = {
   onClose: () => void;
   onRetry: () => void;
   onDateSelect: (date: string) => void;
+  resolveImageUrl: (path?: string | null) => string | undefined;
 };
-
-const QR_GRID_SIZE = 21;
 
 const formatClaimedDate = (value?: string) => {
   if (!value) {
@@ -50,16 +57,16 @@ const formatApiDate = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-const buildVisibleDates = (selectedDate: string) => {
-  const baseDate = new Date(`${selectedDate}T00:00:00`);
-  const dates: Array<{ key: string; label: string; dayNumber: string }> = [];
+const buildFallbackDates = (anchorDate: string): DailyCalendarDay[] => {
+  const baseDate = new Date(`${anchorDate}T00:00:00`);
+  const dates: DailyCalendarDay[] = [];
 
-  for (let offset = -2; offset <= 4; offset += 1) {
+  for (let offset = -7; offset <= 7; offset += 1) {
     const nextDate = new Date(baseDate);
     nextDate.setDate(baseDate.getDate() + offset);
     dates.push({
-      key: formatApiDate(nextDate),
-      label: nextDate.toLocaleDateString('en-US', { weekday: 'short' }),
+      date: formatApiDate(nextDate),
+      dayLabel: nextDate.toLocaleDateString('en-US', { weekday: 'short' }),
       dayNumber: nextDate.toLocaleDateString('en-US', { day: 'numeric' }),
     });
   }
@@ -117,14 +124,18 @@ const RewardClaimModal = ({
   reward,
   visible,
   onClose,
+  resolveImageUrl,
 }: {
   reward: DailyRewardEntry | null;
   visible: boolean;
   onClose: () => void;
+  resolveImageUrl: (path?: string | null) => string | undefined;
 }) => {
   if (!reward) {
     return null;
   }
+
+  const rewardImage = resolveImageUrl(reward.image) ?? reward.image;
 
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
@@ -139,7 +150,7 @@ const RewardClaimModal = ({
           </View>
 
           <View style={styles.claimInfoCard}>
-            {reward.image ? <Image source={{ uri: reward.image }} style={styles.claimThumb} /> : null}
+            {rewardImage ? <Image source={{ uri: rewardImage }} style={styles.claimThumb} /> : null}
             <View style={styles.claimInfoBody}>
               <Text style={styles.claimMerchant}>{reward.subtitle || 'Partner Offer'}</Text>
               <Text style={styles.claimTitle}>{reward.title}</Text>
@@ -159,6 +170,7 @@ const RewardClaimModal = ({
 const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
   visible,
   rewards,
+  calendarDays,
   selectedDate,
   rewardPreviewByDate,
   isLoading,
@@ -166,8 +178,32 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
   onClose,
   onRetry,
   onDateSelect,
+  resolveImageUrl,
 }) => {
+  const insets = useSafeAreaInsets();
+  const calendarScrollRef = useRef<ScrollView>(null);
   const [selectedReward, setSelectedReward] = useState<DailyRewardEntry | null>(null);
+  const todayKey = useMemo(() => formatApiDate(new Date()), []);
+
+  const entries = rewards?.entries ?? [];
+  const history = rewards?.history ?? [];
+  const primaryReward = entries[0] ?? null;
+
+  const visibleCalendarDays = useMemo(() => {
+    const dayMap = new Map<string, DailyCalendarDay>();
+
+    const seedDays = calendarDays.length > 0 ? calendarDays : buildFallbackDates(todayKey);
+    seedDays.forEach(day => {
+      dayMap.set(day.date, day);
+    });
+
+    return Array.from(dayMap.values())
+      .map(day => ({
+        ...day,
+        image: day.image ?? rewardPreviewByDate[day.date],
+      }))
+      .sort((left, right) => left.date.localeCompare(right.date));
+  }, [calendarDays, rewardPreviewByDate, todayKey]);
 
   useEffect(() => {
     if (!visible) {
@@ -175,139 +211,229 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
     }
   }, [visible]);
 
-  const entries = rewards?.entries ?? [];
-  const history = rewards?.history ?? [];
-  const visibleDates = useMemo(() => buildVisibleDates(selectedDate), [selectedDate]);
-  const primaryReward = entries[0] ?? null;
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    const selectedIndex = visibleCalendarDays.findIndex(item => item.date === selectedDate);
+    if (selectedIndex < 0) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      calendarScrollRef.current?.scrollTo({
+        x: Math.max(0, selectedIndex * 72 - 100),
+        animated: true,
+      });
+    }, 120);
+
+    return () => clearTimeout(timer);
+  }, [visible, selectedDate, visibleCalendarDays]);
+
+  const renderCalendarThumb = (day: DailyCalendarDay, isSelected: boolean) => {
+    const imageUri = resolveImageUrl(day.image) ?? day.image;
+
+    if (imageUri) {
+      return (
+        <View style={styles.thumbImageWrap}>
+          <Image source={{ uri: imageUri }} style={styles.calendarThumbImage} />
+          {day.isLocked ? (
+            <View style={styles.lockOverlay}>
+              <MaterialCommunityIcons name="lock" size={14} color={colors.white} />
+            </View>
+          ) : null}
+        </View>
+      );
+    }
+
+    if (day.isLocked || day.date < todayKey) {
+      return (
+        <View style={styles.thumbImageWrap}>
+          <View style={styles.emptyThumb}>
+            <MaterialCommunityIcons name="circle" size={16} color="#D4A017" />
+          </View>
+          <View style={styles.lockOverlay}>
+            <MaterialCommunityIcons name="lock" size={14} color={colors.white} />
+          </View>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.emptyThumb}>
+        <MaterialCommunityIcons
+          name="gift-outline"
+          size={18}
+          color={isSelected ? '#E8A317' : '#C9A227'}
+        />
+      </View>
+    );
+  };
+
+  const renderHistoryBody = () => {
+    if (isLoading) {
+      return (
+        <View style={styles.historyState}>
+          <ActivityIndicator size="small" color={SELECTED_PURPLE} />
+          <Text style={styles.historyStateText}>Loading rewards...</Text>
+        </View>
+      );
+    }
+
+    if (error) {
+      return (
+        <View style={styles.historyState}>
+          <MaterialCommunityIcons name="alert-circle-outline" size={24} color="#D84B4B" />
+          <Text style={styles.historyStateTitle}>Could not load rewards</Text>
+          <Text style={styles.historyStateText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.85}>
+            <Text style={styles.retryButtonText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (history.length > 0) {
+      return history.map(item => {
+        const imageUri = resolveImageUrl(item.image) ?? item.image;
+
+        return (
+          <View key={item.id} style={styles.historyCard}>
+            <View style={styles.historyLeft}>
+              {imageUri ? (
+                <Image source={{ uri: imageUri }} style={styles.historyImage} />
+              ) : (
+                <View style={styles.historyImageFallback} />
+              )}
+              <View style={styles.historyBody}>
+                <Text style={styles.historyTitle}>{item.title}</Text>
+                {item.subtitle ? (
+                  <Text style={styles.historySubtitle} numberOfLines={1}>
+                    {item.subtitle}
+                  </Text>
+                ) : null}
+                {item.claimedAt ? (
+                  <Text style={styles.historyDate}>{formatClaimedDate(item.claimedAt)}</Text>
+                ) : null}
+              </View>
+            </View>
+            <Text style={styles.historyStatus}>{item.statusLabel}</Text>
+          </View>
+        );
+      });
+    }
+
+    if (primaryReward) {
+      const rewardImage = resolveImageUrl(primaryReward.image) ?? primaryReward.image;
+
+      return (
+        <TouchableOpacity
+          style={styles.todayRewardCard}
+          activeOpacity={0.88}
+          onPress={() => setSelectedReward(primaryReward)}
+        >
+          {rewardImage ? (
+            <Image source={{ uri: rewardImage }} style={styles.historyImage} />
+          ) : (
+            <View style={styles.historyImageFallback} />
+          )}
+          <View style={styles.historyBody}>
+            <Text style={styles.historyTitle}>{primaryReward.title}</Text>
+            {primaryReward.subtitle ? (
+              <Text style={styles.historySubtitle} numberOfLines={1}>
+                {primaryReward.subtitle}
+              </Text>
+            ) : null}
+            <Text style={styles.historyDate}>Tap to claim today&apos;s reward</Text>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={20} color={SELECTED_PURPLE} />
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <View style={styles.historyState}>
+        <Text style={styles.historyStateText}>No rewards available for this day yet.</Text>
+      </View>
+    );
+  };
 
   return (
     <>
       <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
         <View style={styles.backdrop}>
           <Pressable style={styles.dismissArea} onPress={onClose} />
-          <View style={styles.sheet}>
-            <View style={styles.grabber} />
+          <View
+            style={[
+              styles.sheet,
+              {
+                minHeight: SCREEN_HEIGHT * 0.68,
+                maxHeight: SCREEN_HEIGHT * 0.92,
+                paddingBottom: Math.max(insets.bottom, 8),
+              },
+            ]}
+          >
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              bounces
+              contentContainerStyle={styles.sheetScrollContent}
+            >
+              <View style={styles.grabber} />
 
-            <View style={styles.headerRow}>
-              <Text style={styles.title}>{rewards?.title || 'Daily Rewards'}</Text>
-              <TouchableOpacity onPress={onClose} style={styles.closeButton} activeOpacity={0.8}>
-                <MaterialCommunityIcons name="close" size={18} color="#7E8798" />
-              </TouchableOpacity>
-            </View>
-
-            {isLoading ? (
-              <View style={styles.stateCard}>
-                <MaterialCommunityIcons name="gift-outline" size={28} color={colors.primary} />
-                <Text style={styles.stateTitle}>Loading rewards...</Text>
-              </View>
-            ) : error ? (
-              <View style={styles.stateCard}>
-                <MaterialCommunityIcons name="alert-circle-outline" size={28} color="#D84B4B" />
-                <Text style={styles.stateTitle}>Could not load rewards</Text>
-                <Text style={styles.stateText}>{error}</Text>
-                <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.85}>
-                  <Text style={styles.retryButtonText}>Try again</Text>
+              <View style={styles.headerRow}>
+                <Text style={styles.title}>{rewards?.title || 'Daily Rewards'}</Text>
+                <TouchableOpacity onPress={onClose} style={styles.closeButton} activeOpacity={0.8}>
+                  <MaterialCommunityIcons name="close" size={20} color="#9AA3B2" />
                 </TouchableOpacity>
               </View>
-            ) : (
-              <>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.daysRow}
-                >
-                  {visibleDates.map(dateItem => {
-                    const isSelected = selectedDate === dateItem.key;
-                    const rewardPreview = rewardPreviewByDate[dateItem.key];
-                    return (
-                      <TouchableOpacity
-                        key={dateItem.key}
-                        style={styles.dayCardWrap}
-                        activeOpacity={0.9}
-                        onPress={() => {
-                          if (isSelected && primaryReward) {
-                            setSelectedReward(primaryReward);
-                            return;
-                          }
 
-                          onDateSelect(dateItem.key);
-                        }}
-                      >
-                        <Text style={styles.dayLabel}>{dateItem.label}</Text>
-                        <Text style={[styles.dayNumber, isSelected && styles.dayNumberToday]}>
-                          {dateItem.dayNumber}
-                        </Text>
-                        <View
-                          style={[
-                            styles.rewardThumbCard,
-                            isSelected && primaryReward?.isClaimed && styles.rewardThumbCardClaimed,
-                          ]}
-                        >
-                          {rewardPreview ? (
-                            <Image source={{ uri: rewardPreview }} style={styles.rewardThumbImage} />
-                          ) : (
-                            <MaterialCommunityIcons
-                              name="gift-outline"
-                              size={16}
-                              color="#D1A13B"
-                            />
-                          )}
-                        </View>
-                        <View style={[styles.selectionBar, isSelected && styles.selectionBarActive]} />
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-
-                <Text style={styles.sectionTitle}>Claim History</Text>
-                <ScrollView
-                  style={styles.historyScroll}
-                  contentContainerStyle={styles.historyContent}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {history.length > 0 ? (
-                    history.map(item => (
-                      <View key={item.id} style={styles.historyCard}>
-                        <View style={styles.historyLeft}>
-                          {item.image ? (
-                            <Image source={{ uri: item.image }} style={styles.historyImage} />
-                          ) : (
-                            <View style={styles.historyImageFallback}>
-                              <MaterialCommunityIcons name="gift-outline" size={16} color={colors.primary} />
-                            </View>
-                          )}
-                          <View style={styles.historyBody}>
-                            <Text style={styles.historyTitle}>{item.title}</Text>
-                            {item.subtitle ? (
-                              <Text style={styles.historySubtitle} numberOfLines={1}>
-                                {item.subtitle}
-                              </Text>
-                            ) : null}
-                            {item.claimedAt ? (
-                              <Text style={styles.historyDate}>{formatClaimedDate(item.claimedAt)}</Text>
-                            ) : null}
-                          </View>
-                        </View>
-                        <Text style={styles.historyStatus}>{item.statusLabel}</Text>
+              <ScrollView
+                ref={calendarScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.daysRow}
+                style={styles.calendarScroll}
+              >
+                {visibleCalendarDays.map(day => {
+                  const isSelected = selectedDate === day.date;
+                  return (
+                    <TouchableOpacity
+                      key={day.date}
+                      style={[styles.dayCard, isSelected && styles.dayCardSelected]}
+                      activeOpacity={0.9}
+                      onPress={() => onDateSelect(day.date)}
+                    >
+                      <Text style={[styles.dayLabel, isSelected && styles.dayLabelSelected]}>
+                        {day.dayLabel}
+                      </Text>
+                      <Text style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}>
+                        {day.dayNumber}
+                      </Text>
+                      <View style={[styles.calendarThumb, isSelected && styles.calendarThumbSelected]}>
+                        {renderCalendarThumb(day, isSelected)}
                       </View>
-                    ))
-                  ) : entries.length === 0 ? (
-                    <View style={styles.historyEmptyCard}>
-                      <Text style={styles.historyEmptyText}>No rewards available for this day yet.</Text>
-                    </View>
-                  ) : (
-                    <View style={styles.historyEmptyCard}>
-                      <Text style={styles.historyEmptyText}>No claimed rewards yet.</Text>
-                    </View>
-                  )}
-                </ScrollView>
-              </>
-            )}
+                      <View style={[styles.selectionBar, isSelected && styles.selectionBarActive]} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+
+              <View style={styles.historySection}>
+                <Text style={styles.sectionTitle}>Claim History</Text>
+                {renderHistoryBody()}
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
 
-      <RewardClaimModal reward={selectedReward} visible={Boolean(selectedReward)} onClose={() => setSelectedReward(null)} />
+      <RewardClaimModal
+        reward={selectedReward}
+        visible={Boolean(selectedReward)}
+        onClose={() => setSelectedReward(null)}
+        resolveImageUrl={resolveImageUrl}
+      />
     </>
   );
 };
@@ -317,201 +443,228 @@ export default DailyRewardsSheet;
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.28)',
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
     justifyContent: 'flex-end',
   },
   dismissArea: {
     flex: 1,
   },
   sheet: {
+    width: '100%',
     backgroundColor: colors.white,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    paddingTop: 6,
-    paddingHorizontal: 16,
-    paddingBottom: 24,
-    minHeight: 470,
-    maxHeight: '74%',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    overflow: 'hidden',
+  },
+  sheetScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 12,
   },
   grabber: {
     alignSelf: 'center',
-    width: 34,
-    height: 3,
+    width: 36,
+    height: 4,
     borderRadius: 999,
-    backgroundColor: '#E5E7EB',
-    marginBottom: 10,
+    backgroundColor: '#D1D5DB',
+    marginTop: 8,
+    marginBottom: 12,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 14,
+    paddingHorizontal: 16,
   },
   title: {
-    fontSize: 18,
+    fontSize: 17,
     color: colors.text,
     fontFamily: fonts.BOLD,
+    letterSpacing: -0.2,
   },
   closeButton: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  daysRow: {
-    gap: 10,
-    paddingBottom: 14,
-    paddingRight: 10,
+  calendarScroll: {
+    marginBottom: 4,
   },
-  dayCardWrap: {
-    width: 48,
+  daysRow: {
+    paddingLeft: 16,
+    paddingRight: 16,
+    gap: 8,
+  },
+  dayCard: {
+    width: 64,
     alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderRadius: 14,
+    backgroundColor: 'transparent',
+  },
+  dayCardSelected: {
+    backgroundColor: '#EEF2FF',
   },
   dayLabel: {
-    fontSize: 10,
-    color: '#A0A8B8',
+    fontSize: 11,
+    color: '#9CA3AF',
     fontFamily: fonts.BOLD,
     textTransform: 'capitalize',
   },
+  dayLabelSelected: {
+    color: SELECTED_PURPLE,
+  },
   dayNumber: {
-    marginTop: 3,
-    fontSize: 18,
-    color: colors.text,
+    marginTop: 2,
+    fontSize: 20,
+    lineHeight: 24,
+    color: '#1F2937',
     fontFamily: fonts.BOLD,
   },
-  dayNumberToday: {
-    color: colors.primaryDark,
+  dayNumberSelected: {
+    color: SELECTED_PURPLE,
   },
-  rewardThumbCard: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    marginTop: 8,
-    backgroundColor: '#F3F4F6',
+  calendarThumb: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    marginTop: 6,
+    backgroundColor: '#ECEFF3',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#EEF1F5',
+    borderColor: '#E2E6EC',
   },
-  rewardThumbCardClaimed: {
-    backgroundColor: '#FFF8EB',
+  calendarThumbSelected: {
+    backgroundColor: colors.white,
+    borderColor: '#DDE3F3',
   },
-  rewardThumbImage: {
+  thumbImageWrap: {
     width: '100%',
     height: '100%',
   },
+  calendarThumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  emptyThumb: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ECEFF3',
+  },
+  lockOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(15, 23, 42, 0.42)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   selectionBar: {
-    marginTop: 7,
-    width: 20,
+    marginTop: 8,
+    width: 26,
     height: 3,
     borderRadius: 999,
     backgroundColor: 'transparent',
   },
   selectionBarActive: {
-    backgroundColor: '#5D55E6',
+    backgroundColor: SELECTED_PURPLE,
+  },
+  historySection: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
   },
   sectionTitle: {
-    marginTop: 2,
-    marginBottom: 8,
-    fontSize: 15,
+    marginBottom: 6,
+    fontSize: 16,
     color: colors.text,
     fontFamily: fonts.BOLD,
-  },
-  historyScroll: {
-    flex: 1,
-  },
-  historyContent: {
-    paddingBottom: 8,
   },
   historyCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 11,
-    borderTopWidth: 1,
-    borderTopColor: '#EFF2F7',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    gap: 10,
+  },
+  todayRewardCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
     gap: 10,
   },
   historyLeft: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   historyImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: '#F4F7FC',
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#E5E7EB',
   },
   historyImageFallback: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
-    backgroundColor: colors.primarySoft,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 44,
+    height: 44,
+    borderRadius: 10,
+    backgroundColor: '#E5E7EB',
   },
   historyBody: {
     flex: 1,
   },
   historyTitle: {
-    fontSize: 12,
+    fontSize: 13,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
   historySubtitle: {
     marginTop: 2,
-    fontSize: 11,
-    color: '#475467',
+    fontSize: 12,
+    color: '#6B7280',
     fontFamily: fonts.BOLD,
   },
   historyDate: {
-    marginTop: 2,
-    fontSize: 10,
-    color: '#98A2B3',
+    marginTop: 3,
+    fontSize: 11,
+    color: '#9CA3AF',
     fontFamily: fonts.BOLD,
   },
   historyStatus: {
-    color: '#2F9E63',
-    fontSize: 11,
-    fontFamily: fonts.BOLD,
-  },
-  historyEmptyCard: {
-    flex: 1,
-    minHeight: 160,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  historyEmptyText: {
+    color: '#22A06B',
     fontSize: 12,
-    color: '#98A2B3',
     fontFamily: fonts.BOLD,
   },
-  stateCard: {
+  historyState: {
+    minHeight: 100,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 42,
-    paddingHorizontal: 18,
+    paddingVertical: 24,
+    paddingHorizontal: 16,
   },
-  stateTitle: {
-    marginTop: 12,
-    fontSize: 15,
+  historyStateTitle: {
+    marginTop: 8,
+    fontSize: 14,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
-  stateText: {
+  historyStateText: {
     marginTop: 6,
     fontSize: 12,
-    lineHeight: 18,
-    color: colors.mutedText,
+    color: '#9CA3AF',
     textAlign: 'center',
     fontFamily: fonts.BOLD,
   },
   retryButton: {
-    marginTop: 14,
+    marginTop: 12,
     borderRadius: 999,
     backgroundColor: colors.primary,
     paddingHorizontal: 18,

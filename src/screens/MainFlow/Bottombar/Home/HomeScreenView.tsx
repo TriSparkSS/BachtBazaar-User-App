@@ -39,7 +39,7 @@ import { getCurrentDeviceCoordinates, requestLocationPermission } from '../../..
 import OfferCountdownText from '../../../../components/OfferCountdownText';
 import PromoBannerCarousel from '../../../../components/PromoBannerCarousel';
 import DailyRewardsSheet from '../../../../components/DailyRewardsSheet';
-import { DailyRewardsCalendar } from '../../../../types/dailyRewards';
+import { DailyCalendarDay, DailyRewardsCalendar } from '../../../../types/dailyRewards';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min((width - 48) / 3 - 4, 118);
@@ -849,12 +849,37 @@ const HomeScreenView = () => {
 
   const rewardPreviewByDate = useMemo(
     () =>
-      Object.entries(dailyRewardsByDate).reduce<Record<string, string | undefined>>((acc, [date, calendar]) => {
-        acc[date] = calendar.entries[0]?.image;
+      Object.values(dailyRewardsByDate).reduce<Record<string, string | undefined>>((acc, calendar) => {
+        calendar.calendarDays?.forEach(day => {
+          if (day.image) {
+            acc[day.date] = day.image;
+          }
+        });
+        calendar.entries.forEach(entry => {
+          if (entry.image) {
+            acc[entry.date] = entry.image;
+          }
+        });
         return acc;
       }, {}),
     [dailyRewardsByDate],
   );
+
+  const mergedCalendarDays = useMemo(() => {
+    const dayMap = new Map<string, DailyCalendarDay>();
+
+    Object.values(dailyRewardsByDate).forEach(calendar => {
+      calendar.calendarDays?.forEach(day => {
+        dayMap.set(day.date, day);
+      });
+    });
+
+    dailyRewards?.calendarDays?.forEach(day => {
+      dayMap.set(day.date, day);
+    });
+
+    return Array.from(dayMap.values()).sort((left, right) => left.date.localeCompare(right.date));
+  }, [dailyRewards, dailyRewardsByDate]);
 
   const renderCategoryChip = (chip: CategoryChip) => {
     const isSelected = selectedCategory === chip.id;
@@ -1462,6 +1487,7 @@ const HomeScreenView = () => {
       <DailyRewardsSheet
         visible={dailyRewardsVisible}
         rewards={dailyRewards}
+        calendarDays={mergedCalendarDays}
         selectedDate={selectedDailyRewardDate}
         rewardPreviewByDate={rewardPreviewByDate}
         isLoading={isLoadingDailyRewards}
@@ -1469,6 +1495,7 @@ const HomeScreenView = () => {
         onClose={() => setDailyRewardsVisible(false)}
         onRetry={() => loadDailyRewards(selectedDailyRewardDate)}
         onDateSelect={handleDailyRewardDateSelect}
+        resolveImageUrl={shopApi.resolveImageUrl}
       />
     </View>
   );
