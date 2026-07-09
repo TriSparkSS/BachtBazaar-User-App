@@ -37,6 +37,8 @@ export const API_ENDPOINTS = {
   shopSearch: (query: string) => `/shop/search?q=${encodeURIComponent(query.trim())}`,
   shopById: (shopId: string) => `/shop/${encodeURIComponent(shopId)}`,
   shopOffers: (shopId: string) => `/shop/offers/${shopId}`,
+  dailyRewardsCalendar: (date: string) =>
+    `/shop/offers/calender?date=${encodeURIComponent(date.trim())}`,
   offerById: (offerId: string) => `/shop/offer/${encodeURIComponent(offerId)}`,
   shopLogo: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/logo`,
   shopBanner: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/banner`,

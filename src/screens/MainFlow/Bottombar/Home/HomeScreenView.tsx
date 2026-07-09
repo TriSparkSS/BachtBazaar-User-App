@@ -12,7 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -38,6 +38,8 @@ import { reverseGeocodeWithGoogle } from '../../../../utils/googleGeocoding';
 import { getCurrentDeviceCoordinates, requestLocationPermission } from '../../../../utils/deviceLocation';
 import OfferCountdownText from '../../../../components/OfferCountdownText';
 import PromoBannerCarousel from '../../../../components/PromoBannerCarousel';
+import DailyRewardsSheet from '../../../../components/DailyRewardsSheet';
+import { DailyRewardsCalendar } from '../../../../types/dailyRewards';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min((width - 48) / 3 - 4, 118);
@@ -55,6 +57,13 @@ type SidebarGroup = {
   title: string;
   items: SidebarItem[];
 };
+
+type QuickActionId =
+  | 'daily-rewards'
+  | 'nearby-coupons'
+  | 'scan-save'
+  | 'invite-earn'
+  | 'saved-offers';
 
 type CategoryChip = {
   id: string;
@@ -89,6 +98,13 @@ const PLACEHOLDER_SHOP_LOGO =
 
 const PLACEHOLDER_OFFER_IMAGE =
   'https://images.pexels.com/photos/1191531/pexels-photo-1191531.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400';
+
+const formatApiDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 const EMPTY_SEARCH_RESULTS: SearchResults = {
   query: '',
@@ -239,6 +255,10 @@ const HomeScreenView = () => {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [isPhoneVisible, setIsPhoneVisible] = useState(false);
   const [profileImageLoadError, setProfileImageLoadError] = useState(false);
+  const [dailyRewardsVisible, setDailyRewardsVisible] = useState(false);
+  const [dailyRewards, setDailyRewards] = useState<DailyRewardsCalendar | null>(null);
+  const [isLoadingDailyRewards, setIsLoadingDailyRewards] = useState(false);
+  const [dailyRewardsError, setDailyRewardsError] = useState<string | null>(null);
   const [headerAddress, setHeaderAddress] = useState(
     currentUser?.address?.trim() ? `Work - ${currentUser.address.trim()}` : 'Work - Fetching location...',
   );
@@ -254,30 +274,35 @@ const HomeScreenView = () => {
 
   const quickActions = [
     {
+      id: 'daily-rewards' as const,
       icon: 'gift-outline',
       label: 'Daily\nRewards',
       bgColor: '#FFF4E5',
       color: '#F2994A',
     },
     {
+      id: 'nearby-coupons' as const,
       icon: 'map-marker-radius-outline',
       label: 'Nearby\nCoupons',
       bgColor: '#F1EAFE',
       color: '#8B5CF6',
     },
     {
+      id: 'scan-save' as const,
       icon: 'qrcode-scan',
       label: 'Scan &\nSave',
       bgColor: '#E7F0FF',
       color: colors.primary,
     },
     {
+      id: 'invite-earn' as const,
       icon: 'account-plus-outline',
       label: 'Invite &\nEarn',
       bgColor: '#E7F8EF',
       color: '#27AE60',
     },
     {
+      id: 'saved-offers' as const,
       icon: 'bookmark-outline',
       label: 'Saved\nOffers',
       bgColor: '#FFF0EB',
@@ -305,10 +330,30 @@ const HomeScreenView = () => {
     !profileImageLoadError && currentUser?.profileImage
       ? resolveProfileImageUrl(currentUser.profileImage) ?? ''
       : '';
+  const rewardsQueryDate = useMemo(() => formatApiDate(new Date()), []);
 
   useEffect(() => {
     setProfileImageLoadError(false);
   }, [currentUser?.profileImage]);
+
+  const loadDailyRewards = useCallback(async () => {
+    try {
+      setIsLoadingDailyRewards(true);
+      setDailyRewardsError(null);
+      const result = await shopApi.fetchDailyRewardsCalendar(
+        rewardsQueryDate,
+        authTokenRef.current ?? undefined,
+      );
+      setDailyRewards(result);
+    } catch (error) {
+      setDailyRewards(null);
+      setDailyRewardsError(
+        error instanceof Error ? error.message : 'Failed to load daily rewards.',
+      );
+    } finally {
+      setIsLoadingDailyRewards(false);
+    }
+  }, [rewardsQueryDate]);
 
   useEffect(() => {
     if (!authToken || !currentUser) {
@@ -526,6 +571,14 @@ const HomeScreenView = () => {
       }
     };
   }, [selectedCategory]);
+
+  useEffect(() => {
+    if (!dailyRewardsVisible) {
+      return;
+    }
+
+    loadDailyRewards();
+  }, [dailyRewardsVisible, loadDailyRewards]);
 
   useEffect(() => {
     const fallbackAddress = currentUser?.address?.trim()
@@ -754,6 +807,17 @@ const HomeScreenView = () => {
     setCategoriesModalVisible(false);
   };
 
+  const handleQuickActionPress = (actionId: QuickActionId, label: string) => {
+    if (actionId === 'daily-rewards') {
+      setDailyRewardsVisible(true);
+      return;
+    }
+
+    showAppAlert(label.replace('\n', ' '), 'This feature will be available in an upcoming update.', [
+      { text: 'OK' },
+    ]);
+  };
+
   const renderCategoryChip = (chip: CategoryChip) => {
     const isSelected = selectedCategory === chip.id;
 
@@ -880,13 +944,7 @@ const HomeScreenView = () => {
                   key={action.label}
                   style={styles.quickActionItem}
                   activeOpacity={0.82}
-                  onPress={() =>
-                    showAppAlert(
-                      action.label.replace('\n', ' '),
-                      'This feature will be available in an upcoming update.',
-                      [{ text: 'OK' }],
-                    )
-                  }
+                  onPress={() => handleQuickActionPress(action.id, action.label)}
                 >
                   <View style={[styles.quickActionCircle, { backgroundColor: action.bgColor }]}>
                     <MaterialCommunityIcons
@@ -1362,6 +1420,15 @@ const HomeScreenView = () => {
           <Pressable style={styles.backdrop} onPress={() => setSidebarVisible(false)} />
         </View>
       </Modal>
+
+      <DailyRewardsSheet
+        visible={dailyRewardsVisible}
+        rewards={dailyRewards}
+        isLoading={isLoadingDailyRewards}
+        error={dailyRewardsError}
+        onClose={() => setDailyRewardsVisible(false)}
+        onRetry={loadDailyRewards}
+      />
     </View>
   );
 };

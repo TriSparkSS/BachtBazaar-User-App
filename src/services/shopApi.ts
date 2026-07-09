@@ -1,8 +1,10 @@
 import { ADMIN_API_BASE_URL, API_ENDPOINTS, resolveProfileImageUrl, SHOPS_API_BASE_URL } from '../config/api';
+import { DailyRewardsCalendar } from '../types/dailyRewards';
 import { OfferBanner } from '../types/offerBanner';
 import { SearchResults } from '../types/search';
 import { OfferDetail, ShopOffer, ShopWithOffers } from '../types/shop';
 import { apiRequest } from './apiClient';
+import { parseDailyRewardsCalendarResponse } from './dailyRewardsParser';
 import { parseAdminBannersResponse, parseOfferBannersResponse } from './offerBannerParser';
 import { parseOfferDetailResponse } from './offerResponseParser';
 import { parseSearchResponse } from './searchResponseParser';
@@ -28,6 +30,19 @@ export const shopApi = {
       token,
       baseUrl: SHOPS_API_BASE_URL,
     }).then(payload => parseShopOffersResponse(payload, shopId));
+  },
+
+  fetchDailyRewardsCalendar(date: string, token?: string): Promise<DailyRewardsCalendar> {
+    const normalizedDate = date.trim();
+    if (!normalizedDate) {
+      return Promise.reject(new Error('Date is required.'));
+    }
+
+    return apiRequest<unknown>(API_ENDPOINTS.dailyRewardsCalendar(normalizedDate), {
+      method: 'GET',
+      token,
+      baseUrl: SHOPS_API_BASE_URL,
+    }).then(payload => parseDailyRewardsCalendarResponse(payload, normalizedDate));
   },
 
   searchShopsProductsAndOffers(query: string, token?: string): Promise<SearchResults> {
