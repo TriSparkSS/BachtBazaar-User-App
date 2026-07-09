@@ -179,7 +179,6 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
   const history = rewards?.history ?? [];
   const visibleDates = useMemo(() => buildVisibleDates(selectedDate), [selectedDate]);
   const primaryReward = entries[0] ?? null;
-  const showEmptyState = !isLoading && !error && entries.length === 0;
 
   return (
     <>
@@ -196,105 +195,114 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              style={styles.sheetScroll}
-              contentContainerStyle={styles.sheetScrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.daysRow}
-              >
-                {visibleDates.map(dateItem => {
-                  const isSelected = selectedDate === dateItem.key;
-                  const rewardPreview = rewardPreviewByDate[dateItem.key];
-                  return (
-                    <TouchableOpacity
-                      key={dateItem.key}
-                      style={styles.dayCardWrap}
-                      activeOpacity={0.9}
-                      onPress={() => onDateSelect(dateItem.key)}
-                    >
-                      <Text style={styles.dayLabel}>{dateItem.label}</Text>
-                      <Text style={[styles.dayNumber, isSelected && styles.dayNumberToday]}>
-                        {dateItem.dayNumber}
-                      </Text>
-                      <View
-                        style={[
-                          styles.rewardThumbCard,
-                          isSelected && primaryReward?.isClaimed && styles.rewardThumbCardClaimed,
-                        ]}
-                      >
-                        {rewardPreview ? (
-                          <Image source={{ uri: rewardPreview }} style={styles.rewardThumbImage} />
-                        ) : (
-                          <MaterialCommunityIcons name="gift-outline" size={16} color="#D1A13B" />
-                        )}
-                      </View>
-                      <View style={[styles.selectionBar, isSelected && styles.selectionBarActive]} />
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+            {isLoading ? (
+              <View style={styles.stateCard}>
+                <MaterialCommunityIcons name="gift-outline" size={28} color={colors.primary} />
+                <Text style={styles.stateTitle}>Loading rewards...</Text>
+              </View>
+            ) : error ? (
+              <View style={styles.stateCard}>
+                <MaterialCommunityIcons name="alert-circle-outline" size={28} color="#D84B4B" />
+                <Text style={styles.stateTitle}>Could not load rewards</Text>
+                <Text style={styles.stateText}>{error}</Text>
+                <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.85}>
+                  <Text style={styles.retryButtonText}>Try again</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.daysRow}
+                >
+                  {visibleDates.map(dateItem => {
+                    const isSelected = selectedDate === dateItem.key;
+                    const rewardPreview = rewardPreviewByDate[dateItem.key];
+                    return (
+                      <TouchableOpacity
+                        key={dateItem.key}
+                        style={styles.dayCardWrap}
+                        activeOpacity={0.9}
+                        onPress={() => {
+                          if (isSelected && primaryReward) {
+                            setSelectedReward(primaryReward);
+                            return;
+                          }
 
-              {isLoading ? (
-                <View style={styles.stateCard}>
-                  <MaterialCommunityIcons name="gift-outline" size={28} color={colors.primary} />
-                  <Text style={styles.stateTitle}>Loading rewards...</Text>
-                </View>
-              ) : error ? (
-                <View style={styles.stateCard}>
-                  <MaterialCommunityIcons name="alert-circle-outline" size={28} color="#D84B4B" />
-                  <Text style={styles.stateTitle}>Could not load rewards</Text>
-                  <Text style={styles.stateText}>{error}</Text>
-                  <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.85}>
-                    <Text style={styles.retryButtonText}>Try again</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : showEmptyState ? (
-                <View style={styles.emptyStateBlock}>
-                  <Text style={styles.historyEmptyText}>No rewards available for this day yet.</Text>
-                </View>
-              ) : (
-                <>
-                  <Text style={styles.sectionTitle}>Claim History</Text>
-                  <View style={styles.historyList}>
-                    {history.length > 0 ? (
-                      history.map(item => (
-                        <View key={item.id} style={styles.historyCard}>
-                          <View style={styles.historyLeft}>
-                            {item.image ? (
-                              <Image source={{ uri: item.image }} style={styles.historyImage} />
-                            ) : (
-                              <View style={styles.historyImageFallback}>
-                                <MaterialCommunityIcons name="gift-outline" size={18} color={colors.primary} />
-                              </View>
-                            )}
-                            <View style={styles.historyBody}>
-                              <Text style={styles.historyStoreTitle}>{item.title}</Text>
-                              {item.subtitle ? (
-                                <Text style={styles.historyRewardTitle} numberOfLines={1}>
-                                  {item.subtitle}
-                                </Text>
-                              ) : null}
-                              {item.claimedAt ? (
-                                <Text style={styles.historyDate}>{formatClaimedDate(item.claimedAt)}</Text>
-                              ) : null}
-                            </View>
-                          </View>
-                          <Text style={styles.historyStatus}>{item.statusLabel}</Text>
+                          onDateSelect(dateItem.key);
+                        }}
+                      >
+                        <Text style={styles.dayLabel}>{dateItem.label}</Text>
+                        <Text style={[styles.dayNumber, isSelected && styles.dayNumberToday]}>
+                          {dateItem.dayNumber}
+                        </Text>
+                        <View
+                          style={[
+                            styles.rewardThumbCard,
+                            isSelected && primaryReward?.isClaimed && styles.rewardThumbCardClaimed,
+                          ]}
+                        >
+                          {rewardPreview ? (
+                            <Image source={{ uri: rewardPreview }} style={styles.rewardThumbImage} />
+                          ) : (
+                            <MaterialCommunityIcons
+                              name="gift-outline"
+                              size={16}
+                              color="#D1A13B"
+                            />
+                          )}
                         </View>
-                      ))
-                    ) : (
-                      <View style={styles.historyEmptyCardCompact}>
-                        <Text style={styles.historyEmptyText}>No claimed rewards yet.</Text>
+                        <View style={[styles.selectionBar, isSelected && styles.selectionBarActive]} />
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+
+                <Text style={styles.sectionTitle}>Claim History</Text>
+                <ScrollView
+                  style={styles.historyScroll}
+                  contentContainerStyle={styles.historyContent}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {history.length > 0 ? (
+                    history.map(item => (
+                      <View key={item.id} style={styles.historyCard}>
+                        <View style={styles.historyLeft}>
+                          {item.image ? (
+                            <Image source={{ uri: item.image }} style={styles.historyImage} />
+                          ) : (
+                            <View style={styles.historyImageFallback}>
+                              <MaterialCommunityIcons name="gift-outline" size={16} color={colors.primary} />
+                            </View>
+                          )}
+                          <View style={styles.historyBody}>
+                            <Text style={styles.historyTitle}>{item.title}</Text>
+                            {item.subtitle ? (
+                              <Text style={styles.historySubtitle} numberOfLines={1}>
+                                {item.subtitle}
+                              </Text>
+                            ) : null}
+                            {item.claimedAt ? (
+                              <Text style={styles.historyDate}>{formatClaimedDate(item.claimedAt)}</Text>
+                            ) : null}
+                          </View>
+                        </View>
+                        <Text style={styles.historyStatus}>{item.statusLabel}</Text>
                       </View>
-                    )}
-                  </View>
-                </>
-              )}
-            </ScrollView>
+                    ))
+                  ) : entries.length === 0 ? (
+                    <View style={styles.historyEmptyCard}>
+                      <Text style={styles.historyEmptyText}>No rewards available for this day yet.</Text>
+                    </View>
+                  ) : (
+                    <View style={styles.historyEmptyCard}>
+                      <Text style={styles.historyEmptyText}>No claimed rewards yet.</Text>
+                    </View>
+                  )}
+                </ScrollView>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -309,7 +317,7 @@ export default DailyRewardsSheet;
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.18)',
+    backgroundColor: 'rgba(15, 23, 42, 0.28)',
     justifyContent: 'flex-end',
   },
   dismissArea: {
@@ -317,27 +325,27 @@ const styles = StyleSheet.create({
   },
   sheet: {
     backgroundColor: colors.white,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingTop: 8,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingTop: 6,
     paddingHorizontal: 16,
-    paddingBottom: 14,
-    minHeight: 300,
-    maxHeight: '46%',
+    paddingBottom: 24,
+    minHeight: 470,
+    maxHeight: '74%',
   },
   grabber: {
     alignSelf: 'center',
-    width: 40,
-    height: 4,
+    width: 34,
+    height: 3,
     borderRadius: 999,
-    backgroundColor: '#E6EAF2',
-    marginBottom: 8,
+    backgroundColor: '#E5E7EB',
+    marginBottom: 10,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   title: {
     fontSize: 18,
@@ -345,35 +353,29 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
   },
   closeButton: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sheetScroll: {
-    flexGrow: 0,
-  },
-  sheetScrollContent: {
-    paddingBottom: 4,
-  },
   daysRow: {
     gap: 10,
-    paddingBottom: 8,
-    paddingRight: 12,
+    paddingBottom: 14,
+    paddingRight: 10,
   },
   dayCardWrap: {
-    width: 46,
+    width: 48,
     alignItems: 'center',
   },
   dayLabel: {
     fontSize: 10,
-    color: '#97A0B1',
+    color: '#A0A8B8',
     fontFamily: fonts.BOLD,
     textTransform: 'capitalize',
   },
   dayNumber: {
-    marginTop: 2,
+    marginTop: 3,
     fontSize: 18,
     color: colors.text,
     fontFamily: fonts.BOLD,
@@ -382,22 +384,19 @@ const styles = StyleSheet.create({
     color: colors.primaryDark,
   },
   rewardThumbCard: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
-    marginTop: 6,
-    backgroundColor: '#F4F5F8',
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    marginTop: 8,
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#ECEFF4',
+    borderColor: '#EEF1F5',
   },
   rewardThumbCardClaimed: {
     backgroundColor: '#FFF8EB',
-  },
-  rewardThumbCardLocked: {
-    opacity: 0.55,
   },
   rewardThumbImage: {
     width: '100%',
@@ -405,7 +404,7 @@ const styles = StyleSheet.create({
   },
   selectionBar: {
     marginTop: 7,
-    width: 18,
+    width: 20,
     height: 3,
     borderRadius: 999,
     backgroundColor: 'transparent',
@@ -414,23 +413,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#5D55E6',
   },
   sectionTitle: {
-    marginTop: 6,
+    marginTop: 2,
     marginBottom: 8,
     fontSize: 15,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
-  historyList: {
-    borderTopWidth: 1,
-    borderTopColor: '#EFF2F7',
+  historyScroll: {
+    flex: 1,
+  },
+  historyContent: {
+    paddingBottom: 8,
   },
   historyCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EFF2F7',
+    paddingVertical: 11,
+    borderTopWidth: 1,
+    borderTopColor: '#EFF2F7',
     gap: 10,
   },
   historyLeft: {
@@ -440,15 +441,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   historyImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 8,
     backgroundColor: '#F4F7FC',
   },
   historyImageFallback: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 8,
     backgroundColor: colors.primarySoft,
     alignItems: 'center',
     justifyContent: 'center',
@@ -456,20 +457,20 @@ const styles = StyleSheet.create({
   historyBody: {
     flex: 1,
   },
-  historyStoreTitle: {
+  historyTitle: {
     fontSize: 12,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
-  historyRewardTitle: {
+  historySubtitle: {
     marginTop: 2,
     fontSize: 11,
     color: '#475467',
     fontFamily: fonts.BOLD,
   },
   historyDate: {
-    marginTop: 3,
-    fontSize: 11,
+    marginTop: 2,
+    fontSize: 10,
     color: '#98A2B3',
     fontFamily: fonts.BOLD,
   },
@@ -479,29 +480,20 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
   },
   historyEmptyCard: {
-    paddingVertical: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  historyEmptyCardCompact: {
-    paddingVertical: 18,
+    flex: 1,
+    minHeight: 160,
     alignItems: 'center',
     justifyContent: 'center',
   },
   historyEmptyText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#98A2B3',
     fontFamily: fonts.BOLD,
-  },
-  emptyStateBlock: {
-    minHeight: 120,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   stateCard: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 28,
+    paddingVertical: 42,
     paddingHorizontal: 18,
   },
   stateTitle: {
@@ -533,31 +525,32 @@ const styles = StyleSheet.create({
   claimBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(15, 23, 42, 0.45)',
-    justifyContent: 'flex-end',
-    paddingHorizontal: 20,
-    paddingBottom: 170,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
   },
   claimCard: {
     width: '100%',
+    maxWidth: 320,
     borderRadius: 22,
     backgroundColor: '#6B3CF0',
     paddingHorizontal: 18,
-    paddingTop: 12,
-    paddingBottom: 16,
+    paddingTop: 14,
+    paddingBottom: 18,
   },
   claimHeader: {
     alignItems: 'center',
   },
   claimCloseButton: {
     alignSelf: 'flex-end',
-    marginBottom: 6,
+    marginBottom: 8,
   },
   qrOuter: {
-    width: 128,
-    height: 128,
+    width: 150,
+    height: 150,
     borderRadius: 12,
     backgroundColor: colors.white,
-    padding: 8,
+    padding: 10,
   },
   qrGrid: {
     flexDirection: 'row',
@@ -580,10 +573,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
   },
   claimInfoCard: {
-    marginTop: 14,
+    marginTop: 16,
     backgroundColor: colors.white,
     borderRadius: 14,
-    padding: 10,
+    padding: 12,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -604,7 +597,7 @@ const styles = StyleSheet.create({
   },
   claimTitle: {
     marginTop: 2,
-    fontSize: 15,
+    fontSize: 16,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
@@ -615,12 +608,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
   },
   claimButton: {
-    marginTop: 14,
+    marginTop: 16,
     alignSelf: 'center',
     backgroundColor: colors.white,
     borderRadius: 999,
-    paddingHorizontal: 24,
-    paddingVertical: 11,
+    paddingHorizontal: 26,
+    paddingVertical: 12,
   },
   claimButtonText: {
     fontSize: 14,
