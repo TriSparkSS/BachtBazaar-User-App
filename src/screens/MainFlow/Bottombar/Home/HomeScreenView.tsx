@@ -256,7 +256,9 @@ const HomeScreenView = () => {
   const [isPhoneVisible, setIsPhoneVisible] = useState(false);
   const [profileImageLoadError, setProfileImageLoadError] = useState(false);
   const [dailyRewardsVisible, setDailyRewardsVisible] = useState(false);
+  const [selectedDailyRewardDate, setSelectedDailyRewardDate] = useState(formatApiDate(new Date()));
   const [dailyRewards, setDailyRewards] = useState<DailyRewardsCalendar | null>(null);
+  const [dailyRewardsByDate, setDailyRewardsByDate] = useState<Record<string, DailyRewardsCalendar>>({});
   const [isLoadingDailyRewards, setIsLoadingDailyRewards] = useState(false);
   const [dailyRewardsError, setDailyRewardsError] = useState<string | null>(null);
   const [headerAddress, setHeaderAddress] = useState(
@@ -330,21 +332,24 @@ const HomeScreenView = () => {
     !profileImageLoadError && currentUser?.profileImage
       ? resolveProfileImageUrl(currentUser.profileImage) ?? ''
       : '';
-  const rewardsQueryDate = useMemo(() => formatApiDate(new Date()), []);
 
   useEffect(() => {
     setProfileImageLoadError(false);
   }, [currentUser?.profileImage]);
 
-  const loadDailyRewards = useCallback(async () => {
+  const loadDailyRewards = useCallback(async (date: string) => {
     try {
       setIsLoadingDailyRewards(true);
       setDailyRewardsError(null);
       const result = await shopApi.fetchDailyRewardsCalendar(
-        rewardsQueryDate,
+        date,
         authTokenRef.current ?? undefined,
       );
       setDailyRewards(result);
+      setDailyRewardsByDate(prev => ({
+        ...prev,
+        [date]: result,
+      }));
     } catch (error) {
       setDailyRewards(null);
       setDailyRewardsError(
@@ -353,7 +358,7 @@ const HomeScreenView = () => {
     } finally {
       setIsLoadingDailyRewards(false);
     }
-  }, [rewardsQueryDate]);
+  }, []);
 
   useEffect(() => {
     if (!authToken || !currentUser) {
@@ -577,8 +582,15 @@ const HomeScreenView = () => {
       return;
     }
 
-    loadDailyRewards();
-  }, [dailyRewardsVisible, loadDailyRewards]);
+    const cachedRewards = dailyRewardsByDate[selectedDailyRewardDate];
+    if (cachedRewards) {
+      setDailyRewards(cachedRewards);
+      setDailyRewardsError(null);
+      return;
+    }
+
+    loadDailyRewards(selectedDailyRewardDate);
+  }, [dailyRewardsVisible, selectedDailyRewardDate, dailyRewardsByDate, loadDailyRewards]);
 
   useEffect(() => {
     const fallbackAddress = currentUser?.address?.trim()
@@ -809,9 +821,35 @@ const HomeScreenView = () => {
 
   const handleQuickActionPress = (actionId: QuickActionId, label: string) => {
     if (actionId === 'daily-rewards') {
+      const today = formatApiDate(new Date());
+      setSelectedDailyRewardDate(today);
+      setDailyRewards(dailyRewardsByDate[today] ?? null);
+      setDailyRewardsError(null);
       setDailyRewardsVisible(true);
       return;
     }
+  const handleDailyRewardDateSelect = (date: string) => {
+    setSelectedDailyRewardDate(date);
+    const cachedRewards = dailyRewardsByDate[date];
+    if (cachedRewards) {
+      setDailyRewards(cachedRewards);
+      setDailyRewardsError(null);
+      return;
+    }
+
+    setDailyRewards(null);
+    setDailyRewardsError(null);
+  };
+
+  const rewardPreviewByDate = useMemo(
+    () =>
+      Object.entries(dailyRewardsByDate).reduce<Record<string, string | undefined>>((acc, [date, calendar]) => {
+        acc[date] = calendar.entries[0]?.image;
+        return acc;
+      }, {}),
+    [dailyRewardsByDate],
+  );
+
 
     showAppAlert(label.replace('\n', ' '), 'This feature will be available in an upcoming update.', [
       { text: 'OK' },
@@ -1424,10 +1462,13 @@ const HomeScreenView = () => {
       <DailyRewardsSheet
         visible={dailyRewardsVisible}
         rewards={dailyRewards}
+        selectedDate={selectedDailyRewardDate}
+        rewardPreviewByDate={rewardPreviewByDate}
         isLoading={isLoadingDailyRewards}
         error={dailyRewardsError}
         onClose={() => setDailyRewardsVisible(false)}
-        onRetry={loadDailyRewards}
+        onRetry={() => loadDailyRewards(selectedDailyRewardDate)}
+        onDateSelect={handleDailyRewardDateSelect}
       />
     </View>
   );

@@ -16,10 +16,13 @@ import { DailyRewardEntry, DailyRewardsCalendar } from '../types/dailyRewards';
 type DailyRewardsSheetProps = {
   visible: boolean;
   rewards: DailyRewardsCalendar | null;
+  selectedDate: string;
+  rewardPreviewByDate: Record<string, string | undefined>;
   isLoading: boolean;
   error: string | null;
   onClose: () => void;
   onRetry: () => void;
+  onDateSelect: (date: string) => void;
 };
 
 const QR_GRID_SIZE = 21;
@@ -38,6 +41,30 @@ const formatClaimedDate = (value?: string) => {
     day: 'numeric',
     month: 'short',
   });
+};
+
+const formatApiDate = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const buildVisibleDates = (selectedDate: string) => {
+  const baseDate = new Date(`${selectedDate}T00:00:00`);
+  const dates: Array<{ key: string; label: string; dayNumber: string }> = [];
+
+  for (let offset = -2; offset <= 4; offset += 1) {
+    const nextDate = new Date(baseDate);
+    nextDate.setDate(baseDate.getDate() + offset);
+    dates.push({
+      key: formatApiDate(nextDate),
+      label: nextDate.toLocaleDateString('en-US', { weekday: 'short' }),
+      dayNumber: nextDate.toLocaleDateString('en-US', { day: 'numeric' }),
+    });
+  }
+
+  return dates;
 };
 
 const buildQrPattern = (seed: string) => {
@@ -132,10 +159,13 @@ const RewardClaimModal = ({
 const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
   visible,
   rewards,
+  selectedDate,
+  rewardPreviewByDate,
   isLoading,
   error,
   onClose,
   onRetry,
+  onDateSelect,
 }) => {
   const [selectedReward, setSelectedReward] = useState<DailyRewardEntry | null>(null);
 
@@ -147,6 +177,8 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
 
   const entries = rewards?.entries ?? [];
   const history = rewards?.history ?? [];
+  const visibleDates = useMemo(() => buildVisibleDates(selectedDate), [selectedDate]);
+  const primaryReward = entries[0] ?? null;
 
   return (
     <>
@@ -184,39 +216,40 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={styles.daysRow}
                 >
-                  {entries.map(entry => {
-                    const isSelected = selectedReward?.id === entry.id || (!selectedReward && entry.isToday);
+                  {visibleDates.map(dateItem => {
+                    const isSelected = selectedDate === dateItem.key;
+                    const rewardPreview = rewardPreviewByDate[dateItem.key];
                     return (
                       <TouchableOpacity
-                        key={entry.id}
+                        key={dateItem.key}
                         style={styles.dayCardWrap}
                         activeOpacity={0.9}
                         onPress={() => {
-                          if (entry.isLocked) {
+                          if (isSelected && primaryReward) {
+                            setSelectedReward(primaryReward);
                             return;
                           }
 
-                          setSelectedReward(entry);
+                          onDateSelect(dateItem.key);
                         }}
                       >
-                        <Text style={styles.dayLabel}>{entry.dayLabel}</Text>
-                        <Text style={[styles.dayNumber, entry.isToday && styles.dayNumberToday]}>
-                          {entry.dayNumber}
+                        <Text style={styles.dayLabel}>{dateItem.label}</Text>
+                        <Text style={[styles.dayNumber, isSelected && styles.dayNumberToday]}>
+                          {dateItem.dayNumber}
                         </Text>
                         <View
                           style={[
                             styles.rewardThumbCard,
-                            entry.isClaimed && styles.rewardThumbCardClaimed,
-                            entry.isLocked && styles.rewardThumbCardLocked,
+                            isSelected && primaryReward?.isClaimed && styles.rewardThumbCardClaimed,
                           ]}
                         >
-                          {entry.image ? (
-                            <Image source={{ uri: entry.image }} style={styles.rewardThumbImage} />
+                          {rewardPreview ? (
+                            <Image source={{ uri: rewardPreview }} style={styles.rewardThumbImage} />
                           ) : (
                             <MaterialCommunityIcons
-                              name={entry.isClaimed ? 'check-bold' : 'gift-outline'}
+                              name="gift-outline"
                               size={16}
-                              color={entry.isClaimed ? '#2F9E63' : '#D1A13B'}
+                              color="#D1A13B"
                             />
                           )}
                         </View>
@@ -225,6 +258,33 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
                     );
                   })}
                 </ScrollView>
+
+                {entries.length > 0 ? (
+                  <TouchableOpacity
+                    style={styles.selectedRewardCard}
+                    activeOpacity={0.9}
+                    onPress={() => setSelectedReward(primaryReward)}
+                  >
+                    {primaryReward?.image ? (
+                      <Image source={{ uri: primaryReward.image }} style={styles.selectedRewardImage} />
+                    ) : (
+                      <View style={styles.selectedRewardFallback}>
+                        <MaterialCommunityIcons name="gift-outline" size={22} color={colors.primary} />
+                      </View>
+                    )}
+                    <View style={styles.selectedRewardBody}>
+                      <Text style={styles.selectedRewardTitle} numberOfLines={1}>
+                        {primaryReward?.title}
+                      </Text>
+                      {primaryReward?.subtitle ? (
+                        <Text style={styles.selectedRewardSubtitle} numberOfLines={1}>
+                          {primaryReward.subtitle}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={colors.primary} />
+                  </TouchableOpacity>
+                ) : null}
 
                 {entries.length === 0 ? (
                   <View style={styles.historyEmptyCard}>
@@ -390,6 +450,45 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontSize: 18,
     color: colors.text,
+    fontFamily: fonts.BOLD,
+  },
+  selectedRewardCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
+    backgroundColor: '#F8FAFF',
+    borderWidth: 1,
+    borderColor: '#E8EEF8',
+    padding: 12,
+    marginBottom: 14,
+  },
+  selectedRewardImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#EEF2F7',
+  },
+  selectedRewardFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedRewardBody: {
+    flex: 1,
+  },
+  selectedRewardTitle: {
+    fontSize: 14,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+  },
+  selectedRewardSubtitle: {
+    marginTop: 3,
+    fontSize: 12,
+    color: '#667085',
     fontFamily: fonts.BOLD,
   },
   historyScroll: {
