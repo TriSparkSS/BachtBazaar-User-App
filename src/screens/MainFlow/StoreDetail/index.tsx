@@ -54,10 +54,6 @@ const StoreDetail = () => {
       return bannerUri;
     }
 
-    if (isLoadingShop) {
-      return undefined;
-    }
-
     return (
       shopApi.resolveImageUrl(shop.products?.find(product => product.image)?.image) ??
       GROCERY_HERO_PLACEHOLDER

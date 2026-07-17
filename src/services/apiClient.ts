@@ -39,6 +39,10 @@ const redactForLogs = (value: unknown, key?: string): unknown => {
     return '[FormData payload]';
   }
 
+  if (typeof URLSearchParams !== 'undefined' && value instanceof URLSearchParams) {
+    return Object.fromEntries(value.entries());
+  }
+
   if (Array.isArray(value)) {
     return value.map(item => redactForLogs(item));
   }
@@ -81,7 +85,11 @@ const buildHeaders = (options: RequestOptions) => {
   };
 
   if (options.body && !(options.body instanceof FormData)) {
-    headers['Content-Type'] = 'application/json';
+    if (typeof URLSearchParams !== 'undefined' && options.body instanceof URLSearchParams) {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    } else if (typeof options.body !== 'string') {
+      headers['Content-Type'] = 'application/json';
+    }
   }
 
   if (options.token) {
@@ -134,8 +142,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       body:
         options.body == null
           ? undefined
-          : options.body instanceof FormData
-            ? options.body
+          : options.body instanceof FormData ||
+              (typeof URLSearchParams !== 'undefined' &&
+                options.body instanceof URLSearchParams) ||
+              typeof options.body === 'string'
+            ? (options.body as BodyInit)
             : JSON.stringify(options.body),
     });
   } catch (error) {

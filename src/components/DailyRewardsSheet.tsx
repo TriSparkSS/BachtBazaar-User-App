@@ -16,11 +16,12 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { colors, fonts } from '../helpers/styles';
 import { DailyCalendarDay, DailyRewardEntry, DailyRewardsCalendar } from '../types/dailyRewards';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const QR_GRID_SIZE = 21;
-const SELECTED_PURPLE = '#5D55E6';
-const CALENDAR_CARD_WIDTH = 62;
-const CALENDAR_CARD_GAP = 10;
+const ACTIVE_BLUE = '#366FE0';
+const DAY_COLUMN_WIDTH = 56;
+const DAY_COLUMN_GAP = 14;
+const REWARD_THUMB_SIZE = 48;
 
 type DailyRewardsSheetProps = {
   visible: boolean;
@@ -35,6 +36,16 @@ type DailyRewardsSheetProps = {
   onDateSelect: (date: string) => void;
   resolveImageUrl: (path?: string | null) => string | undefined;
 };
+
+const GIFT_PALETTE = [
+  { bg: '#FFF3E0', icon: '#F59E0B' },
+  { bg: '#F3E8FF', icon: '#9333EA' },
+  { bg: '#E0F2FE', icon: '#0284C7' },
+  { bg: '#FCE7F3', icon: '#DB2777' },
+  { bg: '#ECFDF5', icon: '#059669' },
+  { bg: '#FEF3C7', icon: '#D97706' },
+  { bg: '#EEF2FF', icon: '#4F46E5' },
+] as const;
 
 const formatClaimedDate = (value?: string) => {
   if (!value) {
@@ -59,21 +70,27 @@ const formatApiDate = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-const buildFallbackDates = (anchorDate: string): DailyCalendarDay[] => {
+const buildFullMonthDays = (anchorDate: string): DailyCalendarDay[] => {
   const baseDate = new Date(`${anchorDate}T00:00:00`);
-  const dates: DailyCalendarDay[] = [];
+  if (Number.isNaN(baseDate.getTime())) {
+    return buildFullMonthDays(formatApiDate(new Date()));
+  }
 
-  for (let offset = -7; offset <= 7; offset += 1) {
-    const nextDate = new Date(baseDate);
-    nextDate.setDate(baseDate.getDate() + offset);
-    dates.push({
+  const year = baseDate.getFullYear();
+  const month = baseDate.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const days: DailyCalendarDay[] = [];
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const nextDate = new Date(year, month, day);
+    days.push({
       date: formatApiDate(nextDate),
       dayLabel: nextDate.toLocaleDateString('en-US', { weekday: 'short' }),
-      dayNumber: nextDate.toLocaleDateString('en-US', { day: 'numeric' }),
+      dayNumber: String(day),
     });
   }
 
-  return dates;
+  return days;
 };
 
 const buildQrPattern = (seed: string) => {
@@ -118,6 +135,38 @@ const RewardQrVisual = ({ value }: { value: string }) => {
           <View key={`${value}-${index}`} style={[styles.qrCell, filled && styles.qrCellFilled]} />
         ))}
       </View>
+    </View>
+  );
+};
+
+const CalendarRewardThumb = ({
+  imageUri,
+  dayIndex,
+  showLock,
+}: {
+  imageUri?: string;
+  dayIndex: number;
+  showLock: boolean;
+}) => {
+  const palette = GIFT_PALETTE[dayIndex % GIFT_PALETTE.length];
+
+  return (
+    <View style={styles.rewardThumbWrap}>
+      {imageUri ? (
+        <Image source={{ uri: imageUri }} style={styles.rewardThumbImage} />
+      ) : (
+        <View style={[styles.rewardThumbFallback, { backgroundColor: palette.bg }]}>
+          <MaterialCommunityIcons name="gift" size={22} color={palette.icon} />
+        </View>
+      )}
+
+      {showLock ? (
+        <View style={styles.lockOverlay}>
+          <View style={styles.lockBadge}>
+            <MaterialCommunityIcons name="lock" size={14} color={colors.white} />
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 };
@@ -192,20 +241,23 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
   const primaryReward = entries[0] ?? null;
 
   const visibleCalendarDays = useMemo(() => {
-    const dayMap = new Map<string, DailyCalendarDay>();
+    const monthDays = buildFullMonthDays(selectedDate || todayKey);
+    const metaByDate = new Map<string, DailyCalendarDay>();
 
-    const seedDays = calendarDays.length > 0 ? calendarDays : buildFallbackDates(todayKey);
-    seedDays.forEach(day => {
-      dayMap.set(day.date, day);
+    calendarDays.forEach(day => {
+      metaByDate.set(day.date, day);
     });
 
-    return Array.from(dayMap.values())
-      .map(day => ({
+    return monthDays.map(day => {
+      const meta = metaByDate.get(day.date);
+      return {
         ...day,
-        image: day.image ?? rewardPreviewByDate[day.date],
-      }))
-      .sort((left, right) => left.date.localeCompare(right.date));
-  }, [calendarDays, rewardPreviewByDate, todayKey]);
+        image: meta?.image ?? rewardPreviewByDate[day.date] ?? day.image,
+        isLocked: meta?.isLocked ?? day.date < todayKey,
+        isClaimed: meta?.isClaimed ?? day.date < todayKey,
+      };
+    });
+  }, [calendarDays, rewardPreviewByDate, selectedDate, todayKey]);
 
   useEffect(() => {
     if (!visible) {
@@ -213,66 +265,126 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
     }
   }, [visible]);
 
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-
+  const scrollCalendarToSelected = (animated = true) => {
     const selectedIndex = visibleCalendarDays.findIndex(item => item.date === selectedDate);
     if (selectedIndex < 0) {
       return;
     }
 
-    const timer = setTimeout(() => {
-      calendarScrollRef.current?.scrollTo({
-        x: Math.max(0, selectedIndex * (CALENDAR_CARD_WIDTH + CALENDAR_CARD_GAP) - 100),
-        animated: true,
-      });
-    }, 120);
+    const itemStride = DAY_COLUMN_WIDTH + DAY_COLUMN_GAP;
+    const targetX = Math.max(
+      0,
+      selectedIndex * itemStride - (SCREEN_WIDTH / 2 - DAY_COLUMN_WIDTH / 2 - 20),
+    );
+    calendarScrollRef.current?.scrollTo({ x: targetX, animated });
+  };
 
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    const timer = setTimeout(() => scrollCalendarToSelected(true), 180);
     return () => clearTimeout(timer);
   }, [visible, selectedDate, visibleCalendarDays]);
 
-  const renderCalendarThumb = (day: DailyCalendarDay) => {
-    const imageUri = resolveImageUrl(day.image) ?? day.image;
+  const isPastSelectedDate = selectedDate < todayKey;
+  const isFutureOrToday = selectedDate >= todayKey;
 
-    if (imageUri) {
-      return (
-        <>
-          <Image source={{ uri: imageUri }} style={styles.calendarDayImage} />
-          {day.isLocked ? (
-            <View style={styles.lockOverlay}>
-              <MaterialCommunityIcons name="lock" size={14} color={colors.white} />
+  const resolveOfferStatusLabel = (rawStatus?: string, isClaimed?: boolean) => {
+    if (isClaimed || rawStatus?.toLowerCase() === 'claimed') {
+      return 'Claimed';
+    }
+
+    // Past dates: show Expired (never Available)
+    if (isPastSelectedDate) {
+      return 'Expired';
+    }
+
+    // Today / future: Available
+    if (isFutureOrToday) {
+      return rawStatus?.toLowerCase() === 'available' || !rawStatus ? 'Available' : rawStatus;
+    }
+
+    return undefined;
+  };
+
+  const renderHistoryItem = (
+    key: string,
+    title: string,
+    subtitle: string | undefined,
+    dateLabel: string | undefined,
+    statusLabel: string | undefined,
+    imageUri: string | undefined,
+    onPress?: () => void,
+  ) => {
+    const normalizedStatus = statusLabel?.toLowerCase();
+    const isClaimed = normalizedStatus === 'claimed';
+    const isExpired = normalizedStatus === 'expired';
+
+    const content = (
+      <View style={styles.historyCard}>
+        <View style={styles.historyImageWrap}>
+          {imageUri ? (
+            <Image source={{ uri: imageUri }} style={styles.historyImage} />
+          ) : (
+            <View style={styles.historyImageFallback}>
+              <MaterialCommunityIcons name="store-outline" size={20} color="#B0B8C4" />
             </View>
+          )}
+        </View>
+
+        <View style={styles.historyTextBlock}>
+          <Text style={styles.historyTitle} numberOfLines={1}>
+            {title}
+          </Text>
+          {subtitle ? (
+            <Text style={styles.historySubtitle} numberOfLines={1}>
+              {subtitle}
+            </Text>
           ) : null}
-        </>
-      );
-    }
-
-    if (day.isLocked) {
-      return (
-        <View style={styles.calendarDayLockBox}>
-          <MaterialCommunityIcons name="lock" size={16} color={colors.white} />
+          {dateLabel ? <Text style={styles.historyDate}>{dateLabel}</Text> : null}
         </View>
-      );
-    }
 
-    if (day.isClaimed || day.date < todayKey) {
+        {statusLabel ? (
+          <Text
+            style={[
+              styles.historyStatus,
+              isClaimed && styles.historyStatusClaimed,
+              isExpired && styles.historyStatusExpired,
+              !isClaimed && !isExpired && styles.historyStatusPending,
+            ]}>
+            {statusLabel}
+          </Text>
+        ) : null}
+      </View>
+    );
+
+    if (onPress) {
       return (
-        <View style={styles.calendarDayCoinBox}>
-          <MaterialCommunityIcons name="circle" size={18} color="#D4A017" />
-        </View>
+        <TouchableOpacity key={key} activeOpacity={0.85} onPress={onPress}>
+          {content}
+        </TouchableOpacity>
       );
     }
 
-    return <View style={styles.calendarDayPlaceholder} />;
+    return <View key={key}>{content}</View>;
+  };
+
+  const openClaimQrIfAllowed = (reward: DailyRewardEntry) => {
+    // Past offers are expired — do not open QR claim screen
+    if (isPastSelectedDate || reward.date < todayKey) {
+      return;
+    }
+
+    setSelectedReward(reward);
   };
 
   const renderHistoryBody = () => {
     if (isLoading) {
       return (
         <View style={styles.historyState}>
-          <ActivityIndicator size="small" color={SELECTED_PURPLE} />
+          <ActivityIndicator size="small" color={ACTIVE_BLUE} />
           <Text style={styles.historyStateText}>Loading rewards...</Text>
         </View>
       );
@@ -294,61 +406,55 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
     if (history.length > 0) {
       return history.map(item => {
         const imageUri = resolveImageUrl(item.image) ?? item.image;
-
-        return (
-          <View key={item.id} style={styles.historyCard}>
-            <View style={styles.historyLeft}>
-              {imageUri ? (
-                <Image source={{ uri: imageUri }} style={styles.historyImage} />
-              ) : (
-                <View style={styles.historyImageFallback} />
-              )}
-              <View style={styles.historyBody}>
-                <Text style={styles.historyTitle}>{item.title}</Text>
-                {item.subtitle ? (
-                  <Text style={styles.historySubtitle} numberOfLines={1}>
-                    {item.subtitle}
-                  </Text>
-                ) : null}
-                {item.claimedAt ? (
-                  <Text style={styles.historyDate}>{formatClaimedDate(item.claimedAt)}</Text>
-                ) : null}
-              </View>
-            </View>
-            <View style={styles.historyStatusPill}>
-              <Text style={styles.historyStatus}>{item.statusLabel}</Text>
-            </View>
-          </View>
+        const statusLabel = resolveOfferStatusLabel(
+          item.statusLabel,
+          item.statusLabel?.toLowerCase() === 'claimed',
+        );
+        return renderHistoryItem(
+          item.id,
+          item.title,
+          item.subtitle,
+          formatClaimedDate(item.claimedAt),
+          statusLabel,
+          imageUri,
+          // History / past items never open QR
+          undefined,
         );
       });
     }
 
     if (primaryReward) {
       const rewardImage = resolveImageUrl(primaryReward.image) ?? primaryReward.image;
-
-      return (
-        <TouchableOpacity
-          style={styles.todayRewardCard}
-          activeOpacity={0.88}
-          onPress={() => setSelectedReward(primaryReward)}
-        >
-          {rewardImage ? (
-            <Image source={{ uri: rewardImage }} style={styles.historyImage} />
-          ) : (
-            <View style={styles.historyImageFallback} />
-          )}
-          <View style={styles.historyBody}>
-            <Text style={styles.historyTitle}>{primaryReward.title}</Text>
-            {primaryReward.subtitle ? (
-              <Text style={styles.historySubtitle} numberOfLines={1}>
-                {primaryReward.subtitle}
-              </Text>
-            ) : null}
-            <Text style={styles.historyDate}>Tap to claim today&apos;s reward</Text>
-          </View>
-          <MaterialCommunityIcons name="chevron-right" size={20} color={SELECTED_PURPLE} />
-        </TouchableOpacity>
+      const statusLabel = resolveOfferStatusLabel(
+        primaryReward.isClaimed ? 'Claimed' : 'Available',
+        primaryReward.isClaimed,
       );
+      return renderHistoryItem(
+        primaryReward.id,
+        primaryReward.title,
+        primaryReward.subtitle,
+        formatClaimedDate(primaryReward.claimedAt) ||
+          (selectedDate === todayKey ? 'Today' : formatClaimedDate(selectedDate)),
+        statusLabel,
+        rewardImage,
+        isPastSelectedDate ? undefined : () => openClaimQrIfAllowed(primaryReward),
+      );
+    }
+
+    if (isPastSelectedDate && entries.length > 0) {
+      return entries.map(entry => {
+        const rewardImage = resolveImageUrl(entry.image) ?? entry.image;
+        return renderHistoryItem(
+          entry.id,
+          entry.title,
+          entry.subtitle,
+          formatClaimedDate(entry.claimedAt) || formatClaimedDate(entry.date),
+          entry.isClaimed ? 'Claimed' : 'Expired',
+          rewardImage,
+          // Past offers: no QR screen on tap
+          undefined,
+        );
+      });
     }
 
     return (
@@ -360,7 +466,12 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
 
   return (
     <>
-      <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+        onRequestClose={onClose}>
         <View style={styles.backdrop}>
           <Pressable style={styles.backdropPress} onPress={onClose} />
           <View
@@ -368,16 +479,15 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
               styles.sheet,
               {
                 height: SCREEN_HEIGHT * 0.78,
-                paddingBottom: Math.max(insets.bottom, 10),
+                paddingBottom: Math.max(insets.bottom, 16),
               },
-            ]}
-          >
+            ]}>
             <View style={styles.grabber} />
 
             <View style={styles.headerRow}>
               <Text style={styles.title}>{rewards?.title || 'Daily Rewards'}</Text>
               <TouchableOpacity onPress={onClose} style={styles.closeButton} activeOpacity={0.8}>
-                <MaterialCommunityIcons name="close" size={20} color="#9AA3B2" />
+                <MaterialCommunityIcons name="close" size={22} color="#9AA3B2" />
               </TouchableOpacity>
             </View>
 
@@ -387,22 +497,46 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.daysRow}
               style={styles.calendarScroll}
-            >
-              {visibleCalendarDays.map(day => {
+              onContentSizeChange={() => {
+                if (visible) {
+                  scrollCalendarToSelected(false);
+                }
+              }}>
+              {visibleCalendarDays.map((day, index) => {
                 const isSelected = selectedDate === day.date;
+                const isPast = day.date < todayKey;
+                const isToday = day.date === todayKey;
+                // Lock only past days — never today or future
+                const showLock = isPast || Boolean(day.isLocked && !isToday);
+                const imageUri = resolveImageUrl(day.image) ?? day.image;
 
                 return (
                   <TouchableOpacity
                     key={day.date}
-                    style={[styles.calendarDayCard, isSelected && styles.calendarDayCardSelected]}
-                    activeOpacity={0.9}
-                    onPress={() => onDateSelect(day.date)}
-                  >
-                    <Text style={[styles.calendarDayName, isSelected && styles.calendarDayNameSelected]}>
+                    style={styles.dayColumn}
+                    activeOpacity={0.85}
+                    onPress={() => onDateSelect(day.date)}>
+                    <Text
+                      style={[
+                        styles.dayLabel,
+                        isPast && styles.dayLabelPast,
+                        isSelected && styles.dayLabelSelected,
+                      ]}>
                       {day.dayLabel}
                     </Text>
-                    <Text style={styles.calendarDayNumber}>{day.dayNumber}</Text>
-                    <View style={styles.calendarDayImageBox}>{renderCalendarThumb(day)}</View>
+                    <Text
+                      style={[
+                        styles.dayNumber,
+                        isPast && styles.dayNumberPast,
+                        isSelected && styles.dayNumberSelected,
+                      ]}>
+                      {day.dayNumber}
+                    </Text>
+                    <CalendarRewardThumb
+                      imageUri={imageUri}
+                      dayIndex={index}
+                      showLock={showLock}
+                    />
                   </TouchableOpacity>
                 );
               })}
@@ -414,8 +548,7 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
               style={styles.historyScroll}
               contentContainerStyle={styles.historyContent}
               showsVerticalScrollIndicator={false}
-              nestedScrollEnabled
-            >
+              nestedScrollEnabled>
               {renderHistoryBody()}
             </ScrollView>
           </View>
@@ -437,246 +570,238 @@ export default DailyRewardsSheet;
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
     justifyContent: 'flex-end',
   },
   backdropPress: {
     ...StyleSheet.absoluteFillObject,
   },
   sheet: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     width: '100%',
-    alignSelf: 'stretch',
     backgroundColor: colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
     overflow: 'hidden',
+    elevation: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
   },
   grabber: {
     alignSelf: 'center',
-    width: 36,
+    width: 40,
     height: 4,
     borderRadius: 999,
     backgroundColor: '#D1D5DB',
-    marginTop: 8,
-    marginBottom: 12,
+    marginTop: 10,
+    marginBottom: 14,
   },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
-    paddingHorizontal: 16,
+    marginBottom: 18,
+    paddingHorizontal: 20,
   },
   title: {
-    fontSize: 17,
-    color: colors.text,
+    fontSize: 18,
+    color: '#1F2937',
     fontFamily: fonts.BOLD,
-    letterSpacing: -0.2,
+    letterSpacing: -0.3,
   },
   closeButton: {
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
   calendarScroll: {
-    marginBottom: 2,
+    marginBottom: 6,
+    flexGrow: 0,
   },
   daysRow: {
-    paddingLeft: 16,
-    paddingRight: 16,
-    gap: CALENDAR_CARD_GAP,
+    paddingHorizontal: 20,
+    gap: DAY_COLUMN_GAP,
+    alignItems: 'flex-start',
   },
-  calendarDayCard: {
-    width: CALENDAR_CARD_WIDTH,
-    height: 102,
-    borderRadius: 12,
-    backgroundColor: colors.white,
+  dayColumn: {
+    width: DAY_COLUMN_WIDTH,
     alignItems: 'center',
-    paddingTop: 8,
-    paddingBottom: 8,
-    borderWidth: 1,
-    borderColor: '#ECECEC',
   },
-  calendarDayCardSelected: {
-    backgroundColor: '#E8EDF7',
-    borderColor: '#D5DDF0',
-    shadowColor: '#5D55E6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  calendarDayName: {
-    fontSize: 11,
-    color: '#9CA3AF',
+  dayLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#6B7280',
     fontFamily: fonts.BOLD,
     textTransform: 'capitalize',
   },
-  calendarDayNameSelected: {
-    color: '#6B7280',
+  dayLabelPast: {
+    color: '#9CA3AF',
   },
-  calendarDayNumber: {
-    marginTop: 1,
-    marginBottom: 6,
-    fontSize: 21,
-    lineHeight: 24,
+  dayLabelSelected: {
+    color: ACTIVE_BLUE,
+  },
+  dayNumber: {
+    marginTop: 2,
+    marginBottom: 8,
+    fontSize: 18,
+    lineHeight: 22,
     color: '#111827',
     fontFamily: fonts.BOLD,
   },
-  calendarDayImageBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 8,
+  dayNumberPast: {
+    color: '#9CA3AF',
+  },
+  dayNumberSelected: {
+    color: ACTIVE_BLUE,
+  },
+  rewardThumbWrap: {
+    width: REWARD_THUMB_SIZE,
+    height: REWARD_THUMB_SIZE,
+    borderRadius: 10,
     overflow: 'hidden',
-    backgroundColor: '#DDE1E8',
-  },
-  calendarDayImage: {
-    width: '100%',
-    height: '100%',
-  },
-  calendarDayPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#DDE1E8',
-  },
-  calendarDayLockBox: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#4B5563',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  calendarDayCoinBox: {
-    width: '100%',
-    height: '100%',
     backgroundColor: '#F3F4F6',
+  },
+  rewardThumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  rewardThumbFallback: {
+    width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
   },
   lockOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    backgroundColor: 'rgba(17, 24, 39, 0.38)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  lockBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(17, 24, 39, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sectionTitle: {
-    marginTop: 14,
-    marginBottom: 4,
-    paddingHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 8,
+    paddingHorizontal: 20,
     fontSize: 16,
-    color: colors.text,
+    color: '#1F2937',
     fontFamily: fonts.BOLD,
+    letterSpacing: -0.2,
   },
   historyScroll: {
     flex: 1,
   },
   historyContent: {
     flexGrow: 1,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
   },
   historyCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    gap: 10,
-  },
-  todayRewardCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-    gap: 10,
-  },
-  historyLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E5E7EB',
     gap: 12,
   },
-  historyImage: {
-    width: 44,
-    height: 44,
+  historyImageWrap: {
+    width: 48,
+    height: 48,
     borderRadius: 10,
+    overflow: 'hidden',
     backgroundColor: '#E5E7EB',
+  },
+  historyImage: {
+    width: '100%',
+    height: '100%',
   },
   historyImageFallback: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: '100%',
+    height: '100%',
     backgroundColor: '#E5E7EB',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  historyBody: {
+  historyTextBlock: {
     flex: 1,
+    gap: 2,
   },
   historyTitle: {
-    fontSize: 13,
-    color: colors.text,
+    fontSize: 14,
+    color: '#111827',
     fontFamily: fonts.BOLD,
   },
   historySubtitle: {
-    marginTop: 2,
     fontSize: 12,
     color: '#6B7280',
     fontFamily: fonts.BOLD,
   },
   historyDate: {
-    marginTop: 3,
+    marginTop: 1,
     fontSize: 11,
     color: '#9CA3AF',
     fontFamily: fonts.BOLD,
   },
-  historyStatusPill: {
-    backgroundColor: '#E7F6EF',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
   historyStatus: {
-    color: '#1F8B4C',
-    fontSize: 11,
+    fontSize: 13,
     fontFamily: fonts.BOLD,
   },
+  historyStatusClaimed: {
+    color: '#22C55E',
+  },
+  historyStatusExpired: {
+    color: '#EF4444',
+  },
+  historyStatusPending: {
+    color: ACTIVE_BLUE,
+  },
   historyState: {
-    minHeight: 100,
+    minHeight: 120,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 24,
-    paddingHorizontal: 16,
+    paddingVertical: 32,
+    paddingHorizontal: 20,
+    gap: 8,
   },
   historyStateTitle: {
-    marginTop: 8,
     fontSize: 14,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
   historyStateText: {
-    marginTop: 6,
-    fontSize: 12,
+    fontSize: 13,
     color: '#9CA3AF',
     textAlign: 'center',
     fontFamily: fonts.BOLD,
+    lineHeight: 18,
   },
   retryButton: {
-    marginTop: 12,
+    marginTop: 8,
     borderRadius: 999,
     backgroundColor: colors.primary,
-    paddingHorizontal: 18,
+    paddingHorizontal: 20,
     paddingVertical: 10,
   },
   retryButtonText: {
     color: colors.white,
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: fonts.BOLD,
   },
   claimBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    backgroundColor: 'rgba(15, 23, 42, 0.5)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 28,
@@ -684,11 +809,11 @@ const styles = StyleSheet.create({
   claimCard: {
     width: '100%',
     maxWidth: 320,
-    borderRadius: 22,
-    backgroundColor: '#6B3CF0',
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 18,
+    borderRadius: 24,
+    backgroundColor: ACTIVE_BLUE,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
   },
   claimHeader: {
     alignItems: 'center',
@@ -700,7 +825,7 @@ const styles = StyleSheet.create({
   qrOuter: {
     width: 150,
     height: 150,
-    borderRadius: 12,
+    borderRadius: 14,
     backgroundColor: colors.white,
     padding: 10,
   },
@@ -719,24 +844,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#121826',
   },
   claimScanText: {
-    marginTop: 10,
+    marginTop: 12,
     color: colors.white,
-    fontSize: 12,
+    fontSize: 13,
     fontFamily: fonts.BOLD,
   },
   claimInfoCard: {
-    marginTop: 16,
+    marginTop: 18,
     backgroundColor: colors.white,
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: 16,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   claimThumb: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     backgroundColor: '#EEF2F7',
   },
   claimInfoBody: {
@@ -754,22 +879,22 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
   },
   claimValidity: {
-    marginTop: 2,
+    marginTop: 3,
     fontSize: 11,
     color: '#B42318',
     fontFamily: fonts.BOLD,
   },
   claimButton: {
-    marginTop: 16,
+    marginTop: 18,
     alignSelf: 'center',
     backgroundColor: colors.white,
     borderRadius: 999,
-    paddingHorizontal: 26,
-    paddingVertical: 12,
+    paddingHorizontal: 32,
+    paddingVertical: 13,
   },
   claimButtonText: {
-    fontSize: 14,
-    color: '#5E34E7',
+    fontSize: 15,
+    color: ACTIVE_BLUE,
     fontFamily: fonts.BOLD,
   },
 });

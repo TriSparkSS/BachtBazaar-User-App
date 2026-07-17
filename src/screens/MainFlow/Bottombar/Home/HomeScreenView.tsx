@@ -122,10 +122,10 @@ const sidebarIconPalette: Record<string, string> = {
   Shop: '#D9E8FF',
   Delivery: '#D8F1E4',
   'Discover Product': '#E8E0FF',
-  'Local offers (Today`s)': '#FDE0EC',
+  'Local offers (Today)': '#FDE0EC',
   'Bacht Wallet': '#FFF0C7',
-  'Saving Summery': '#DFF4FF',
-  'Bachar Target': '#E5DEFF',
+  'Saving Summary': '#DFF4FF',
+  'Bachat Target': '#E5DEFF',
   'Tips & Tricks': '#EAF5FF',
   'My coupons': '#FBE4FF',
   'Saved Stores': '#DFF7EC',
@@ -134,6 +134,7 @@ const sidebarIconPalette: Record<string, string> = {
   'Edit Profile': '#E7F7D8',
   Notification: '#E8F0FF',
   'Delete account': '#FFE5E5',
+  'Create request': '#E0F2FE',
 };
 
 const sidebarIconTint: Record<string, string> = {
@@ -141,10 +142,10 @@ const sidebarIconTint: Record<string, string> = {
   Shop: '#366FE0',
   Delivery: '#2E8B57',
   'Discover Product': '#6C4CCF',
-  'Local offers (Today`s)': '#C1487C',
+  'Local offers (Today)': '#C1487C',
   'Bacht Wallet': '#A16B00',
-  'Saving Summery': '#1174A6',
-  'Bachar Target': '#6343D8',
+  'Saving Summary': '#1174A6',
+  'Bachat Target': '#6343D8',
   'Tips & Tricks': '#2E6FB8',
   'My coupons': '#A63DBA',
   'Saved Stores': '#2D8B5F',
@@ -153,6 +154,7 @@ const sidebarIconTint: Record<string, string> = {
   'Edit Profile': '#5E9631',
   Notification: '#4E73D8',
   'Delete account': '#D84B4B',
+  'Create request': '#0284C7',
 };
 
 const sidebarMciIcons: Record<AppIconName, string> = {
@@ -184,6 +186,7 @@ const sidebarMciIcons: Record<AppIconName, string> = {
   'edit-profile': 'account-edit-outline',
   notification: 'bell-badge-outline',
   'delete-account': 'delete-outline',
+  'create-request': 'handshake-outline',
   reward: 'gift-outline',
   'nearby-coupons': 'map-marker-radius-outline',
   'scan-save': 'qrcode-scan',
@@ -200,18 +203,19 @@ const sidebarGroups: SidebarGroup[] = [
     title: 'Home',
     items: [
       { icon: 'overview', label: 'Overview' },
+      { icon: 'create-request', label: 'Create request' },
       { icon: 'shop', label: 'Shop' },
       { icon: 'delivery', label: 'Delivery' },
       { icon: 'discover-product', label: 'Discover Product' },
-      { icon: 'offers', label: 'Local offers (Today`s)' },
+      { icon: 'offers', label: 'Local offers (Today)' },
     ],
   },
   {
     title: 'Saving & Tools',
     items: [
       { icon: 'wallet', label: 'Bacht Wallet' },
-      { icon: 'saving-summary', label: 'Saving Summery' },
-      { icon: 'target', label: 'Bachar Target' },
+      { icon: 'saving-summary', label: 'Saving Summary' },
+      { icon: 'target', label: 'Bachat Target' },
     ],
   },
   {
@@ -784,8 +788,19 @@ const HomeScreenView = () => {
     );
   };
 
+  const openCreateRequest = () => {
+    setSidebarVisible(false);
+    const parentNavigation = navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    parentNavigation?.navigate('CreateRequestForm');
+  };
+
   const handleSidebarItemPress = (label: string) => {
     setSelectedSidebarItem(label);
+
+    if (label === 'Create request') {
+      openCreateRequest();
+      return;
+    }
 
     if (label === 'Edit Profile') {
       openProfileSetup();

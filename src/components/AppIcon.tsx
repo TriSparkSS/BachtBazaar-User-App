@@ -31,6 +31,7 @@ export type AppIconName =
   | 'edit-profile'
   | 'notification'
   | 'delete-account'
+  | 'create-request'
   | 'reward'
   | 'nearby-coupons'
   | 'scan-save'
@@ -70,6 +71,7 @@ const iconMap: Record<AppIconName, string> = {
   'edit-profile': 'account-edit-outline',
   notification: 'bell-badge-outline',
   'delete-account': 'delete-outline',
+  'create-request': 'handshake-outline',
   reward: 'gift-outline',
   'nearby-coupons': 'map-marker-radius-outline',
   'scan-save': 'qrcode-scan',

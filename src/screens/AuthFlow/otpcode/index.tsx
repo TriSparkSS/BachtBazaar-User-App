@@ -89,12 +89,17 @@ const OTPCode = () => {
         return;
       }
 
+      const signupResponse = response as {
+        userId: string;
+        sessionToken: string;
+      };
+
       // @ts-ignore
       navigation.navigate('Forgot', {
         flow: 'signup-password',
         phoneNumber: pendingAuth.normalizedPhone,
-        userId: response.userId,
-        sessionToken: response.sessionToken,
+        userId: signupResponse.userId,
+        sessionToken: signupResponse.sessionToken,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to verify OTP.';

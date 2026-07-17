@@ -230,24 +230,30 @@ const normalizeHistoryItem = (value: unknown): DailyRewardHistoryItem | null => 
     return null;
   }
 
-  const title = pickString(
-    value.title,
+  const shopName = pickString(value.shopName, value.shop_name, value.merchantName, value.merchant_name);
+  const offerTitle = pickString(
     value.offerTitle,
     value.offer_title,
     value.rewardTitle,
     value.reward_title,
-    value.shopName,
-    value.shop_name,
+    value.title,
+    value.name,
   );
+  const title = shopName ?? offerTitle;
 
   if (!title) {
     return null;
   }
 
+  const subtitle =
+    shopName && offerTitle && shopName !== offerTitle
+      ? offerTitle
+      : pickString(value.subtitle, value.description, value.offerDescription, value.offer_description);
+
   return {
     id: pickString(value._id, value.id, value.offerId, value.offer_id, title)!,
     title,
-    subtitle: pickString(value.subtitle, value.description, value.offerDescription, value.offer_description),
+    subtitle,
     claimedAt: pickString(value.claimedAt, value.claimed_at, value.date, value.historyDate, value.history_date),
     image: resolveRewardImage(value),
     statusLabel: pickString(value.statusLabel, value.status_label, value.status) ?? 'Claimed',

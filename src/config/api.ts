@@ -43,6 +43,7 @@ export const API_ENDPOINTS = {
   shopLogo: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/logo`,
   shopBanner: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/banner`,
   categories: '/others/categories',
+  createBestRequest: '/best-request/create',
   offerBanners: (categoryId: string) =>
     `/shop/offers/banners?category=${encodeURIComponent(categoryId.trim())}`,
   adminBannerActiveFeed: '/adminbanners/active-feed',
