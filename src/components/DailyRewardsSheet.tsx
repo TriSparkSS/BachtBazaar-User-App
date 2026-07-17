@@ -233,6 +233,41 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
     return () => clearTimeout(timer);
   }, [visible, selectedDate, visibleCalendarDays]);
 
+  const renderCalendarThumb = (day: DailyCalendarDay) => {
+    const imageUri = resolveImageUrl(day.image) ?? day.image;
+
+    if (imageUri) {
+      return (
+        <>
+          <Image source={{ uri: imageUri }} style={styles.calendarDayImage} />
+          {day.isLocked ? (
+            <View style={styles.lockOverlay}>
+              <MaterialCommunityIcons name="lock" size={14} color={colors.white} />
+            </View>
+          ) : null}
+        </>
+      );
+    }
+
+    if (day.isLocked) {
+      return (
+        <View style={styles.calendarDayLockBox}>
+          <MaterialCommunityIcons name="lock" size={16} color={colors.white} />
+        </View>
+      );
+    }
+
+    if (day.isClaimed || day.date < todayKey) {
+      return (
+        <View style={styles.calendarDayCoinBox}>
+          <MaterialCommunityIcons name="circle" size={18} color="#D4A017" />
+        </View>
+      );
+    }
+
+    return <View style={styles.calendarDayPlaceholder} />;
+  };
+
   const renderHistoryBody = () => {
     if (isLoading) {
       return (
@@ -327,71 +362,61 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
     <>
       <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
         <View style={styles.backdrop}>
-          <Pressable style={styles.dismissArea} onPress={onClose} />
+          <Pressable style={styles.backdropPress} onPress={onClose} />
           <View
             style={[
               styles.sheet,
               {
-                minHeight: SCREEN_HEIGHT * 0.68,
-                maxHeight: SCREEN_HEIGHT * 0.92,
-                paddingBottom: Math.max(insets.bottom, 8),
+                height: SCREEN_HEIGHT * 0.78,
+                paddingBottom: Math.max(insets.bottom, 10),
               },
             ]}
           >
+            <View style={styles.grabber} />
+
+            <View style={styles.headerRow}>
+              <Text style={styles.title}>{rewards?.title || 'Daily Rewards'}</Text>
+              <TouchableOpacity onPress={onClose} style={styles.closeButton} activeOpacity={0.8}>
+                <MaterialCommunityIcons name="close" size={20} color="#9AA3B2" />
+              </TouchableOpacity>
+            </View>
+
             <ScrollView
-              showsVerticalScrollIndicator={false}
-              bounces
-              contentContainerStyle={styles.sheetScrollContent}
+              ref={calendarScrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.daysRow}
+              style={styles.calendarScroll}
             >
-              <View style={styles.grabber} />
+              {visibleCalendarDays.map(day => {
+                const isSelected = selectedDate === day.date;
 
-              <View style={styles.headerRow}>
-                <Text style={styles.title}>{rewards?.title || 'Daily Rewards'}</Text>
-                <TouchableOpacity onPress={onClose} style={styles.closeButton} activeOpacity={0.8}>
-                  <MaterialCommunityIcons name="close" size={20} color="#9AA3B2" />
-                </TouchableOpacity>
-              </View>
+                return (
+                  <TouchableOpacity
+                    key={day.date}
+                    style={[styles.calendarDayCard, isSelected && styles.calendarDayCardSelected]}
+                    activeOpacity={0.9}
+                    onPress={() => onDateSelect(day.date)}
+                  >
+                    <Text style={[styles.calendarDayName, isSelected && styles.calendarDayNameSelected]}>
+                      {day.dayLabel}
+                    </Text>
+                    <Text style={styles.calendarDayNumber}>{day.dayNumber}</Text>
+                    <View style={styles.calendarDayImageBox}>{renderCalendarThumb(day)}</View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
 
-              <ScrollView
-                ref={calendarScrollRef}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.daysRow}
-                style={styles.calendarScroll}
-              >
-                {visibleCalendarDays.map(day => {
-                  const isSelected = selectedDate === day.date;
-                  const imageUri = resolveImageUrl(day.image) ?? day.image;
-                  const isLocked = Boolean(day.isLocked || day.date < todayKey);
+            <Text style={styles.sectionTitle}>Claim History</Text>
 
-                  return (
-                    <TouchableOpacity
-                      key={day.date}
-                      style={[styles.calendarDayCard, isSelected && styles.calendarDayCardSelected]}
-                      activeOpacity={0.9}
-                      onPress={() => onDateSelect(day.date)}
-                    >
-                      <Text style={styles.calendarDayName}>{day.dayLabel}</Text>
-                      <Text style={styles.calendarDayNumber}>{day.dayNumber}</Text>
-                      <View style={styles.calendarDayImageBox}>
-                        {imageUri ? (
-                          <Image source={{ uri: imageUri }} style={styles.calendarDayImage} />
-                        ) : null}
-                        {isLocked ? (
-                          <View style={styles.lockOverlay}>
-                            <MaterialCommunityIcons name="lock" size={16} color={colors.white} />
-                          </View>
-                        ) : null}
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-
-              <View style={styles.historySection}>
-                <Text style={styles.sectionTitle}>Claim History</Text>
-                {renderHistoryBody()}
-              </View>
+            <ScrollView
+              style={styles.historyScroll}
+              contentContainerStyle={styles.historyContent}
+              showsVerticalScrollIndicator={false}
+              nestedScrollEnabled
+            >
+              {renderHistoryBody()}
             </ScrollView>
           </View>
         </View>
@@ -415,19 +440,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.35)',
     justifyContent: 'flex-end',
   },
-  dismissArea: {
-    flex: 1,
+  backdropPress: {
+    ...StyleSheet.absoluteFillObject,
   },
   sheet: {
     width: '100%',
+    alignSelf: 'stretch',
     backgroundColor: colors.white,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     overflow: 'hidden',
-  },
-  sheetScrollContent: {
-    flexGrow: 1,
-    paddingBottom: 12,
   },
   grabber: {
     alignSelf: 'center',
@@ -458,7 +480,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   calendarScroll: {
-    marginBottom: 4,
+    marginBottom: 2,
   },
   daysRow: {
     paddingLeft: 16,
@@ -467,15 +489,23 @@ const styles = StyleSheet.create({
   },
   calendarDayCard: {
     width: CALENDAR_CARD_WIDTH,
-    minHeight: 114,
+    height: 102,
     borderRadius: 12,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: colors.white,
     alignItems: 'center',
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderWidth: 1,
+    borderColor: '#ECECEC',
   },
   calendarDayCardSelected: {
-    backgroundColor: '#E4EAF6',
+    backgroundColor: '#E8EDF7',
+    borderColor: '#D5DDF0',
+    shadowColor: '#5D55E6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    elevation: 2,
   },
   calendarDayName: {
     fontSize: 11,
@@ -483,11 +513,14 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
     textTransform: 'capitalize',
   },
+  calendarDayNameSelected: {
+    color: '#6B7280',
+  },
   calendarDayNumber: {
-    marginTop: 2,
-    marginBottom: 8,
-    fontSize: 22,
-    lineHeight: 26,
+    marginTop: 1,
+    marginBottom: 6,
+    fontSize: 21,
+    lineHeight: 24,
     color: '#111827',
     fontFamily: fonts.BOLD,
   },
@@ -495,12 +528,31 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 8,
-    backgroundColor: '#DDE1E8',
     overflow: 'hidden',
+    backgroundColor: '#DDE1E8',
   },
   calendarDayImage: {
     width: '100%',
     height: '100%',
+  },
+  calendarDayPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#DDE1E8',
+  },
+  calendarDayLockBox: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#4B5563',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  calendarDayCoinBox: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#F3F4F6',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   lockOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -508,15 +560,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  historySection: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-  },
   sectionTitle: {
-    marginBottom: 6,
+    marginTop: 14,
+    marginBottom: 4,
+    paddingHorizontal: 16,
     fontSize: 16,
     color: colors.text,
     fontFamily: fonts.BOLD,
+  },
+  historyScroll: {
+    flex: 1,
+  },
+  historyContent: {
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
   historyCard: {
     flexDirection: 'row',
