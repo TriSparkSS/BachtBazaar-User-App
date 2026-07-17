@@ -19,6 +19,8 @@ import { DailyCalendarDay, DailyRewardEntry, DailyRewardsCalendar } from '../typ
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const QR_GRID_SIZE = 21;
 const SELECTED_PURPLE = '#5D55E6';
+const CALENDAR_CARD_WIDTH = 62;
+const CALENDAR_CARD_GAP = 10;
 
 type DailyRewardsSheetProps = {
   visible: boolean;
@@ -223,53 +225,13 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
 
     const timer = setTimeout(() => {
       calendarScrollRef.current?.scrollTo({
-        x: Math.max(0, selectedIndex * 72 - 100),
+        x: Math.max(0, selectedIndex * (CALENDAR_CARD_WIDTH + CALENDAR_CARD_GAP) - 100),
         animated: true,
       });
     }, 120);
 
     return () => clearTimeout(timer);
   }, [visible, selectedDate, visibleCalendarDays]);
-
-  const renderCalendarThumb = (day: DailyCalendarDay, isSelected: boolean) => {
-    const imageUri = resolveImageUrl(day.image) ?? day.image;
-
-    if (imageUri) {
-      return (
-        <View style={styles.thumbImageWrap}>
-          <Image source={{ uri: imageUri }} style={styles.calendarThumbImage} />
-          {day.isLocked ? (
-            <View style={styles.lockOverlay}>
-              <MaterialCommunityIcons name="lock" size={14} color={colors.white} />
-            </View>
-          ) : null}
-        </View>
-      );
-    }
-
-    if (day.isLocked || day.date < todayKey) {
-      return (
-        <View style={styles.thumbImageWrap}>
-          <View style={styles.emptyThumb}>
-            <MaterialCommunityIcons name="circle" size={16} color="#D4A017" />
-          </View>
-          <View style={styles.lockOverlay}>
-            <MaterialCommunityIcons name="lock" size={14} color={colors.white} />
-          </View>
-        </View>
-      );
-    }
-
-    return (
-      <View style={styles.emptyThumb}>
-        <MaterialCommunityIcons
-          name="gift-outline"
-          size={18}
-          color={isSelected ? '#E8A317' : '#C9A227'}
-        />
-      </View>
-    );
-  };
 
   const renderHistoryBody = () => {
     if (isLoading) {
@@ -318,7 +280,9 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
                 ) : null}
               </View>
             </View>
-            <Text style={styles.historyStatus}>{item.statusLabel}</Text>
+            <View style={styles.historyStatusPill}>
+              <Text style={styles.historyStatus}>{item.statusLabel}</Text>
+            </View>
           </View>
         );
       });
@@ -397,23 +361,28 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
               >
                 {visibleCalendarDays.map(day => {
                   const isSelected = selectedDate === day.date;
+                  const imageUri = resolveImageUrl(day.image) ?? day.image;
+                  const isLocked = Boolean(day.isLocked || day.date < todayKey);
+
                   return (
                     <TouchableOpacity
                       key={day.date}
-                      style={[styles.dayCard, isSelected && styles.dayCardSelected]}
+                      style={[styles.calendarDayCard, isSelected && styles.calendarDayCardSelected]}
                       activeOpacity={0.9}
                       onPress={() => onDateSelect(day.date)}
                     >
-                      <Text style={[styles.dayLabel, isSelected && styles.dayLabelSelected]}>
-                        {day.dayLabel}
-                      </Text>
-                      <Text style={[styles.dayNumber, isSelected && styles.dayNumberSelected]}>
-                        {day.dayNumber}
-                      </Text>
-                      <View style={[styles.calendarThumb, isSelected && styles.calendarThumbSelected]}>
-                        {renderCalendarThumb(day, isSelected)}
+                      <Text style={styles.calendarDayName}>{day.dayLabel}</Text>
+                      <Text style={styles.calendarDayNumber}>{day.dayNumber}</Text>
+                      <View style={styles.calendarDayImageBox}>
+                        {imageUri ? (
+                          <Image source={{ uri: imageUri }} style={styles.calendarDayImage} />
+                        ) : null}
+                        {isLocked ? (
+                          <View style={styles.lockOverlay}>
+                            <MaterialCommunityIcons name="lock" size={16} color={colors.white} />
+                          </View>
+                        ) : null}
                       </View>
-                      <View style={[styles.selectionBar, isSelected && styles.selectionBarActive]} />
                     </TouchableOpacity>
                   );
                 })}
@@ -494,84 +463,50 @@ const styles = StyleSheet.create({
   daysRow: {
     paddingLeft: 16,
     paddingRight: 16,
-    gap: 8,
+    gap: CALENDAR_CARD_GAP,
   },
-  dayCard: {
-    width: 64,
+  calendarDayCard: {
+    width: CALENDAR_CARD_WIDTH,
+    minHeight: 114,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F6',
     alignItems: 'center',
-    paddingTop: 8,
-    paddingBottom: 8,
-    borderRadius: 14,
-    backgroundColor: 'transparent',
+    paddingTop: 10,
+    paddingBottom: 10,
   },
-  dayCardSelected: {
-    backgroundColor: '#EEF2FF',
+  calendarDayCardSelected: {
+    backgroundColor: '#E4EAF6',
   },
-  dayLabel: {
+  calendarDayName: {
     fontSize: 11,
     color: '#9CA3AF',
     fontFamily: fonts.BOLD,
     textTransform: 'capitalize',
   },
-  dayLabelSelected: {
-    color: SELECTED_PURPLE,
-  },
-  dayNumber: {
+  calendarDayNumber: {
     marginTop: 2,
-    fontSize: 20,
-    lineHeight: 24,
-    color: '#1F2937',
+    marginBottom: 8,
+    fontSize: 22,
+    lineHeight: 26,
+    color: '#111827',
     fontFamily: fonts.BOLD,
   },
-  dayNumberSelected: {
-    color: SELECTED_PURPLE,
-  },
-  calendarThumb: {
-    width: 48,
-    height: 48,
-    borderRadius: 10,
-    marginTop: 6,
-    backgroundColor: '#ECEFF3',
-    alignItems: 'center',
-    justifyContent: 'center',
+  calendarDayImageBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
+    backgroundColor: '#DDE1E8',
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#E2E6EC',
   },
-  calendarThumbSelected: {
-    backgroundColor: colors.white,
-    borderColor: '#DDE3F3',
-  },
-  thumbImageWrap: {
+  calendarDayImage: {
     width: '100%',
     height: '100%',
-  },
-  calendarThumbImage: {
-    width: '100%',
-    height: '100%',
-  },
-  emptyThumb: {
-    width: '100%',
-    height: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#ECEFF3',
   },
   lockOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.42)',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  selectionBar: {
-    marginTop: 8,
-    width: 26,
-    height: 3,
-    borderRadius: 999,
-    backgroundColor: 'transparent',
-  },
-  selectionBarActive: {
-    backgroundColor: SELECTED_PURPLE,
   },
   historySection: {
     paddingHorizontal: 16,
@@ -638,9 +573,15 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     fontFamily: fonts.BOLD,
   },
+  historyStatusPill: {
+    backgroundColor: '#E7F6EF',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
   historyStatus: {
-    color: '#22A06B',
-    fontSize: 12,
+    color: '#1F8B4C',
+    fontSize: 11,
     fontFamily: fonts.BOLD,
   },
   historyState: {
