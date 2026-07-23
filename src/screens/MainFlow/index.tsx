@@ -2,6 +2,7 @@ import BottomBar from './Bottombar';
 import StoreDetail from './StoreDetail';
 import OfferDetail from './OfferDetail';
 import CreateRequestForm from './CreateRequest';
+import CreateRequestOffers from './CreateRequest/CreateRequestOffers';
 import CreateRequestSearching from './CreateRequest/CreateRequestSearching';
 import CreateRequestResults from './CreateRequest/CreateRequestResults';
 
@@ -10,6 +11,7 @@ export default {
 	StoreDetail,
 	OfferDetail,
 	CreateRequestForm,
+	CreateRequestOffers,
 	CreateRequestSearching,
 	CreateRequestResults,
 };

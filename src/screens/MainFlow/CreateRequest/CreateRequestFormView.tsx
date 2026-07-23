@@ -29,6 +29,7 @@ type CreateRequestFormViewProps = {
   categories: Category[];
   isLoadingCategories?: boolean;
   isSubmitting?: boolean;
+  showHeader?: boolean;
   resolveCategoryImageUrl: (path?: string | null) => string | undefined;
   onBack: () => void;
   onSubmit: (payload: CreateRequestFormParams) => void | Promise<void>;
@@ -54,6 +55,12 @@ const categoryFallbackIcon = (label: string): string => {
   if (name.includes('fashion') || name.includes('cloth') || name.includes('apparel')) {
     return 'tshirt-crew-outline';
   }
+  if (name.includes('mobile') || name.includes('phone')) {
+    return 'cellphone';
+  }
+  if (name.includes('tv') || name.includes('electron')) {
+    return 'television';
+  }
   if (name.includes('daily') || name.includes('grocery') || name.includes('need')) {
     return 'basket-outline';
   }
@@ -66,11 +73,11 @@ const categoryFallbackIcon = (label: string): string => {
   if (name.includes('jewel')) {
     return 'diamond-stone';
   }
-  if (name.includes('home') || name.includes('kitchen')) {
-    return 'sofa-outline';
+  if (name.includes('home') || name.includes('kitchen') || name.includes('fridge')) {
+    return 'fridge-outline';
   }
-  if (name.includes('electron')) {
-    return 'laptop';
+  if (name.includes('ac') || name.includes('air')) {
+    return 'air-conditioner';
   }
   return 'shape-outline';
 };
@@ -80,6 +87,7 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
   categories,
   isLoadingCategories = false,
   isSubmitting = false,
+  showHeader = true,
   resolveCategoryImageUrl,
   onBack,
   onSubmit,
@@ -130,12 +138,10 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
     if (!canSubmit || isSubmitting) {
       return;
     }
-
     if (!effectiveCategoryId) {
       showAppAlert('Category required', 'Please select a category to continue.');
       return;
     }
-
     onSubmit({
       product: product.trim(),
       category: selectedCategory?.label || selectedCategory?.value || 'General',
@@ -146,22 +152,37 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
     });
   };
 
+  const urgencyIconColor = (id: RequestUrgency, selected: boolean) => {
+    if (selected) {
+      return colors.white;
+    }
+    if (id === 'today') {
+      return FLASH;
+    }
+    if (id === 'soon') {
+      return PRIMARY;
+    }
+    return '#8B95A7';
+  };
+
   return (
-    <View style={styles.root}>
-      <SafeAreaView edges={['top']} style={styles.headerSafe}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onBack} style={styles.backBtn} activeOpacity={0.8} hitSlop={8}>
-            <MaterialCommunityIcons name="arrow-left" size={24} color={colors.white} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Request Best Deal</Text>
-          <View style={styles.backBtn} />
-        </View>
-      </SafeAreaView>
+    <View style={[styles.root, !showHeader && styles.rootEmbedded]}>
+      {showHeader ? (
+        <SafeAreaView edges={['top']} style={styles.headerSafe}>
+          <View style={styles.header}>
+            <TouchableOpacity onPress={onBack} style={styles.backBtn} activeOpacity={0.85}>
+              <MaterialCommunityIcons name="arrow-left" size={22} color={colors.white} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Request Best Deal</Text>
+            <View style={styles.backBtn} />
+          </View>
+        </SafeAreaView>
+      ) : null}
 
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.sheet}>
+        <View style={[styles.sheet, !showHeader && styles.sheetEmbedded]}>
           <ScrollView
             style={styles.flex}
             contentContainerStyle={styles.scrollContent}
@@ -171,7 +192,7 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
             <View style={styles.inputBox}>
               <TextInput
                 style={styles.input}
-                placeholder="e.g., iPhone 15 Pro, Samsung TV..."
+                placeholder="e.g., iPhone 15 Pro, Samsung S23"
                 placeholderTextColor="#B0B7C3"
                 value={product}
                 onChangeText={setProduct}
@@ -183,7 +204,7 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
                 onPress={() =>
                   showAppAlert('Voice', 'Voice input will be available soon.', [{ text: 'OK' }])
                 }>
-                <MaterialCommunityIcons name="microphone" size={17} color={MIC} />
+                <MaterialCommunityIcons name="microphone" size={18} color={MIC} />
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.trailIcon}
@@ -193,13 +214,13 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
                     { text: 'OK' },
                   ])
                 }>
-                <MaterialCommunityIcons name="camera" size={17} color={CAM} />
+                <MaterialCommunityIcons name="camera" size={18} color={CAM} />
               </TouchableOpacity>
             </View>
 
             {priceHint ? (
               <View style={styles.aiCard}>
-                <MaterialCommunityIcons name="robot-happy-outline" size={18} color="#1B7A3D" />
+                <MaterialCommunityIcons name="lightbulb-on" size={16} color="#1B7A3D" />
                 <Text style={styles.aiText}>
                   AI Insight: Average price for {product.trim()} nearby is ₹
                   {priceHint.min.toLocaleString('en-IN')}
@@ -230,17 +251,19 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
                       activeOpacity={0.85}
                       onPress={() => setCategoryId(item.id)}
                       style={[styles.catCard, selected && styles.catCardSelected]}>
-                      {imageUri ? (
-                        <Image source={{ uri: imageUri }} style={styles.catImage} />
-                      ) : (
-                        <MaterialCommunityIcons
-                          name={categoryFallbackIcon(label)}
-                          size={18}
-                          color={selected ? PRIMARY : '#6B7280'}
-                        />
-                      )}
+                      <View style={[styles.catIcon, selected && styles.catIconSelected]}>
+                        {imageUri ? (
+                          <Image source={{ uri: imageUri }} style={styles.catImage} />
+                        ) : (
+                          <MaterialCommunityIcons
+                            name={categoryFallbackIcon(label)}
+                            size={18}
+                            color={selected ? PRIMARY : '#5B6475'}
+                          />
+                        )}
+                      </View>
                       <Text
-                        numberOfLines={2}
+                        numberOfLines={1}
                         style={[styles.catLabel, selected && styles.catLabelSelected]}>
                         {label}
                       </Text>
@@ -268,20 +291,17 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
             <View style={styles.urgencyRow}>
               {URGENCY.map(item => {
                 const selected = urgency === item.id;
-                const iconColor = selected
-                  ? colors.white
-                  : item.id === 'today'
-                    ? FLASH
-                    : item.id === 'soon'
-                      ? PRIMARY
-                      : '#8B95A7';
                 return (
                   <TouchableOpacity
                     key={item.id}
                     activeOpacity={0.88}
                     onPress={() => setUrgency(item.id)}
                     style={[styles.urgencyCard, selected && styles.urgencyCardOn]}>
-                    <MaterialCommunityIcons name={item.icon} size={18} color={iconColor} />
+                    <MaterialCommunityIcons
+                      name={item.icon}
+                      size={20}
+                      color={urgencyIconColor(item.id, selected)}
+                    />
                     <Text
                       numberOfLines={2}
                       style={[styles.urgencyText, selected && styles.urgencyTextOn]}>
@@ -293,7 +313,7 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
             </View>
 
             <Text style={styles.label}>Delivery Location</Text>
-            <View style={styles.locationRow}>
+            <View style={styles.locationBox}>
               <MaterialCommunityIcons name="map-marker" size={18} color={PIN} />
               <Text style={styles.locationText} numberOfLines={2}>
                 {location || 'Add delivery address'}
@@ -303,8 +323,8 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
                 disabled={isDetectingLocation}
                 hitSlop={10}
                 activeOpacity={0.7}>
-                <Text style={styles.editText}>
-                  {isDetectingLocation ? '...' : 'Edit'}
+                <Text style={styles.detectText}>
+                  {isDetectingLocation ? 'Detecting...' : 'Detect'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -339,6 +359,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: PRIMARY,
   },
+  rootEmbedded: {
+    backgroundColor: 'transparent',
+  },
   flex: {
     flex: 1,
   },
@@ -346,31 +369,35 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY,
   },
   header: {
-    height: 56,
+    height: 54,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
+    paddingHorizontal: 8,
   },
   backBtn: {
-    width: 44,
-    height: 44,
+    width: 42,
+    height: 42,
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
     flex: 1,
     textAlign: 'center',
-    fontSize: 18,
+    fontSize: 17,
     color: colors.white,
     fontFamily: fonts.BOLD,
-    letterSpacing: 0.1,
   },
   sheet: {
     flex: 1,
     backgroundColor: colors.white,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     overflow: 'hidden',
+  },
+  sheetEmbedded: {
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    backgroundColor: colors.white,
   },
   scrollContent: {
     paddingHorizontal: 18,
@@ -378,136 +405,136 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   label: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#8A93A6',
+    fontSize: 13,
+    color: '#7A8499',
     fontFamily: fonts.BOLD,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   inputBox: {
-    minHeight: 44,
-    borderRadius: 12,
+    minHeight: 50,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#E4E8F0',
-    backgroundColor: '#FBFCFD',
-    paddingLeft: 12,
-    paddingRight: 4,
+    borderColor: '#E5E9F2',
+    backgroundColor: '#FAFBFD',
+    paddingLeft: 14,
+    paddingRight: 6,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
   },
   input: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: colors.text,
     fontFamily: fonts.BOLD,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   budgetInput: {
-    paddingLeft: 2,
+    paddingLeft: 4,
   },
   trailIcon: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rupee: {
-    fontSize: 13,
+    fontSize: 15,
     color: '#9AA3B2',
     fontFamily: fonts.BOLD,
-    marginRight: 2,
   },
   aiCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 8,
     backgroundColor: '#EAF8EF',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     marginTop: -8,
-    marginBottom: 16,
+    marginBottom: 18,
   },
   aiText: {
     flex: 1,
-    fontSize: 11,
-    lineHeight: 15,
+    fontSize: 12,
+    lineHeight: 17,
     color: '#1B5E20',
     fontFamily: fonts.BOLD,
   },
   catLoading: {
-    height: 64,
+    height: 72,
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
   },
   catRow: {
-    gap: 8,
+    gap: 10,
     paddingBottom: 2,
-    marginBottom: 16,
+    marginBottom: 18,
   },
   catCard: {
-    width: 86,
-    minHeight: 68,
-    borderRadius: 12,
+    width: 78,
+    alignItems: 'center',
+    gap: 8,
+  },
+  catCardSelected: {},
+  catIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: '#F3F5F9',
-    borderWidth: 1.2,
+    borderWidth: 1.5,
     borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 10,
-    gap: 6,
+    overflow: 'hidden',
   },
-  catCardSelected: {
-    backgroundColor: '#EEF4FF',
+  catIconSelected: {
+    backgroundColor: colors.primarySoft,
     borderColor: PRIMARY,
   },
   catImage: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
+    width: 28,
+    height: 28,
+    borderRadius: 8,
   },
   catLabel: {
-    fontSize: 10,
-    lineHeight: 13,
-    textAlign: 'center',
+    fontSize: 11,
     color: '#5B6475',
     fontFamily: fonts.BOLD,
+    textAlign: 'center',
   },
   catLabelSelected: {
     color: PRIMARY,
   },
   urgencyRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
+    gap: 10,
+    marginBottom: 18,
   },
   urgencyCard: {
     flex: 1,
-    minHeight: 72,
-    borderRadius: 12,
+    minHeight: 84,
+    borderRadius: 16,
     backgroundColor: colors.white,
-    borderWidth: 1.2,
-    borderColor: '#E4E8F0',
+    borderWidth: 1.5,
+    borderColor: '#E5E9F2',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
-    paddingVertical: 10,
-    gap: 6,
+    paddingHorizontal: 6,
+    gap: 8,
   },
   urgencyCardOn: {
     backgroundColor: PRIMARY,
     borderColor: PRIMARY,
     shadowColor: PRIMARY,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 4,
   },
   urgencyText: {
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 11,
+    lineHeight: 14,
     textAlign: 'center',
     color: '#4B5565',
     fontFamily: fonts.BOLD,
@@ -515,42 +542,50 @@ const styles = StyleSheet.create({
   urgencyTextOn: {
     color: colors.white,
   },
-  locationRow: {
+  locationBox: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 8,
-    marginBottom: 6,
+    minHeight: 50,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E9F2',
+    backgroundColor: '#FAFBFD',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginBottom: 8,
   },
   locationText: {
     flex: 1,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 18,
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
-  editText: {
+  detectText: {
     fontSize: 12,
     color: PRIMARY,
     fontFamily: fonts.BOLD,
-    marginTop: 1,
   },
   footer: {
     paddingHorizontal: 18,
-    paddingTop: 6,
-    paddingBottom: 6,
+    paddingTop: 10,
+    paddingBottom: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#EEF1F6',
     backgroundColor: colors.white,
   },
   cta: {
-    height: 48,
-    borderRadius: 24,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: PRIMARY,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: PRIMARY,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.22,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.28,
+    shadowRadius: 14,
+    elevation: 5,
   },
   ctaOff: {
     backgroundColor: '#9BB6F0',
@@ -558,16 +593,13 @@ const styles = StyleSheet.create({
     elevation: 0,
   },
   ctaText: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.white,
     fontFamily: fonts.BOLD,
-    letterSpacing: 0.2,
   },
   hint: {
-    marginTop: 8,
-    marginBottom: 2,
+    marginTop: 10,
     fontSize: 11,
-    lineHeight: 14,
     textAlign: 'center',
     color: '#9AA3B2',
     fontFamily: fonts.BOLD,

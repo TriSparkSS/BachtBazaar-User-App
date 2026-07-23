@@ -44,6 +44,12 @@ export const API_ENDPOINTS = {
   shopBanner: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/banner`,
   categories: '/others/categories',
   createBestRequest: '/best-request/create',
+  myBestRequests: '/best-request/my-requests',
+  cancelBestRequest: (requestId: string) =>
+    `/best-request/cancel/${encodeURIComponent(requestId.trim())}`,
+  merchantBidHistory: '/merchant-bids/merchant/history',
+  merchantBidsForUserRequest: (requestId: string) =>
+    `/merchant-bids/user/request/${encodeURIComponent(requestId.trim())}`,
   offerBanners: (categoryId: string) =>
     `/shop/offers/banners?category=${encodeURIComponent(categoryId.trim())}`,
   adminBannerActiveFeed: '/adminbanners/active-feed',
