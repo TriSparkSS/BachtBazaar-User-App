@@ -1,0 +1,521 @@
+import {
+  DailyCalendarDay,
+  DailyRewardEntry,
+  DailyRewardHistoryItem,
+  DailyRewardsCalendar,
+} from '../types/dailyRewards';
+import { encodeOfferQrValue } from '../helpers/offerQrCode';
+import { shouldShowInCalendarList } from '../utils/offerDisplayType';
+import { resolveShopMediaFromApiValue } from './shopResponseParser';
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value && typeof value === 'object' && !Array.isArray(value));
+
+const pickString = (...values: unknown[]): string | undefined => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim();
+    }
+
+    if (typeof value === 'number' && !Number.isNaN(value)) {
+      return String(value);
+    }
+  }
+
+  return undefined;
+};
+
+const pickBoolean = (...values: unknown[]): boolean | undefined => {
+  for (const value of values) {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value === 'number') {
+      return value !== 0;
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['true', '1', 'yes'].includes(normalized)) {
+        return true;
+      }
+
+      if (['false', '0', 'no', 'locked', 'inactive', 'unavailable'].includes(normalized)) {
+        return false;
+      }
+    }
+  }
+
+  return undefined;
+};
+
+const isRedeemedStatus = (value: unknown): boolean => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value !== 'string') {
+    return false;
+  }
+  const normalized = value.trim().toLowerCase();
+  return (
+    normalized.includes('redeem') ||
+    normalized.includes('claimed') ||
+    normalized.includes('completed') ||
+    normalized === 'used'
+  );
+};
+
+const pickNumber = (...values: unknown[]): number | undefined => {
+  for (const value of values) {
+    if (typeof value === 'number' && !Number.isNaN(value)) {
+      return value;
+    }
+
+    if (typeof value === 'string') {
+      const normalized = Number(value.trim());
+      if (!Number.isNaN(normalized)) {
+        return normalized;
+      }
+    }
+  }
+
+  return undefined;
+};
+
+const formatDayLabel = (date: Date) =>
+  date.toLocaleDateString('en-US', { weekday: 'short' });
+
+const formatDayNumber = (date: Date) =>
+  date.toLocaleDateString('en-US', { day: 'numeric' });
+
+const normalizeDate = (value: unknown, fallbackDate: string): string => {
+  const rawValue = pickString(value);
+  if (!rawValue) {
+    return fallbackDate;
+  }
+
+  const parsed = new Date(rawValue);
+  if (Number.isNaN(parsed.getTime())) {
+    return fallbackDate;
+  }
+
+  return parsed.toISOString().slice(0, 10);
+};
+
+const parseDate = (value: string) => {
+  const parsed = new Date(`${value}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+};
+
+const resolveRewardImage = (value: Record<string, unknown>) =>
+  resolveShopMediaFromApiValue(
+    value.image ??
+      value.thumbnail ??
+      value.icon ??
+      value.photo ??
+      value.offerImage ??
+      value.offer_image,
+  );
+
+const normalizeRewardEntry = (
+  value: unknown,
+  selectedDate: string,
+  index: number,
+): DailyRewardEntry | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const shopRecord = isRecord(value.shop) ? value.shop : undefined;
+  const locationRecord = isRecord(value.location) ? value.location : undefined;
+  const entryDate = normalizeDate(
+    value.date ?? value.rewardDate ?? value.reward_date ?? value.dayDate ?? value.day_date,
+    selectedDate,
+  );
+  const parsedDate = parseDate(entryDate);
+  const title =
+    pickString(
+      value.title,
+      value.offerTitle,
+      value.offer_title,
+      value.rewardTitle,
+      value.reward_title,
+      value.name,
+      value.shopName,
+      value.shop_name,
+    ) ?? `Reward ${index + 1}`;
+  const subtitle = pickString(
+    value.shopName,
+    value.shop_name,
+    shopRecord?.shopName,
+    shopRecord?.name,
+    value.merchantName,
+    value.merchant_name,
+    value.subtitle,
+    value.description,
+    value.offerDescription,
+    value.offer_description,
+  );
+  const claimedAt = pickString(value.claimedAt, value.claimed_at, value.historyDate, value.history_date);
+  const rawStatus = pickString(value.status, value.statusLabel, value.status_label, value.offerStatus);
+  const isClaimed =
+    pickBoolean(value.isClaimed, value.is_claimed, value.claimed) ??
+    isRedeemedStatus(rawStatus) ??
+    false;
+  const isLocked = pickBoolean(value.isLocked, value.is_locked, value.locked) ?? false;
+  const isToday =
+    pickBoolean(value.isToday, value.is_today, value.today, value.current) ?? entryDate === selectedDate;
+  const isAvailable =
+    pickBoolean(value.isAvailable, value.is_available, value.available, value.canClaim, value.can_claim) ??
+    (!isLocked && !isClaimed);
+
+  const minimumPurchaseAmount = pickNumber(
+    value.minimumPurchaseAmount,
+    value.minimum_purchase_amount,
+  );
+  const shopLatitude = pickNumber(
+    shopRecord?.latitude,
+    Array.isArray(locationRecord?.coordinates) ? locationRecord.coordinates[1] : undefined,
+  );
+  const shopLongitude = pickNumber(
+    shopRecord?.longitude,
+    Array.isArray(locationRecord?.coordinates) ? locationRecord.coordinates[0] : undefined,
+  );
+  const offerId = pickString(value.offerId, value.offer_id, value._id, value.id) || '';
+  const description = pickString(
+    value.description,
+    value.offerDescription,
+    value.offer_description,
+  );
+  const discountBadge = pickString(value.discountBadge, value.discount_badge);
+  const startDate = pickString(value.startDate, value.start_date);
+  const endDate = pickString(value.endDate, value.end_date);
+  const image = resolveRewardImage(value);
+  const offerType = pickString(
+    value.offerType,
+    value.offer_type,
+    value.displayType,
+    value.display_type,
+    isRecord(value.offer_type_id) ? value.offer_type_id.label : undefined,
+    isRecord(value.offerTypeId) ? value.offerTypeId.label : undefined,
+  );
+  const displayType = pickString(value.displayType, value.display_type);
+  const shopId = pickString(
+    value.shopId,
+    value.shop_id,
+    shopRecord?._id,
+    shopRecord?.id,
+  );
+  const merchantId = pickString(
+    value.merchantId,
+    value.merchant_id,
+    isRecord(shopRecord?.merchantId) ? shopRecord?.merchantId._id : shopRecord?.merchantId,
+    isRecord(shopRecord?.merchant) ? shopRecord?.merchant._id : shopRecord?.merchant,
+    isRecord(value.merchant) ? value.merchant._id : value.merchant,
+  );
+  const shopName = pickString(
+    shopRecord?.shopName,
+    shopRecord?.name,
+    value.shopName,
+    value.shop_name,
+  );
+  const apiQrValue = pickString(
+    value.qrValue,
+    value.qr_value,
+    value.code,
+    value.offerCode,
+    value.offer_code,
+  );
+  // Prefer a structured client payload so merchantId / offerId / offerType are never dropped.
+  // userId is injected at display time from the logged-in session.
+  const qrPayload = encodeOfferQrValue({
+    id: offerId,
+    offerId,
+    merchantId,
+    shopId,
+    title,
+    description,
+    discountBadge,
+    minimumPurchaseAmount,
+    startDate,
+    endDate,
+    thumbnail: image,
+    offerType,
+    displayType,
+    shopName,
+    isActive: !isClaimed,
+  });
+
+  return {
+    id: pickString(value._id, value.id, value.offerId, value.offer_id, `${entryDate}-${index}`)!,
+    shopId,
+    offerId,
+    merchantId,
+    date: entryDate,
+    dayLabel:
+      pickString(value.dayLabel, value.day_label, value.dayName, value.day_name) ??
+      formatDayLabel(parsedDate),
+    dayNumber:
+      pickString(value.dayNumber, value.day_number, value.dateNumber, value.date_number) ??
+      formatDayNumber(parsedDate),
+    monthLabel: pickString(value.monthLabel, value.month_label),
+    title,
+    subtitle,
+    description,
+    image,
+    qrValue: apiQrValue || qrPayload,
+    qrImage: pickString(value.qrImage, value.qr_image),
+    isClaimed,
+    isToday,
+    isLocked,
+    isAvailable,
+    claimedAt,
+    validText:
+      pickString(value.validText, value.valid_text, value.validity, value.validityText) ??
+      (pickString(value.endDate, value.end_date)
+        ? `Valid till ${new Date(
+            pickString(value.endDate, value.end_date)!,
+          ).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+        : 'Valid today only'),
+    discountBadge: pickString(value.discountBadge, value.discount_badge),
+    minimumPurchaseAmount,
+    distanceKm: pickNumber(value.distanceKm, value.distance_km),
+    startDate: pickString(value.startDate, value.start_date),
+    endDate: pickString(value.endDate, value.end_date),
+    shopName,
+    shopAddress: pickString(shopRecord?.address, value.address),
+    shopCity: pickString(shopRecord?.city, value.city),
+    shopLatitude,
+    shopLongitude,
+    offerType,
+    displayType,
+    statusLabel: isClaimed ? 'Redeem' : pickString(rawStatus) || (isAvailable ? 'Available' : undefined),
+  };
+};
+
+const normalizeCalendarDay = (
+  value: unknown,
+  fallbackDate: string,
+): DailyCalendarDay | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const entryDate = normalizeDate(
+    value.date ?? value.rewardDate ?? value.reward_date ?? value.dayDate ?? value.day_date,
+    fallbackDate,
+  );
+  const parsedDate = parseDate(entryDate);
+
+  return {
+    date: entryDate,
+    dayLabel:
+      pickString(value.dayLabel, value.day_label, value.dayName, value.day_name) ??
+      formatDayLabel(parsedDate),
+    dayNumber:
+      pickString(value.dayNumber, value.day_number, value.dateNumber, value.date_number) ??
+      formatDayNumber(parsedDate),
+    image: resolveRewardImage(value),
+    isLocked: pickBoolean(value.isLocked, value.is_locked, value.locked) ?? false,
+    isClaimed:
+      pickBoolean(value.isClaimed, value.is_claimed, value.claimed) ??
+      isRedeemedStatus(value.status) ??
+      false,
+  };
+};
+
+const unwrapCalendarDaysList = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (!isRecord(payload)) {
+    return [];
+  }
+
+  const root = isRecord(payload.data) ? payload.data : payload;
+
+  for (const key of [
+    'calendar',
+    'calender',
+    'days',
+    'calendarDays',
+    'calendar_days',
+    'week',
+    'dates',
+  ]) {
+    const value = root[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    if (isRecord(value)) {
+      for (const nestedKey of ['days', 'items', 'calendar', 'entries', 'dates']) {
+        const nested = value[nestedKey];
+        if (Array.isArray(nested)) {
+          return nested;
+        }
+      }
+    }
+  }
+
+  return [];
+};
+
+const normalizeHistoryItem = (value: unknown): DailyRewardHistoryItem | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const shopName = pickString(value.shopName, value.shop_name, value.merchantName, value.merchant_name);
+  const offerTitle = pickString(
+    value.offerTitle,
+    value.offer_title,
+    value.rewardTitle,
+    value.reward_title,
+    value.title,
+    value.name,
+  );
+  const title = shopName ?? offerTitle;
+
+  if (!title) {
+    return null;
+  }
+
+  const subtitle =
+    shopName && offerTitle && shopName !== offerTitle
+      ? offerTitle
+      : pickString(value.subtitle, value.description, value.offerDescription, value.offer_description);
+
+  return {
+    id: pickString(value._id, value.id, value.offerId, value.offer_id, title)!,
+    title,
+    subtitle,
+    claimedAt: pickString(value.claimedAt, value.claimed_at, value.date, value.historyDate, value.history_date),
+    image: resolveRewardImage(value),
+    statusLabel: (() => {
+      const raw = pickString(value.statusLabel, value.status_label, value.status);
+      if (isRedeemedStatus(raw) || isRedeemedStatus(value.isClaimed) || isRedeemedStatus(value.claimed)) {
+        return 'Redeem';
+      }
+      return raw ?? 'Redeem';
+    })(),
+  };
+};
+
+const unwrapEntryList = (payload: unknown): unknown[] => {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (!isRecord(payload)) {
+    return [];
+  }
+
+  for (const key of [
+    'data',
+    'entries',
+    'calendar',
+    'offers',
+    'rewards',
+    'items',
+    'result',
+  ]) {
+    const value = payload[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    if (isRecord(value)) {
+      for (const nestedKey of ['entries', 'offers', 'rewards', 'items', 'days', 'calendar']) {
+        const nested = value[nestedKey];
+        if (Array.isArray(nested)) {
+          return nested;
+        }
+      }
+    }
+  }
+
+  return [];
+};
+
+const unwrapHistoryList = (payload: unknown): unknown[] => {
+  if (!isRecord(payload)) {
+    return [];
+  }
+
+  for (const key of ['history', 'claimHistory', 'claim_history', 'claimed', 'claimedRewards']) {
+    const value = payload[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+
+    if (isRecord(value)) {
+      for (const nestedKey of ['history', 'items', 'list']) {
+        const nested = value[nestedKey];
+        if (Array.isArray(nested)) {
+          return nested;
+        }
+      }
+    }
+  }
+
+  return [];
+};
+
+export const parseDailyRewardsCalendarResponse = (
+  payload: unknown,
+  selectedDate: string,
+): DailyRewardsCalendar => {
+  const root = isRecord(payload) && isRecord(payload.data) ? payload.data : payload;
+  // Calendar sheet only shows calendar display-type offers (not banner / all / regular).
+  const entries = unwrapEntryList(root)
+    .filter(shouldShowInCalendarList)
+    .map((item, index) => normalizeRewardEntry(item, selectedDate, index))
+    .filter((entry): entry is DailyRewardEntry => Boolean(entry));
+  const history = unwrapHistoryList(root)
+    .map(item => normalizeHistoryItem(item))
+    .filter((item): item is DailyRewardHistoryItem => Boolean(item));
+
+  const derivedHistory =
+    history.length > 0
+      ? history
+      : entries
+          .filter(entry => entry.isClaimed)
+          .map(entry => ({
+            id: `${entry.id}-history`,
+            title: entry.subtitle || entry.title,
+            subtitle: entry.title,
+            claimedAt: entry.claimedAt || entry.date,
+            image: entry.image,
+            statusLabel: 'Redeem',
+          }));
+
+  const parsedCalendarDays = unwrapCalendarDaysList(root)
+    .map(item => normalizeCalendarDay(item, selectedDate))
+    .filter((day): day is DailyCalendarDay => Boolean(day));
+
+  const calendarDays =
+    parsedCalendarDays.length > 0
+      ? parsedCalendarDays
+      : entries.map(entry => ({
+          date: entry.date,
+          dayLabel: entry.dayLabel,
+          dayNumber: entry.dayNumber,
+          image: entry.image,
+          isLocked: entry.isLocked,
+          isClaimed: entry.isClaimed,
+        }));
+
+  return {
+    title: pickString(
+      isRecord(root) ? root.title : undefined,
+      isRecord(root) ? root.heading : undefined,
+    ) ?? 'Daily Rewards',
+    selectedDate,
+    calendarDays,
+    entries,
+    history: derivedHistory,
+  };
+};

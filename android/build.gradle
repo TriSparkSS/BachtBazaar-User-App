@@ -1,0 +1,52 @@
+buildscript {
+    ext {
+        buildToolsVersion = "36.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 36
+        targetSdkVersion = 36
+        ndkVersion = "27.1.12297006"
+        kotlinVersion = "2.1.20"
+        // Keep location on 20.x so FusedLocationProviderClient stays a class.
+        // play-services-location 21+ changed it to an interface and crashes
+        // react-native-geolocation-service with IncompatibleClassChangeError.
+        playServicesLocationVersion = "20.0.0"
+        googlePlayServicesVersion = "20.0.0"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("com.google.gms:google-services:4.4.2")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"
+
+allprojects {
+    configurations.configureEach {
+        resolutionStrategy {
+            force "com.google.android.gms:play-services-location:20.0.0"
+        }
+    }
+}
+
+subprojects { subproject ->
+    subproject.plugins.withId("com.android.library") {
+        def androidExt = subproject.extensions.findByName("android")
+
+        if (androidExt != null) {
+            androidExt.defaultConfig {
+                externalNativeBuild {
+                    cmake {
+                        arguments "-DANDROID_STL=c++_shared",
+                                "-DCMAKE_CXX_STANDARD_LIBRARIES=-lc++_shared -latomic -lm"
+                    }
+                }
+            }
+        }
+    }
+}
