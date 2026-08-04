@@ -69,19 +69,15 @@ export const API_ENDPOINTS = {
     `/offer-wishlist/${encodeURIComponent(type)}`,
   addWishlistItem: (type: 'offers' | 'shops' | 'products', id: string) =>
     `/offer-wishlist/${encodeURIComponent(type)}/${encodeURIComponent(id.trim())}`,
-  removeWishlistItem: (type: 'offers' | 'shops' | 'products', id: string) => {
-    // Backend remove route uses singular type segment (offer/shop/product).
-    const singular =
-      type === 'offers' ? 'offer' : type === 'shops' ? 'shop' : 'product';
-    return `/offer-wishlist/remove/${encodeURIComponent(singular)}/${encodeURIComponent(id.trim())}`;
-  },
+  removeWishlistItem: (type: 'offers' | 'shops' | 'products', id: string) =>
+    `/offer-wishlist/remove/${encodeURIComponent(type)}/${encodeURIComponent(id.trim())}`,
   clearOfferWishlist: '/offer-wishlist/clear',
   // Legacy aliases kept for any leftover callers
   offerWishlist: '/offer-wishlist/offers',
   addOfferWishlist: (offerId: string) =>
     `/offer-wishlist/offers/${encodeURIComponent(offerId.trim())}`,
   removeOfferWishlist: (offerId: string) =>
-    `/offer-wishlist/remove/offer/${encodeURIComponent(offerId.trim())}`,
+    `/offer-wishlist/remove/offers/${encodeURIComponent(offerId.trim())}`,
   offerBanners: (categoryId: string) =>
     `/shop/offers/banners?category=${encodeURIComponent(categoryId.trim())}`,
   adminBannerActiveFeed: '/adminbanners/active-feed',

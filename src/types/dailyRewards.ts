@@ -32,6 +32,7 @@ export interface DailyRewardEntry {
   offerType?: string;
   displayType?: string;
   statusLabel?: string;
+  isWishlisted?: boolean;
 }
 
 export interface DailyRewardHistoryItem {

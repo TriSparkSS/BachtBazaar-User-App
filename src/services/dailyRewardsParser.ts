@@ -5,7 +5,6 @@ import {
   DailyRewardsCalendar,
 } from '../types/dailyRewards';
 import { encodeOfferQrValue } from '../helpers/offerQrCode';
-import { shouldShowInCalendarList } from '../utils/offerDisplayType';
 import { resolveShopMediaFromApiValue } from './shopResponseParser';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -201,6 +200,8 @@ const normalizeRewardEntry = (
     isRecord(value.offerTypeId) ? value.offerTypeId.label : undefined,
   );
   const displayType = pickString(value.displayType, value.display_type);
+  const isWishlisted =
+    pickBoolean(value.isWishlisted, value.is_wishlisted, value.wishlisted) ?? false;
   const shopId = pickString(
     value.shopId,
     value.shop_id,
@@ -291,7 +292,30 @@ const normalizeRewardEntry = (
     offerType,
     displayType,
     statusLabel: isClaimed ? 'Redeem' : pickString(rawStatus) || (isAvailable ? 'Available' : undefined),
+    isWishlisted,
   };
+};
+
+/** YYYY-MM-DD from an ISO/date string, matching normalizeDate (UTC). */
+const endDateDayKey = (endDate?: string): string | undefined => {
+  if (!endDate?.trim()) {
+    return undefined;
+  }
+  const parsed = new Date(endDate.trim());
+  if (Number.isNaN(parsed.getTime())) {
+    // Already a bare date?
+    const bare = endDate.trim().slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(bare) ? bare : undefined;
+  }
+  return parsed.toISOString().slice(0, 10);
+};
+
+const entryEndsOnSelectedDate = (entry: DailyRewardEntry, selectedDate: string): boolean => {
+  const endKey = endDateDayKey(entry.endDate);
+  if (!endKey) {
+    return false;
+  }
+  return endKey === selectedDate;
 };
 
 const normalizeCalendarDay = (
@@ -469,11 +493,11 @@ export const parseDailyRewardsCalendarResponse = (
   selectedDate: string,
 ): DailyRewardsCalendar => {
   const root = isRecord(payload) && isRecord(payload.data) ? payload.data : payload;
-  // Calendar sheet only shows calendar display-type offers (not banner / all / regular).
+  // Dedicated calender endpoint — keep API items even without displayType; filter by endDate day.
   const entries = unwrapEntryList(root)
-    .filter(shouldShowInCalendarList)
     .map((item, index) => normalizeRewardEntry(item, selectedDate, index))
-    .filter((entry): entry is DailyRewardEntry => Boolean(entry));
+    .filter((entry): entry is DailyRewardEntry => Boolean(entry))
+    .filter(entry => entryEndsOnSelectedDate(entry, selectedDate));
   const history = unwrapHistoryList(root)
     .map(item => normalizeHistoryItem(item))
     .filter((item): item is DailyRewardHistoryItem => Boolean(item));
@@ -517,5 +541,120 @@ export const parseDailyRewardsCalendarResponse = (
     calendarDays,
     entries,
     history: derivedHistory,
+  };
+};
+
+/** Normalize history/API status → UI labels: Claimed | Redeem | Expire | Available. */
+export const normalizeRedemptionStatusLabel = (raw?: string): string | undefined => {
+  if (!raw?.trim()) {
+    return undefined;
+  }
+  const normalized = raw.trim().toLowerCase();
+  if (normalized.includes('claim')) {
+    return 'Claimed';
+  }
+  if (
+    normalized.includes('redeem') ||
+    normalized.includes('complet') ||
+    normalized === 'used'
+  ) {
+    return 'Redeem';
+  }
+  if (normalized.includes('expir')) {
+    return 'Expire';
+  }
+  if (normalized === 'available' || normalized === 'pending' || normalized === 'active') {
+    return 'Available';
+  }
+  return raw.trim();
+};
+
+const todayUtcKey = () => new Date().toISOString().slice(0, 10);
+
+const isEntryExpiredByEndDate = (entry: DailyRewardEntry, todayKey: string): boolean => {
+  const endKey = endDateDayKey(entry.endDate);
+  if (!endKey) {
+    return false;
+  }
+  return endKey < todayKey;
+};
+
+/**
+ * Merge `/offer-redemption/user/history` into calendar entries by offerId for status only.
+ * Does not touch `isWishlisted` (hearts come from calendar `isWishlisted`).
+ */
+export const mergeRedemptionHistoryIntoCalendar = (
+  calendar: DailyRewardsCalendar,
+  history: DailyRewardHistoryItem[],
+  todayKey: string = todayUtcKey(),
+): DailyRewardsCalendar => {
+  const historyByOfferId = new Map<string, DailyRewardHistoryItem>();
+  history.forEach(item => {
+    const offerId = item.offerId?.trim();
+    if (offerId) {
+      historyByOfferId.set(offerId, item);
+    }
+  });
+
+  const entries = calendar.entries.map(entry => {
+    const offerKey = entry.offerId?.trim() || entry.id.trim();
+    const match = historyByOfferId.get(offerKey);
+
+    if (match) {
+      const statusLabel =
+        normalizeRedemptionStatusLabel(match.statusLabel) ||
+        normalizeRedemptionStatusLabel(entry.statusLabel) ||
+        'Available';
+      const isClaimed = statusLabel === 'Claimed' || statusLabel === 'Redeem';
+      const isExpired = statusLabel === 'Expire';
+
+      return {
+        ...entry,
+        isClaimed,
+        isAvailable: !isClaimed && !isExpired,
+        statusLabel,
+        claimedAt: match.claimedAt || entry.claimedAt,
+      };
+    }
+
+    if (isEntryExpiredByEndDate(entry, todayKey)) {
+      return {
+        ...entry,
+        isClaimed: false,
+        isAvailable: false,
+        statusLabel: 'Expire',
+      };
+    }
+
+    return {
+      ...entry,
+      statusLabel:
+        normalizeRedemptionStatusLabel(entry.statusLabel) ||
+        (entry.isClaimed ? 'Redeem' : 'Available'),
+    };
+  });
+
+  const normalizedHistory =
+    history.length > 0
+      ? history.map(item => ({
+          ...item,
+          statusLabel:
+            normalizeRedemptionStatusLabel(item.statusLabel) || item.statusLabel,
+        }))
+      : calendar.history;
+
+  return {
+    ...calendar,
+    entries,
+    history: normalizedHistory,
+    calendarDays: calendar.calendarDays.map(day => {
+      if (day.date !== calendar.selectedDate) {
+        return day;
+      }
+      const dayClaimed = entries.some(
+        entry => (entry.date === day.date || entryEndsOnSelectedDate(entry, day.date)) && entry.isClaimed,
+      );
+      return dayClaimed ? { ...day, isClaimed: true } : day;
+    }),
   };
 };

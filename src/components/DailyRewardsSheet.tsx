@@ -25,6 +25,7 @@ type ClaimModalPhase = 'details' | 'scratch' | 'revealed';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const ACTIVE_BLUE = '#366FE0';
+const HEART_RED = '#E11D48';
 const DAY_COLUMN_WIDTH = 56;
 const DAY_COLUMN_GAP = 14;
 const REWARD_THUMB_SIZE = 48;
@@ -37,10 +38,12 @@ type DailyRewardsSheetProps = {
   rewardPreviewByDate: Record<string, string | undefined>;
   isLoading: boolean;
   error: string | null;
+  togglingOfferId?: string | null;
   onClose: () => void;
   onRetry: () => void;
   onDateSelect: (date: string) => void;
   onClaimReward: (reward: DailyRewardEntry) => Promise<string | void>;
+  onToggleWishlist?: (reward: DailyRewardEntry) => void | Promise<void>;
   onOpenHistory: () => void;
   resolveImageUrl: (path?: string | null) => string | undefined;
 };
@@ -308,10 +311,12 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
   rewardPreviewByDate,
   isLoading,
   error,
+  togglingOfferId,
   onClose,
   onRetry,
   onDateSelect,
   onClaimReward,
+  onToggleWishlist,
   onOpenHistory,
   resolveImageUrl,
 }) => {
@@ -411,17 +416,23 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
 
   const resolveOfferStatusLabel = (rawStatus?: string, isClaimed?: boolean) => {
     const normalized = (rawStatus || '').toLowerCase();
-    if (
-      isClaimed ||
-      normalized.includes('claimed') ||
-      normalized.includes('redeem')
-    ) {
+    // Prefer explicit history/API status: claimed | redeem | expire
+    if (normalized.includes('claim')) {
+      return 'Claimed';
+    }
+    if (normalized.includes('redeem')) {
+      return 'Redeem';
+    }
+    if (normalized.includes('expir')) {
+      return 'Expire';
+    }
+    if (isClaimed) {
       return 'Redeem';
     }
 
-    // Past dates: show Expired (never Available)
+    // Past dates / expired endDate: Expire (never Available)
     if (isPastSelectedDate) {
-      return 'Expired';
+      return 'Expire';
     }
 
     // Today / future: Available
@@ -440,13 +451,19 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
     statusLabel: string | undefined,
     imageUri: string | undefined,
     onPress?: () => void,
+    wishlist?: {
+      isWishlisted: boolean;
+      isToggling: boolean;
+      onToggle?: () => void;
+    },
   ) => {
     const normalizedStatus = statusLabel?.toLowerCase();
     const isClaimed =
       normalizedStatus === 'claimed' ||
       normalizedStatus === 'redeem' ||
       normalizedStatus === 'redeemed';
-    const isExpired = normalizedStatus === 'expired';
+    const isExpired =
+      normalizedStatus === 'expired' || normalizedStatus === 'expire';
 
     const content = (
       <View style={styles.historyCard}>
@@ -458,6 +475,26 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
               <MaterialCommunityIcons name="store-outline" size={20} color="#B0B8C4" />
             </View>
           )}
+          {wishlist?.onToggle ? (
+            <TouchableOpacity
+              style={styles.historyHeartButton}
+              activeOpacity={0.85}
+              disabled={wishlist.isToggling}
+              onPress={event => {
+                event.stopPropagation?.();
+                wishlist.onToggle?.();
+              }}>
+              {wishlist.isToggling ? (
+                <ActivityIndicator size="small" color={HEART_RED} />
+              ) : (
+                <MaterialCommunityIcons
+                  name={wishlist.isWishlisted ? 'heart' : 'heart-outline'}
+                  size={16}
+                  color={wishlist.isWishlisted ? HEART_RED : '#667085'}
+                />
+              )}
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={styles.historyTextBlock}>
@@ -495,6 +532,18 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
     }
 
     return <View key={key}>{content}</View>;
+  };
+
+  const wishlistPropsFor = (entry: DailyRewardEntry) => {
+    if (!onToggleWishlist) {
+      return undefined;
+    }
+    const offerId = entry.offerId?.trim() || entry.id.trim();
+    return {
+      isWishlisted: Boolean(entry.isWishlisted),
+      isToggling: Boolean(offerId && togglingOfferId === offerId),
+      onToggle: () => onToggleWishlist(entry),
+    };
   };
 
   const openClaimQrIfAllowed = (reward: DailyRewardEntry) => {
@@ -602,14 +651,19 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
       );
     }
 
-    // Prefer today's calendar offers (with Available / Redeem from history merge).
-    if (entries.length > 0 && !isPastSelectedDate) {
+    // Prefer calendar offers for the selected day (status already merged from history).
+    if (entries.length > 0) {
       return entries.map(entry => {
         const rewardImage = resolveImageUrl(entry.image) ?? entry.image;
         const statusLabel = resolveOfferStatusLabel(
           entry.statusLabel || (entry.isClaimed ? 'Redeem' : 'Available'),
           entry.isClaimed,
         );
+        const canOpenQr =
+          !isPastSelectedDate &&
+          (statusLabel === 'Claimed' ||
+            statusLabel === 'Redeem' ||
+            statusLabel === 'Available');
         return renderHistoryItem(
           entry.id,
           entry.title,
@@ -618,7 +672,8 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
             (selectedDate === todayKey ? 'Today' : formatClaimedDate(selectedDate)),
           statusLabel,
           rewardImage,
-          () => openClaimQrIfAllowed(entry),
+          canOpenQr ? () => openClaimQrIfAllowed(entry) : undefined,
+          wishlistPropsFor(entry),
         );
       });
     }
@@ -662,23 +717,8 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
         statusLabel,
         rewardImage,
         isPastSelectedDate ? undefined : () => openClaimQrIfAllowed(primaryReward),
+        wishlistPropsFor(primaryReward),
       );
-    }
-
-    if (isPastSelectedDate && entries.length > 0) {
-      return entries.map(entry => {
-        const rewardImage = resolveImageUrl(entry.image) ?? entry.image;
-        return renderHistoryItem(
-          entry.id,
-          entry.title,
-          entry.subtitle,
-          formatClaimedDate(entry.claimedAt) || formatClaimedDate(entry.date),
-          entry.isClaimed ? 'Redeem' : 'Expired',
-          rewardImage,
-          // Past offers: no QR screen on tap
-          undefined,
-        );
-      });
     }
 
     return (
@@ -966,6 +1006,17 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: '#E5E7EB',
+  },
+  historyHeartButton: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   historyImage: {
     width: '100%',
