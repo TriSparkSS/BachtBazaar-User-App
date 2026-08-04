@@ -31,6 +31,7 @@ import { SearchResults } from '../../../../types/search';
 import { MainStackParamList } from '../../../../navigation/types';
 import { resetToAuthLogin } from '../../../../navigation/navigationService';
 import { shopApi } from '../../../../services/shopApi';
+import { mergeRedemptionHistoryIntoCalendar } from '../../../../services/dailyRewardsParser';
 import { offerWishlistApi } from '../../../../services/offerWishlistApi';
 import { shopWishlistApi } from '../../../../services/shopWishlistApi';
 import { categoryApi } from '../../../../services/categoryApi';
@@ -486,68 +487,24 @@ const HomeScreenView = () => {
       setIsLoadingDailyRewards(true);
       setDailyRewardsError(null);
       const token = authTokenRef.current ?? undefined;
-      const [calendar, redemptionHistory] = await Promise.all([
-        shopApi.fetchDailyRewardsCalendar(date, token),
-        token
-          ? shopApi.fetchOfferRedemptionHistory(token).catch(() => [])
-          : Promise.resolve([]),
-      ]);
+      // Calendar first; only fetch history when this date has offers.
+      const calendar = await shopApi.fetchDailyRewardsCalendar(date, token);
 
-      const redeemedByOfferId = new Map<string, (typeof redemptionHistory)[number]>();
-      redemptionHistory.forEach(item => {
-        const status = (item.statusLabel || '').toLowerCase();
-        const isRedeemed =
-          status.includes('redeem') || status.includes('claim') || status.includes('used');
-        if (!isRedeemed) {
-          return;
-        }
-        const offerId = item.offerId?.trim();
-        if (offerId) {
-          redeemedByOfferId.set(offerId, item);
-        }
-      });
+      if (!calendar.entries.length) {
+        setDailyRewards(calendar);
+        setDailyRewardsByDate(prev => ({
+          ...prev,
+          [date]: calendar,
+        }));
+        return;
+      }
 
-      const entries = calendar.entries.map(entry => {
-        const match =
-          redeemedByOfferId.get(entry.offerId?.trim() || '') ||
-          redeemedByOfferId.get(entry.id.trim());
-        if (!match) {
-          return entry;
-        }
+      // Hearts stay on isWishlisted; history only merges Claimed/Redeem/Expire status.
+      const redemptionHistory = token
+        ? await shopApi.fetchOfferRedemptionHistory(token).catch(() => [])
+        : [];
 
-        return {
-          ...entry,
-          isClaimed: true,
-          isAvailable: false,
-          statusLabel: 'Redeem',
-          claimedAt: match.claimedAt || entry.claimedAt,
-        };
-      });
-
-      const history =
-        redemptionHistory.length > 0
-          ? redemptionHistory.map(item => ({
-              ...item,
-              statusLabel:
-                (item.statusLabel || '').toLowerCase().includes('redeem') ||
-                (item.statusLabel || '').toLowerCase().includes('claim')
-                  ? 'Redeem'
-                  : item.statusLabel,
-            }))
-          : calendar.history;
-
-      const result = {
-        ...calendar,
-        entries,
-        history,
-        calendarDays: calendar.calendarDays.map(day => {
-          if (day.date !== date) {
-            return day;
-          }
-          const dayClaimed = entries.some(entry => entry.date === day.date && entry.isClaimed);
-          return dayClaimed ? { ...day, isClaimed: true } : day;
-        }),
-      };
+      const result = mergeRedemptionHistoryIntoCalendar(calendar, redemptionHistory);
 
       setDailyRewards(result);
       setDailyRewardsByDate(prev => ({
@@ -563,6 +520,67 @@ const HomeScreenView = () => {
       setIsLoadingDailyRewards(false);
     }
   }, []);
+
+  const updateDailyRewardWishlist = useCallback(
+    (offerId: string, isWishlisted: boolean) => {
+      const patchEntries = (entries: DailyRewardEntry[]) =>
+        entries.map(entry => {
+          const id = entry.offerId?.trim() || entry.id.trim();
+          return id === offerId ? { ...entry, isWishlisted } : entry;
+        });
+
+      setDailyRewards(prev =>
+        prev ? { ...prev, entries: patchEntries(prev.entries) } : prev,
+      );
+      setDailyRewardsByDate(prev => {
+        const next: Record<string, DailyRewardsCalendar> = {};
+        Object.entries(prev).forEach(([key, calendar]) => {
+          next[key] = { ...calendar, entries: patchEntries(calendar.entries) };
+        });
+        return next;
+      });
+      setSavedOfferIds(prev => {
+        if (isWishlisted) {
+          return { ...prev, [offerId]: true };
+        }
+        const next = { ...prev };
+        delete next[offerId];
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleToggleDailyRewardWishlist = useCallback(
+    async (reward: DailyRewardEntry) => {
+      const token = authTokenRef.current?.trim();
+      const offerId = reward.offerId?.trim() || reward.id.trim();
+      if (!token || !offerId) {
+        showAppAlert('Login required', 'Please log in again to save offers.');
+        return;
+      }
+
+      const isSaved = Boolean(reward.isWishlisted);
+      try {
+        setTogglingOfferId(offerId);
+        if (isSaved) {
+          await offerWishlistApi.removeFromWishlist(offerId, token);
+          updateDailyRewardWishlist(offerId, false);
+        } else {
+          await offerWishlistApi.addToWishlist(offerId, token);
+          updateDailyRewardWishlist(offerId, true);
+        }
+      } catch (error) {
+        showAppAlert(
+          isSaved ? 'Could not remove offer' : 'Could not save offer',
+          error instanceof Error ? error.message : 'Please try again.',
+        );
+      } finally {
+        setTogglingOfferId(null);
+      }
+    },
+    [updateDailyRewardWishlist],
+  );
 
   const handleClaimDailyReward = useCallback(
     async (reward: DailyRewardEntry) => {
@@ -2088,10 +2106,12 @@ const HomeScreenView = () => {
         rewardPreviewByDate={rewardPreviewByDate}
         isLoading={isLoadingDailyRewards}
         error={dailyRewardsError}
+        togglingOfferId={togglingOfferId}
         onClose={() => setDailyRewardsVisible(false)}
         onRetry={() => loadDailyRewards(selectedDailyRewardDate)}
         onDateSelect={handleDailyRewardDateSelect}
         onClaimReward={handleClaimDailyReward}
+        onToggleWishlist={handleToggleDailyRewardWishlist}
         onOpenHistory={openOfferRedemptionHistory}
         resolveImageUrl={shopApi.resolveImageUrl}
       />
