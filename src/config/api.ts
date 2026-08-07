@@ -6,6 +6,12 @@ export const SHOPS_API_BASE_URL = 'https://bachatbazaar.tech/api/users';
 /** Admin banners and other admin APIs live under /api. */
 export const ADMIN_API_BASE_URL = 'https://bachatbazaar.tech/api';
 
+/** Delivery APIs live under /api (same root as merchants/admin). */
+export const DELIVERY_API_BASE_URL = 'https://bachatbazaar.tech/api';
+
+/** Cart APIs live under /api (same root as delivery/merchants). */
+export const CART_API_BASE_URL = 'https://bachatbazaar.tech/api';
+
 export const API_ENDPOINTS = {
   sendOtp: '/auth/send-otp',
   verifyOtp: '/auth/verify-otp',
@@ -81,6 +87,16 @@ export const API_ENDPOINTS = {
   offerBanners: (categoryId: string) =>
     `/shop/offers/banners?category=${encodeURIComponent(categoryId.trim())}`,
   adminBannerActiveFeed: '/adminbanners/active-feed',
+  /** Merchant delivery capability — under /api (ADMIN_API_BASE_URL), not /api/user. */
+  merchantDeliveryStatus: (merchantId: string) =>
+    `/merchants/${encodeURIComponent(merchantId.trim())}/delivery-status`,
+  /** User delivery order create — under /api (DELIVERY_API_BASE_URL). */
+  createDeliveryOrder: '/delivery/user/delivery-orders',
+  /** Cart — under /api (CART_API_BASE_URL). */
+  cart: '/cart',
+  cartAdd: '/cart/add',
+  cartItem: (itemId: string) => `/cart/item/${encodeURIComponent(itemId.trim())}`,
+  cartClear: '/cart/clear',
 } as const;
 
 export const getShopLogoUrl = (shopId: string) =>

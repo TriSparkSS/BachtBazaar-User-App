@@ -21,10 +21,12 @@ import { MainStackParamList } from '../../../navigation/types';
 import { useAppContext } from '../../../context/AppContext';
 import { shopApi } from '../../../services/shopApi';
 import { wishlistApi } from '../../../services/offerWishlistApi';
+import { cartApi, hasDifferentMerchantInCart } from '../../../services/cartApi';
 import { colors, fonts } from '../../../helpers/styles';
 import { formatShopAddress, isShopOpenNow } from '../../../utils/shop';
 import { openChatWithNumber, openPhoneDialer } from '../../../helpers/contactActions';
 import { showAppAlert } from '../../../services/appAlert';
+import { ShopWithOffers } from '../../../types/shop';
 
 const { width } = Dimensions.get('window');
 const HEART_RED = '#E11D48';
@@ -40,10 +42,15 @@ const ProductDetail = () => {
     useNavigation<StackNavigationProp<MainStackParamList, 'ProductDetail'>>();
   const route = useRoute();
   const { authToken } = useAppContext();
-  const { shop, product } = route.params as MainStackParamList['ProductDetail'];
+  const routeParams = route.params as MainStackParamList['ProductDetail'];
+  const product = routeParams.product;
+  const [shop, setShop] = useState<ShopWithOffers>(routeParams.shop);
   const [heroError, setHeroError] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [isTogglingWishlist, setIsTogglingWishlist] = useState(false);
+  /** Source of truth: GET /merchants/:id/delivery-status. Stay false until API returns true (no button flash). */
+  const [providesDelivery, setProvidesDelivery] = useState(false);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
 
   const heroImageUri = useMemo(
     () => shopApi.resolveImageUrl(product.image) ?? PRODUCT_PLACEHOLDER,
@@ -56,6 +63,78 @@ const ProductDetail = () => {
   const shopAddress = formatShopAddress(shop);
   const openNow = isShopOpenNow(shop.openingHours) ?? shop.isOpen;
   const showHeroImage = Boolean(heroImageUri) && !heroError;
+
+  useEffect(() => {
+    setShop(routeParams.shop);
+  }, [routeParams.shop]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const merchantId = shop.merchantId?.trim();
+    const token = authToken?.trim();
+
+    // Hide cart/delivery until this API confirms delivery is enabled.
+    setProvidesDelivery(false);
+
+    if (!merchantId || !token) {
+      return;
+    }
+
+    shopApi
+      .fetchMerchantDeliveryStatus(merchantId, token)
+      .then(result => {
+        if (cancelled) {
+          return;
+        }
+        setProvidesDelivery(result.providesDelivery);
+        setShop(prev =>
+          prev.providesDelivery === result.providesDelivery
+            ? prev
+            : { ...prev, providesDelivery: result.providesDelivery },
+        );
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setProvidesDelivery(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, shop.merchantId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const shopId = routeParams.shop.id?.trim() || product.shopId?.trim();
+    const token = authToken?.trim();
+    if (!shopId || !token) {
+      return;
+    }
+
+    shopApi
+      .fetchShopByIdWithOffers(shopId, token)
+      .then(detail => {
+        if (!cancelled) {
+          // Preserve merchantId / delivery flag so a sparse detail payload
+          // cannot cancel an in-flight delivery-status fetch or wipe its result.
+          setShop(prev => ({
+            ...prev,
+            ...detail,
+            merchantId: detail.merchantId?.trim() || prev.merchantId,
+            // delivery-status effect owns this flag — don't let shop GET clobber it.
+            providesDelivery: prev.providesDelivery,
+          }));
+        }
+      })
+      .catch(() => {
+        // Keep route shop if detail refresh fails.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, product.shopId, routeParams.shop.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -184,6 +263,72 @@ const ProductDetail = () => {
         error instanceof Error ? error.message : 'Mobile number is not available for chat.',
       );
     }
+  };
+
+  const handleAddToCart = async () => {
+    if (isAddingToCart) {
+      return;
+    }
+
+    const token = authToken?.trim();
+    if (!token) {
+      showAppAlert('Login required', 'Please log in again to add items to cart.');
+      return;
+    }
+
+    const merchantId = shop.merchantId?.trim();
+    const productId = product.id?.trim();
+    if (!merchantId) {
+      showAppAlert('Merchant required', 'Could not find the merchant for this product.');
+      return;
+    }
+    if (!productId) {
+      showAppAlert('Product required', 'Could not find the product to add to cart.');
+      return;
+    }
+
+    try {
+      setIsAddingToCart(true);
+      const cart = await cartApi.fetchCart(token);
+      if (hasDifferentMerchantInCart(cart.items, merchantId)) {
+        showAppAlert(
+          'Different store',
+          'Cart has items from another store. Clear cart or continue shopping from the same store.',
+          [
+            { text: 'OK', style: 'cancel' },
+            {
+              text: 'Go to Cart',
+              onPress: () => navigation.navigate('Cart'),
+            },
+          ],
+        );
+        return;
+      }
+
+      await cartApi.addToCart([{ productId, merchantId, quantity: 1 }], token);
+      showAppAlert(
+        'Added to cart',
+        `"${product.title}" from ${shop.name} was added to your cart.`,
+        [
+          { text: 'Add more', style: 'cancel' },
+          {
+            text: 'Go to Cart',
+            onPress: () => navigation.navigate('Cart'),
+          },
+        ],
+      );
+    } catch (error) {
+      showAppAlert(
+        'Could not add to cart',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    } finally {
+      setIsAddingToCart(false);
+    }
+  };
+
+  const handleRequestDelivery = () => {
+    navigation.navigate('RequestDelivery', { shop, product });
   };
 
   return (
@@ -379,14 +524,42 @@ const ProductDetail = () => {
       </ScrollView>
 
       <SafeAreaView edges={['bottom']} style={styles.bottomBar}>
-        <TouchableOpacity style={styles.chatButton} activeOpacity={0.88} onPress={handleChat}>
-          <MaterialCommunityIcons name="whatsapp" size={20} color="#22A45A" />
-          <Text style={styles.chatButtonText}>Chat</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.callButton} activeOpacity={0.88} onPress={handleCall}>
-          <MaterialCommunityIcons name="phone" size={20} color={colors.white} />
-          <Text style={styles.callButtonText}>Call store</Text>
-        </TouchableOpacity>
+        {providesDelivery ? (
+          <>
+            <TouchableOpacity
+              style={[styles.addToCartButton, isAddingToCart && styles.addToCartButtonDisabled]}
+              activeOpacity={0.88}
+              disabled={isAddingToCart}
+              onPress={handleAddToCart}>
+              {isAddingToCart ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <MaterialCommunityIcons name="cart-outline" size={20} color={colors.primary} />
+              )}
+              <Text style={styles.addToCartButtonText}>
+                {isAddingToCart ? 'Adding...' : 'Add to Cart'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.requestDeliveryButton}
+              activeOpacity={0.88}
+              onPress={handleRequestDelivery}>
+              <MaterialCommunityIcons name="truck-delivery-outline" size={20} color={colors.white} />
+              <Text style={styles.requestDeliveryButtonText}>Request Delivery</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity style={styles.chatButton} activeOpacity={0.88} onPress={handleChat}>
+              <MaterialCommunityIcons name="whatsapp" size={20} color="#22A45A" />
+              <Text style={styles.chatButtonText}>Chat</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.callButton} activeOpacity={0.88} onPress={handleCall}>
+              <MaterialCommunityIcons name="phone" size={20} color={colors.white} />
+              <Text style={styles.callButtonText}>Call store</Text>
+            </TouchableOpacity>
+          </>
+        )}
       </SafeAreaView>
     </View>
   );
@@ -729,6 +902,42 @@ const styles = StyleSheet.create({
   callButtonText: {
     color: colors.white,
     fontSize: 15,
+    fontFamily: fonts.BOLD,
+  },
+  addToCartButton: {
+    flex: 1,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: colors.primarySoft,
+    borderWidth: 1.5,
+    borderColor: colors.primaryBorder,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  addToCartButtonDisabled: {
+    opacity: 0.7,
+  },
+  addToCartButtonText: {
+    color: colors.primary,
+    fontSize: 14,
+    fontFamily: fonts.BOLD,
+  },
+  requestDeliveryButton: {
+    flex: 1.25,
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 8,
+  },
+  requestDeliveryButtonText: {
+    color: colors.white,
+    fontSize: 14,
     fontFamily: fonts.BOLD,
   },
 });

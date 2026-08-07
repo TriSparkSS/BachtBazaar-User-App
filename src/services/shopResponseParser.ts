@@ -7,6 +7,7 @@ import {
   ShopWithOffers,
 } from '../types/shop';
 import { shouldShowInOffersList } from '../utils/offerDisplayType';
+import { pickProvidesDeliveryFlag } from '../utils/shopDelivery';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -316,6 +317,7 @@ const normalizeShop = (value: unknown): Shop | undefined => {
     openingHours,
     merchantId,
     merchantName: pickString(merchant?.name),
+    providesDelivery: pickProvidesDeliveryFlag(value, merchant),
   };
 };
 
@@ -414,6 +416,7 @@ const normalizeProduct = (value: unknown, shopId: string): ShopProduct | undefin
     rating: pickNumberString(value.rating, value.avgRating, value.avg_rating),
     stock: pickNumber(value.stock),
     isFeatured: Boolean(value.is_featured ?? value.isFeatured),
+    providesDelivery: pickProvidesDeliveryFlag(value),
   };
 };
 
@@ -565,6 +568,16 @@ export const parseShopDetailResponse = (payload: unknown, fallbackShopId?: strin
   let offers = inventory.offers.map(offer => ({ ...offer, shopId }));
   let products = inventory.products.map(product => ({ ...product, shopId }));
 
+  // Shop-detail payloads may put the delivery flag on data / inventory roots.
+  const providesDelivery =
+    pickProvidesDeliveryFlag(
+      isRecord(shopRecord) ? shopRecord : undefined,
+      isRecord(shopRecord) && isRecord(shopRecord.merchantId) ? shopRecord.merchantId : undefined,
+      isRecord(shopRecord) && isRecord(shopRecord.merchant) ? shopRecord.merchant : undefined,
+      data,
+      isRecord(data.inventory) ? data.inventory : undefined,
+    ) ?? resolvedShop.providesDelivery;
+
   if (!offers.length && isRecord(shopRecord)) {
     for (const key of ['offers', 'shopOffers', 'shop_offers']) {
       const value = shopRecord[key];
@@ -591,6 +604,7 @@ export const parseShopDetailResponse = (payload: unknown, fallbackShopId?: strin
     id: shopId,
     logo,
     coverImage,
+    providesDelivery,
     offers,
     products,
     productCount: inventory.productCount ?? products.length,

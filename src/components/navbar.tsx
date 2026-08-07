@@ -6,6 +6,7 @@ import { colors, fonts } from '../helpers/styles';
 interface NavbarProps {
   onMenuPress?: () => void;
   onScannerPress?: () => void;
+  onCartPress?: () => void;
   title?: string;
   subtitle?: string;
   showSearch?: boolean;
@@ -18,6 +19,7 @@ interface NavbarProps {
 const Navbar: React.FC<NavbarProps> = ({
   onMenuPress,
   onScannerPress,
+  onCartPress,
   title = 'Bacht Bazaar',
   subtitle = 'Work - Mohan Sharn',
   showSearch = true,
@@ -52,14 +54,25 @@ const Navbar: React.FC<NavbarProps> = ({
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity
-          style={styles.iconButton}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="Notifications"
-        >
-          <MaterialCommunityIcons name="bell-outline" size={24} color="#202843" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.cartButton}
+            onPress={onCartPress}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Open cart"
+          >
+            <MaterialCommunityIcons name="cart-outline" size={24} color="#202843" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.iconButton}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Notifications"
+          >
+            <MaterialCommunityIcons name="bell-outline" size={24} color="#202843" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {showSearch && (
@@ -151,6 +164,26 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     maxWidth: '92%',
     lineHeight: 15,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  cartButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.white,
+    borderWidth: 1.5,
+    borderColor: '#D8E2F0',
+    shadowColor: '#1B2430',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
   iconButton: {
     width: 44,

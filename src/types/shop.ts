@@ -35,6 +35,12 @@ export interface Shop {
   merchantId?: string;
   merchantName?: string;
   city?: string;
+  /**
+   * Whether this shop/merchant offers delivery.
+   * Parsed from providesDelivery / deliveryAvailable / aliases (see shopDelivery.ts).
+   * Undefined when the API omits recognized fields — Product Detail hides cart/delivery.
+   */
+  providesDelivery?: boolean;
 }
 
 export interface ShopProduct {
@@ -52,6 +58,8 @@ export interface ShopProduct {
   stock?: number;
   isFeatured?: boolean;
   shopName?: string;
+  /** Product-level delivery flag when present on inventory/search payloads. */
+  providesDelivery?: boolean;
 }
 
 export interface ShopOffer {

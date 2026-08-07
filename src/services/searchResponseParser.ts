@@ -1,5 +1,6 @@
 import { SearchResults } from '../types/search';
 import { ShopOffer, ShopProduct, ShopWithOffers } from '../types/shop';
+import { pickProvidesDeliveryFlag } from '../utils/shopDelivery';
 import { resolveShopMediaFromApiValue } from './shopResponseParser';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -79,6 +80,12 @@ const normalizeSearchProduct = (value: unknown): ShopProduct | undefined => {
       isRecord(value.shop) ? value.shop.name ?? value.shop.shopName : undefined,
       isRecord(value.merchant_id) ? value.merchant_id.name : undefined,
     ),
+    providesDelivery: pickProvidesDeliveryFlag(
+      value,
+      isRecord(value.shop) ? value.shop : undefined,
+      isRecord(value.merchant_id) ? value.merchant_id : undefined,
+      isRecord(value.merchantId) ? value.merchantId : undefined,
+    ),
   };
 };
 
@@ -140,6 +147,12 @@ const normalizeSearchShop = (value: unknown): ShopWithOffers | undefined => {
     city: pickString(value.city),
     phone: pickString(value.phone),
     merchantId,
+    providesDelivery: pickProvidesDeliveryFlag(
+      value,
+      isRecord(value.merchantId) ? value.merchantId : undefined,
+      isRecord(value.merchant) ? value.merchant : undefined,
+      isRecord(value.merchant_id) ? value.merchant_id : undefined,
+    ),
     offers: Array.isArray(value.offers)
       ? value.offers.map(normalizeSearchOffer).filter((offer): offer is ShopOffer => Boolean(offer))
       : [],

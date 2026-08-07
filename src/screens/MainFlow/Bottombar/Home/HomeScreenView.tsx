@@ -650,6 +650,16 @@ const HomeScreenView = () => {
     openSavedScreen('offers');
   }, [openSavedScreen]);
 
+  const openCart = useCallback(() => {
+    const parentNavigation = navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('Cart');
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate('Cart');
+  }, [navigation]);
+
   useEffect(() => {
     if (!authToken || !currentUser) {
       return;
@@ -1482,6 +1492,7 @@ const HomeScreenView = () => {
         <Navbar
           onMenuPress={() => setSidebarVisible(true)}
           onScannerPress={openScannerScreen}
+          onCartPress={openCart}
           title="Bacht Bazaar"
           subtitle={headerAddress}
           showSearch

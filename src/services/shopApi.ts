@@ -1,8 +1,15 @@
-import { ADMIN_API_BASE_URL, API_ENDPOINTS, resolveProfileImageUrl, SHOPS_API_BASE_URL } from '../config/api';
+import {
+  ADMIN_API_BASE_URL,
+  API_BASE_URL,
+  API_ENDPOINTS,
+  resolveProfileImageUrl,
+  SHOPS_API_BASE_URL,
+} from '../config/api';
 import { DailyRewardHistoryItem, DailyRewardsCalendar } from '../types/dailyRewards';
 import { OfferBanner } from '../types/offerBanner';
 import { SearchResults } from '../types/search';
 import { OfferDetail, Shop, ShopOffer, ShopWithOffers } from '../types/shop';
+import { parseMerchantDeliveryStatusResponse } from '../utils/shopDelivery';
 import { apiRequest, logApiEvent } from './apiClient';
 import { parseDailyRewardsCalendarResponse } from './dailyRewardsParser';
 import { parseAdminBannersResponse, parseOfferBannersResponse } from './offerBannerParser';
@@ -524,6 +531,71 @@ export const shopApi = {
         }
       }),
     );
+  },
+
+  /**
+   * GET /api/merchants/:id/delivery-status — source of truth for Product Detail
+   * Add to Cart / Request Delivery gating. Uses logged-in user Bearer token.
+   * Tries ADMIN base first (`/api`), then shops (`/api/users`) and user (`/api/user`) on 404.
+   */
+  async fetchMerchantDeliveryStatus(
+    merchantId: string,
+    token: string,
+  ): Promise<{ providesDelivery: boolean; url: string }> {
+    const normalizedId = merchantId.trim();
+    if (!normalizedId) {
+      throw new Error('Merchant id is required.');
+    }
+    if (!token.trim()) {
+      throw new Error('Auth token is required.');
+    }
+
+    const path = API_ENDPOINTS.merchantDeliveryStatus(normalizedId);
+    const bases = [
+      { label: 'admin', baseUrl: ADMIN_API_BASE_URL },
+      { label: 'shops', baseUrl: SHOPS_API_BASE_URL },
+      { label: 'user', baseUrl: API_BASE_URL },
+    ];
+
+    let lastError: Error | undefined;
+
+    for (const { label, baseUrl } of bases) {
+      const url = `${baseUrl}${path}`;
+      try {
+        const payload = await apiRequest<unknown>(path, {
+          method: 'GET',
+          token,
+          baseUrl,
+        });
+        const providesDelivery = parseMerchantDeliveryStatusResponse(payload);
+        logApiEvent('merchant delivery-status', {
+          merchantId: normalizedId,
+          base: label,
+          url,
+          isDeliveryEnabled: providesDelivery,
+          providesDelivery,
+        });
+        return { providesDelivery, url };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const is404 =
+          message.toLowerCase().includes('404') ||
+          message.toLowerCase().includes('not found');
+        logApiEvent('merchant delivery-status miss', {
+          merchantId: normalizedId,
+          base: label,
+          url,
+          error: message,
+          willRetry: is404,
+        });
+        lastError = error instanceof Error ? error : new Error(message);
+        if (!is404) {
+          throw lastError;
+        }
+      }
+    }
+
+    throw lastError ?? new Error('Merchant delivery-status request failed.');
   },
 
   resolveImageUrl: resolveProfileImageUrl,

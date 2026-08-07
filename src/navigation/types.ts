@@ -21,6 +21,41 @@ export type MainStackParamList = {
     shop: ShopWithOffers;
     product: ShopProduct;
   };
+  Cart: undefined;
+  RequestDelivery: {
+    shop: ShopWithOffers;
+    product: ShopProduct;
+    /** Set by AddAddress when user saves/selects a delivery address. */
+    selectedAddress?: string;
+    selectedCity?: string;
+  };
+  AddAddress: {
+    initialAddress?: string;
+    initialCity?: string;
+    initialLatitude?: number;
+    initialLongitude?: number;
+  } | undefined;
+  RequestDeliverySent: {
+    shop: ShopWithOffers;
+    product: ShopProduct;
+    requestId: string;
+    address: string;
+    mobile: string;
+    note?: string;
+    itemPrice: number;
+    deliveryFee: number;
+    platformFee: number;
+    totalAmount: number;
+  };
+  RequestDeliveryAccepted: {
+    shop: ShopWithOffers;
+    product: ShopProduct;
+    requestId: string;
+    orderId: string;
+    deliveryFee: number;
+    eta?: string;
+    bidId?: string;
+  };
   CreateRequestForm: {
     initialProduct?: string;
   } | undefined;

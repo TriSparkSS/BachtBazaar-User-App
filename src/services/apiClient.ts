@@ -1,7 +1,7 @@
 import { API_BASE_URL } from '../config/api';
 import { API_DEBUG } from '../config/debug';
 
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 interface RequestOptions {
   method?: HttpMethod;
@@ -62,6 +62,15 @@ const redactForLogs = (value: unknown, key?: string): unknown => {
     return Object.fromEntries(value.entries());
   }
 
+  // Urlencoded form strings — expand to a key map for clearer request logs.
+  if (typeof value === 'string' && value.includes('=') && value.includes('&')) {
+    try {
+      return Object.fromEntries(new URLSearchParams(value).entries());
+    } catch {
+      // fall through
+    }
+  }
+
   // Shop logo/banner come back as huge Buffer byte arrays — never walk/stringify them.
   if (isBufferLike(value)) {
     const record = value as Record<string, unknown>;
@@ -80,6 +89,18 @@ const redactForLogs = (value: unknown, key?: string): unknown => {
       byteLength,
       omitted: true,
     };
+  }
+
+  // profileImage / logo sometimes arrive as huge base64 strings (not Buffer objects).
+  if (typeof value === 'string' && value.length > 500) {
+    const looksBinary =
+      value.startsWith('data:') ||
+      value.startsWith('/9j/') ||
+      value.startsWith('iVBOR') ||
+      /^[A-Za-z0-9+/=\s]+$/.test(value.slice(0, 120));
+    if (looksBinary) {
+      return `[base64 omitted, length=${value.length}]`;
+    }
   }
 
   if (Array.isArray(value)) {
@@ -121,6 +142,9 @@ const writeNativeApiLog = (message: string) => {
   console.log(message);
 };
 
+const looksLikeUrlEncoded = (value: string) =>
+  /^(?:[^=&\s]+=[^&]*(?:&[^=&\s]+=[^&]*)*)$/.test(value.trim());
+
 const buildHeaders = (options: RequestOptions) => {
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -129,8 +153,14 @@ const buildHeaders = (options: RequestOptions) => {
 
   if (options.body && !(options.body instanceof FormData)) {
     if (typeof URLSearchParams !== 'undefined' && options.body instanceof URLSearchParams) {
-      headers['Content-Type'] = 'application/x-www-form-urlencoded';
-    } else if (typeof options.body !== 'string') {
+      headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
+    } else if (typeof options.body === 'string') {
+      // Never upgrade a form string to JSON. If caller omitted Content-Type, set urlencoded.
+      const existing = headers['Content-Type'] ?? headers['content-type'];
+      if (!existing && looksLikeUrlEncoded(options.body)) {
+        headers['Content-Type'] = 'application/x-www-form-urlencoded;charset=UTF-8';
+      }
+    } else {
       headers['Content-Type'] = 'application/json';
     }
   }
