@@ -141,6 +141,8 @@ const sidebarIconPalette: Record<string, string> = {
   Notification: '#E8F0FF',
   'Delete account': '#FFE5E5',
   'Create request': '#E0F2FE',
+  'Privacy Policy': '#E8EEFF',
+  'Terms & Conditions': '#EAF5FF',
 };
 
 const sidebarIconTint: Record<string, string> = {
@@ -162,6 +164,8 @@ const sidebarIconTint: Record<string, string> = {
   Notification: '#4E73D8',
   'Delete account': '#D84B4B',
   'Create request': '#0284C7',
+  'Privacy Policy': '#3F5BD8',
+  'Terms & Conditions': '#2E6FB8',
 };
 
 const sidebarMciIcons: Record<AppIconName, string> = {
@@ -203,6 +207,8 @@ const sidebarMciIcons: Record<AppIconName, string> = {
   jewelry: 'diamond-stone',
   grocery: 'cart-outline',
   food: 'food-outline',
+  'privacy-policy': 'shield-lock-outline',
+  'terms-conditions': 'file-document-outline',
 };
 
 const sidebarGroups: SidebarGroup[] = [
@@ -234,6 +240,13 @@ const sidebarGroups: SidebarGroup[] = [
       { icon: 'saved-offers', label: 'Saved Offers' },
       { icon: 'saved-stores', label: 'Saved Stores' },
       { icon: 'saved-products', label: 'Saved Products' },
+    ],
+  },
+  {
+    title: 'Legal',
+    items: [
+      { icon: 'privacy-policy', label: 'Privacy Policy' },
+      { icon: 'terms-conditions', label: 'Terms & Conditions' },
     ],
   },
   {
@@ -487,7 +500,8 @@ const HomeScreenView = () => {
       setIsLoadingDailyRewards(true);
       setDailyRewardsError(null);
       const token = authTokenRef.current ?? undefined;
-      // Calendar first; only fetch history when this date has offers.
+      const todayKey = formatApiDate(new Date());
+      // List source: calender API only. History is status-only (never invents cards).
       const calendar = await shopApi.fetchDailyRewardsCalendar(date, token);
 
       if (!calendar.entries.length) {
@@ -499,12 +513,19 @@ const HomeScreenView = () => {
         return;
       }
 
-      // Hearts stay on isWishlisted; history only merges Claimed/Redeem/Expire status.
-      const redemptionHistory = token
-        ? await shopApi.fetchOfferRedemptionHistory(token).catch(() => [])
-        : [];
+      // Past selected day → Expire via merge; skip history fetch (not needed for that label).
+      const isPastSelectedDate = date < todayKey;
+      const redemptionHistory =
+        !isPastSelectedDate && token
+          ? await shopApi.fetchOfferRedemptionHistory(token).catch(() => [])
+          : [];
 
-      const result = mergeRedemptionHistoryIntoCalendar(calendar, redemptionHistory);
+      // Hearts stay on isWishlisted; history sets Claimed/Redeem/Available when not expired.
+      const result = mergeRedemptionHistoryIntoCalendar(
+        calendar,
+        redemptionHistory,
+        todayKey,
+      );
 
       setDailyRewards(result);
       setDailyRewardsByDate(prev => ({
@@ -659,6 +680,33 @@ const HomeScreenView = () => {
 
     (navigation as StackNavigationProp<MainStackParamList>).navigate('Cart');
   }, [navigation]);
+
+  const openDeliveryOrders = useCallback(() => {
+    const parentNavigation = navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('DeliveryOrders');
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate('DeliveryOrders');
+  }, [navigation]);
+
+  const openLegalWebScreen = useCallback(
+    (title: string, url: string) => {
+      const parentNavigation =
+        navigation.getParent<StackNavigationProp<MainStackParamList>>();
+      if (parentNavigation) {
+        parentNavigation.navigate('LegalWebScreen', { title, url });
+        return;
+      }
+
+      (navigation as StackNavigationProp<MainStackParamList>).navigate('LegalWebScreen', {
+        title,
+        url,
+      });
+    },
+    [navigation],
+  );
 
   useEffect(() => {
     if (!authToken || !currentUser) {
@@ -1248,6 +1296,30 @@ const HomeScreenView = () => {
     if (label === 'Saved Products') {
       setSidebarVisible(false);
       openSavedScreen('products');
+      return;
+    }
+
+    if (label === 'Delivery') {
+      setSidebarVisible(false);
+      openDeliveryOrders();
+      return;
+    }
+
+    if (label === 'Privacy Policy') {
+      setSidebarVisible(false);
+      openLegalWebScreen(
+        'Privacy Policy',
+        'https://bachatbazaar.tech/legal/privacy-policy',
+      );
+      return;
+    }
+
+    if (label === 'Terms & Conditions') {
+      setSidebarVisible(false);
+      openLegalWebScreen(
+        'Terms & Conditions',
+        'https://bachatbazaar.tech/legal/terms-and-condition',
+      );
       return;
     }
 
