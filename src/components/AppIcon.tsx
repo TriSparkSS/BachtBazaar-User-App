@@ -40,7 +40,9 @@ export type AppIconName =
   | 'hot-deals'
   | 'jewelry'
   | 'grocery'
-  | 'food';
+  | 'food'
+  | 'privacy-policy'
+  | 'terms-conditions';
 
 const iconMap: Record<AppIconName, string> = {
   menu: 'menu',
@@ -81,6 +83,8 @@ const iconMap: Record<AppIconName, string> = {
   jewelry: 'diamond-stone',
   grocery: 'cart-outline',
   food: 'food-outline',
+  'privacy-policy': 'shield-lock-outline',
+  'terms-conditions': 'file-document-outline',
 };
 
 interface AppIconProps {

@@ -296,26 +296,36 @@ const normalizeRewardEntry = (
   };
 };
 
-/** YYYY-MM-DD from an ISO/date string, matching normalizeDate (UTC). */
-const endDateDayKey = (endDate?: string): string | undefined => {
-  if (!endDate?.trim()) {
+/** YYYY-MM-DD from an ISO/date string (prefer bare prefix, else UTC day). */
+const dateDayKey = (value?: string): string | undefined => {
+  if (!value?.trim()) {
     return undefined;
   }
-  const parsed = new Date(endDate.trim());
+  const bare = value.trim().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(bare)) {
+    return bare;
+  }
+  const parsed = new Date(value.trim());
   if (Number.isNaN(parsed.getTime())) {
-    // Already a bare date?
-    const bare = endDate.trim().slice(0, 10);
-    return /^\d{4}-\d{2}-\d{2}$/.test(bare) ? bare : undefined;
+    return undefined;
   }
   return parsed.toISOString().slice(0, 10);
 };
 
-const entryEndsOnSelectedDate = (entry: DailyRewardEntry, selectedDate: string): boolean => {
-  const endKey = endDateDayKey(entry.endDate);
-  if (!endKey) {
+/**
+ * Keep calendar API offers for the selected day.
+ * Only drop offers that have not started yet (startDate > selectedDate).
+ * Do not drop by endDate — expired endDate is shown as Expire via merge.
+ */
+const entryActiveOnSelectedDate = (
+  entry: DailyRewardEntry,
+  selectedDate: string,
+): boolean => {
+  const startKey = dateDayKey(entry.startDate);
+  if (startKey && selectedDate < startKey) {
     return false;
   }
-  return endKey === selectedDate;
+  return true;
 };
 
 const normalizeCalendarDay = (
@@ -387,47 +397,6 @@ const unwrapCalendarDaysList = (payload: unknown): unknown[] => {
   return [];
 };
 
-const normalizeHistoryItem = (value: unknown): DailyRewardHistoryItem | null => {
-  if (!isRecord(value)) {
-    return null;
-  }
-
-  const shopName = pickString(value.shopName, value.shop_name, value.merchantName, value.merchant_name);
-  const offerTitle = pickString(
-    value.offerTitle,
-    value.offer_title,
-    value.rewardTitle,
-    value.reward_title,
-    value.title,
-    value.name,
-  );
-  const title = shopName ?? offerTitle;
-
-  if (!title) {
-    return null;
-  }
-
-  const subtitle =
-    shopName && offerTitle && shopName !== offerTitle
-      ? offerTitle
-      : pickString(value.subtitle, value.description, value.offerDescription, value.offer_description);
-
-  return {
-    id: pickString(value._id, value.id, value.offerId, value.offer_id, title)!,
-    title,
-    subtitle,
-    claimedAt: pickString(value.claimedAt, value.claimed_at, value.date, value.historyDate, value.history_date),
-    image: resolveRewardImage(value),
-    statusLabel: (() => {
-      const raw = pickString(value.statusLabel, value.status_label, value.status);
-      if (isRedeemedStatus(raw) || isRedeemedStatus(value.isClaimed) || isRedeemedStatus(value.claimed)) {
-        return 'Redeem';
-      }
-      return raw ?? 'Redeem';
-    })(),
-  };
-};
-
 const unwrapEntryList = (payload: unknown): unknown[] => {
   if (Array.isArray(payload)) {
     return payload;
@@ -464,57 +433,17 @@ const unwrapEntryList = (payload: unknown): unknown[] => {
   return [];
 };
 
-const unwrapHistoryList = (payload: unknown): unknown[] => {
-  if (!isRecord(payload)) {
-    return [];
-  }
-
-  for (const key of ['history', 'claimHistory', 'claim_history', 'claimed', 'claimedRewards']) {
-    const value = payload[key];
-    if (Array.isArray(value)) {
-      return value;
-    }
-
-    if (isRecord(value)) {
-      for (const nestedKey of ['history', 'items', 'list']) {
-        const nested = value[nestedKey];
-        if (Array.isArray(nested)) {
-          return nested;
-        }
-      }
-    }
-  }
-
-  return [];
-};
-
 export const parseDailyRewardsCalendarResponse = (
   payload: unknown,
   selectedDate: string,
 ): DailyRewardsCalendar => {
   const root = isRecord(payload) && isRecord(payload.data) ? payload.data : payload;
-  // Dedicated calender endpoint — keep API items even without displayType; filter by endDate day.
+  // Dedicated calender endpoint — keep API items for the date; range-filter when start/end exist.
+  // Offer cards come only from calender `data` — never invent cards from redemption history.
   const entries = unwrapEntryList(root)
     .map((item, index) => normalizeRewardEntry(item, selectedDate, index))
     .filter((entry): entry is DailyRewardEntry => Boolean(entry))
-    .filter(entry => entryEndsOnSelectedDate(entry, selectedDate));
-  const history = unwrapHistoryList(root)
-    .map(item => normalizeHistoryItem(item))
-    .filter((item): item is DailyRewardHistoryItem => Boolean(item));
-
-  const derivedHistory =
-    history.length > 0
-      ? history
-      : entries
-          .filter(entry => entry.isClaimed)
-          .map(entry => ({
-            id: `${entry.id}-history`,
-            title: entry.subtitle || entry.title,
-            subtitle: entry.title,
-            claimedAt: entry.claimedAt || entry.date,
-            image: entry.image,
-            statusLabel: 'Redeem',
-          }));
+    .filter(entry => entryActiveOnSelectedDate(entry, selectedDate));
 
   const parsedCalendarDays = unwrapCalendarDaysList(root)
     .map(item => normalizeCalendarDay(item, selectedDate))
@@ -540,7 +469,8 @@ export const parseDailyRewardsCalendarResponse = (
     selectedDate,
     calendarDays,
     entries,
-    history: derivedHistory,
+    // Status-only merge uses `/offer-redemption/user/history` separately.
+    history: [],
   };
 };
 
@@ -569,10 +499,17 @@ export const normalizeRedemptionStatusLabel = (raw?: string): string | undefined
   return raw.trim();
 };
 
-const todayUtcKey = () => new Date().toISOString().slice(0, 10);
+/** Local YYYY-MM-DD — matches Home/DailyRewardsSheet `formatApiDate` / selectedDate. */
+const todayLocalKey = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 const isEntryExpiredByEndDate = (entry: DailyRewardEntry, todayKey: string): boolean => {
-  const endKey = endDateDayKey(entry.endDate);
+  const endKey = dateDayKey(entry.endDate);
   if (!endKey) {
     return false;
   }
@@ -582,11 +519,15 @@ const isEntryExpiredByEndDate = (entry: DailyRewardEntry, todayKey: string): boo
 /**
  * Merge `/offer-redemption/user/history` into calendar entries by offerId for status only.
  * Does not touch `isWishlisted` (hearts come from calendar `isWishlisted`).
+ *
+ * Status rules:
+ * 1. Past selected calendar day → Expire (ignore history).
+ * 2. Today/future selected day → Expire if offer endDate day < today; else Claimed/Redeem/Available from history.
  */
 export const mergeRedemptionHistoryIntoCalendar = (
   calendar: DailyRewardsCalendar,
   history: DailyRewardHistoryItem[],
-  todayKey: string = todayUtcKey(),
+  todayKey: string = todayLocalKey(),
 ): DailyRewardsCalendar => {
   const historyByOfferId = new Map<string, DailyRewardHistoryItem>();
   history.forEach(item => {
@@ -596,7 +537,27 @@ export const mergeRedemptionHistoryIntoCalendar = (
     }
   });
 
+  const isPastSelectedDate = calendar.selectedDate < todayKey;
+
   const entries = calendar.entries.map(entry => {
+    if (isPastSelectedDate) {
+      return {
+        ...entry,
+        isClaimed: false,
+        isAvailable: false,
+        statusLabel: 'Expire',
+      };
+    }
+
+    if (isEntryExpiredByEndDate(entry, todayKey)) {
+      return {
+        ...entry,
+        isClaimed: false,
+        isAvailable: false,
+        statusLabel: 'Expire',
+      };
+    }
+
     const offerKey = entry.offerId?.trim() || entry.id.trim();
     const match = historyByOfferId.get(offerKey);
 
@@ -617,15 +578,6 @@ export const mergeRedemptionHistoryIntoCalendar = (
       };
     }
 
-    if (isEntryExpiredByEndDate(entry, todayKey)) {
-      return {
-        ...entry,
-        isClaimed: false,
-        isAvailable: false,
-        statusLabel: 'Expire',
-      };
-    }
-
     return {
       ...entry,
       statusLabel:
@@ -634,25 +586,19 @@ export const mergeRedemptionHistoryIntoCalendar = (
     };
   });
 
-  const normalizedHistory =
-    history.length > 0
-      ? history.map(item => ({
-          ...item,
-          statusLabel:
-            normalizeRedemptionStatusLabel(item.statusLabel) || item.statusLabel,
-        }))
-      : calendar.history;
-
+  // Keep history off the list surface — status was already applied onto `entries`.
   return {
     ...calendar,
     entries,
-    history: normalizedHistory,
+    history: [],
     calendarDays: calendar.calendarDays.map(day => {
       if (day.date !== calendar.selectedDate) {
         return day;
       }
       const dayClaimed = entries.some(
-        entry => (entry.date === day.date || entryEndsOnSelectedDate(entry, day.date)) && entry.isClaimed,
+        entry =>
+          (entry.date === day.date || entryActiveOnSelectedDate(entry, day.date)) &&
+          entry.isClaimed,
       );
       return dayClaimed ? { ...day, isClaimed: true } : day;
     }),

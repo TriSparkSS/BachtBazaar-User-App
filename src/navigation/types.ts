@@ -22,6 +22,10 @@ export type MainStackParamList = {
     product: ShopProduct;
   };
   Cart: undefined;
+  DeliveryOrders: undefined;
+  DeliveryOrderDetail: {
+    orderId: string;
+  };
   RequestDelivery: {
     shop: ShopWithOffers;
     product: ShopProduct;
@@ -39,6 +43,8 @@ export type MainStackParamList = {
     shop: ShopWithOffers;
     product: ShopProduct;
     requestId: string;
+    /** All delivery order ids for this wait (multi-item cart). */
+    orderIds?: string[];
     address: string;
     mobile: string;
     note?: string;
@@ -93,5 +99,9 @@ export type MainStackParamList = {
     marketPrice: number;
     youSave: number;
     offers: CreateRequestShopOffer[];
+  };
+  LegalWebScreen: {
+    title: string;
+    url: string;
   };
 };

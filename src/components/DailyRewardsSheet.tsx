@@ -18,7 +18,7 @@ import ScratchToReveal from './ScratchToReveal';
 import { useAppContext } from '../context/AppContext';
 import { colors, fonts } from '../helpers/styles';
 import { resolveOfferQrValue } from '../helpers/offerQrCode';
-import { DailyCalendarDay, DailyRewardEntry, DailyRewardHistoryItem, DailyRewardsCalendar } from '../types/dailyRewards';
+import { DailyCalendarDay, DailyRewardEntry, DailyRewardsCalendar } from '../types/dailyRewards';
 import { showAppAlert } from '../services/appAlert';
 
 type ClaimModalPhase = 'details' | 'scratch' | 'revealed';
@@ -328,9 +328,8 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
   const [isClaimingReward, setIsClaimingReward] = useState(false);
   const todayKey = useMemo(() => formatApiDate(new Date()), []);
 
+  // List source is calendar API `entries` only — never redemption history cards.
   const entries = rewards?.entries ?? [];
-  const history = rewards?.history ?? [];
-  const primaryReward = entries[0] ?? null;
 
   const visibleCalendarDays = useMemo(() => {
     const monthDays = buildFullMonthDays(selectedDate || todayKey);
@@ -415,27 +414,26 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
   const isFutureOrToday = selectedDate >= todayKey;
 
   const resolveOfferStatusLabel = (rawStatus?: string, isClaimed?: boolean) => {
+    // Past selected calendar day: always Expire (ignore history).
+    if (isPastSelectedDate) {
+      return 'Expire';
+    }
+
     const normalized = (rawStatus || '').toLowerCase();
-    // Prefer explicit history/API status: claimed | redeem | expire
+    // Today/future: endDate-expired merge sets Expire; otherwise Claimed / Redeem / Available.
+    if (normalized.includes('expir')) {
+      return 'Expire';
+    }
     if (normalized.includes('claim')) {
       return 'Claimed';
     }
     if (normalized.includes('redeem')) {
       return 'Redeem';
     }
-    if (normalized.includes('expir')) {
-      return 'Expire';
-    }
     if (isClaimed) {
       return 'Redeem';
     }
 
-    // Past dates / expired endDate: Expire (never Available)
-    if (isPastSelectedDate) {
-      return 'Expire';
-    }
-
-    // Today / future: Available
     if (isFutureOrToday) {
       return normalized === 'available' || !rawStatus ? 'Available' : rawStatus;
     }
@@ -557,45 +555,6 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
     setSelectedReward(reward);
   };
 
-  const openHistoryOffer = (item: DailyRewardHistoryItem) => {
-    const status = (item.statusLabel || '').toLowerCase();
-    const isRedeemed =
-      status.includes('redeem') || status.includes('claim') || status.includes('used');
-    if (!isRedeemed) {
-      return;
-    }
-
-    const matched =
-      entries.find(
-        entry =>
-          (item.offerId && (entry.offerId === item.offerId || entry.id === item.offerId)) ||
-          entry.id === item.id ||
-          entry.offerId === item.id,
-      ) ?? null;
-
-    const reward: DailyRewardEntry =
-      matched ??
-      ({
-        id: item.offerId || item.id,
-        offerId: item.offerId || item.id,
-        date: selectedDate,
-        dayLabel: '',
-        dayNumber: '',
-        title: item.title,
-        subtitle: item.subtitle,
-        image: item.image,
-        isClaimed: true,
-        isToday: selectedDate === todayKey,
-        isLocked: false,
-        isAvailable: false,
-        claimedAt: item.claimedAt,
-        statusLabel: 'Redeem',
-      } as DailyRewardEntry);
-
-    setClaimPhase('revealed');
-    setSelectedReward(reward);
-  };
-
   const closeClaimModal = () => {
     setSelectedReward(null);
     setClaimPhase('details');
@@ -651,7 +610,7 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
       );
     }
 
-    // Prefer calendar offers for the selected day (status already merged from history).
+    // Calendar API offers only (status already merged from redemption history by offerId).
     if (entries.length > 0) {
       return entries.map(entry => {
         const rewardImage = resolveImageUrl(entry.image) ?? entry.image;
@@ -676,49 +635,6 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
           wishlistPropsFor(entry),
         );
       });
-    }
-
-    if (history.length > 0) {
-      return history.map(item => {
-        const imageUri = resolveImageUrl(item.image) ?? item.image;
-        const statusLabel = resolveOfferStatusLabel(
-          item.statusLabel,
-          item.statusLabel?.toLowerCase().includes('claim') ||
-            item.statusLabel?.toLowerCase().includes('redeem'),
-        );
-        const canOpenQr =
-          statusLabel?.toLowerCase() === 'redeem' ||
-          statusLabel?.toLowerCase() === 'redeemed' ||
-          statusLabel?.toLowerCase() === 'claimed';
-        return renderHistoryItem(
-          item.id,
-          item.title,
-          item.subtitle,
-          formatClaimedDate(item.claimedAt),
-          statusLabel,
-          imageUri,
-          canOpenQr ? () => openHistoryOffer(item) : undefined,
-        );
-      });
-    }
-
-    if (primaryReward) {
-      const rewardImage = resolveImageUrl(primaryReward.image) ?? primaryReward.image;
-      const statusLabel = resolveOfferStatusLabel(
-        primaryReward.statusLabel || (primaryReward.isClaimed ? 'Redeem' : 'Available'),
-        primaryReward.isClaimed,
-      );
-      return renderHistoryItem(
-        primaryReward.id,
-        primaryReward.title,
-        primaryReward.subtitle,
-        formatClaimedDate(primaryReward.claimedAt) ||
-          (selectedDate === todayKey ? 'Today' : formatClaimedDate(selectedDate)),
-        statusLabel,
-        rewardImage,
-        isPastSelectedDate ? undefined : () => openClaimQrIfAllowed(primaryReward),
-        wishlistPropsFor(primaryReward),
-      );
     }
 
     return (

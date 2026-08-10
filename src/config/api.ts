@@ -92,6 +92,17 @@ export const API_ENDPOINTS = {
     `/merchants/${encodeURIComponent(merchantId.trim())}/delivery-status`,
   /** User delivery order create — under /api (DELIVERY_API_BASE_URL). */
   createDeliveryOrder: '/delivery/user/delivery-orders',
+  /** User delivery orders list (GET) — under /api (DELIVERY_API_BASE_URL). */
+  listDeliveryOrders: '/delivery/user/delivery-orders',
+  /**
+   * User delivery order detail (GET) — under /api (DELIVERY_API_BASE_URL).
+   * Full URL: https://bachatbazaar.tech/api/delivery/user/delivery-orders/:orderId
+   */
+  deliveryOrderDetail: (orderId: string) =>
+    `/delivery/user/delivery-orders/${encodeURIComponent(orderId.trim())}`,
+  /** User delivery order cancel — under /api (DELIVERY_API_BASE_URL). */
+  cancelDeliveryOrder: (orderId: string) =>
+    `/delivery/user/delivery-orders/${encodeURIComponent(orderId.trim())}/cancel`,
   /** Cart — under /api (CART_API_BASE_URL). */
   cart: '/cart',
   cartAdd: '/cart/add',

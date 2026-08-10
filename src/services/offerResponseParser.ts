@@ -34,6 +34,48 @@ const pickNumber = (...values: unknown[]): number | undefined => {
   return undefined;
 };
 
+const pickBoolean = (...values: unknown[]): boolean | undefined => {
+  for (const value of values) {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+
+    if (typeof value === 'number') {
+      return value !== 0;
+    }
+
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (['true', '1', 'yes'].includes(normalized)) {
+        return true;
+      }
+
+      if (['false', '0', 'no'].includes(normalized)) {
+        return false;
+      }
+    }
+  }
+
+  return undefined;
+};
+
+const isClaimedStatus = (value: unknown): boolean => {
+  if (typeof value !== 'string' || !value.trim()) {
+    return false;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized.includes('unclaim') || normalized.includes('not claim')) {
+    return false;
+  }
+  return (
+    normalized.includes('claimed') ||
+    normalized.includes('redeem') ||
+    normalized.includes('complet') ||
+    normalized === 'used'
+  );
+};
+
 const resolveImagePath = (value: unknown): string | undefined => {
   if (typeof value === 'string' && value.trim()) {
     return value.trim();
@@ -176,6 +218,27 @@ export const parseOfferDetailResponse = (
         }
       : undefined,
     isActive: data.isActive !== undefined ? Boolean(data.isActive) : data.is_active !== undefined ? Boolean(data.is_active) : undefined,
+    isClaimed:
+      pickBoolean(
+        data.isClaimed,
+        data.is_claimed,
+        data.claimed,
+        data.isRedeemed,
+        data.is_redeemed,
+        data.hasClaimed,
+        data.has_claimed,
+      ) ??
+      isClaimedStatus(
+        pickString(
+          data.status,
+          data.statusLabel,
+          data.status_label,
+          data.redemptionStatus,
+          data.redemption_status,
+          data.claimStatus,
+          data.claim_status,
+        ),
+      ),
     createdAt: pickString(data.createdAt, data.created_at),
   };
 };

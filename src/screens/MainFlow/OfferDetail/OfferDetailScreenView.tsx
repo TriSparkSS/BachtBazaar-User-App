@@ -40,10 +40,12 @@ type OfferDetailScreenViewProps = {
   shopLogoUri: string;
   isLoading?: boolean;
   isSaved?: boolean;
+  isClaimed?: boolean;
   isTogglingWishlist?: boolean;
   onBack: () => void;
   onToggleWishlist: () => void;
   onOpenScanner: () => void;
+  onAlreadyClaimedPress?: () => void;
   resolveImageUrl: (path?: string | null) => string | undefined;
 };
 
@@ -55,10 +57,12 @@ const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
   shopLogoUri,
   isLoading = false,
   isSaved = false,
+  isClaimed = false,
   isTogglingWishlist = false,
   onBack,
   onToggleWishlist,
   onOpenScanner,
+  onAlreadyClaimedPress,
   resolveImageUrl,
 }) => {
   const [heroError, setHeroError] = useState(false);
@@ -352,13 +356,24 @@ const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
       {!isLoading ? (
         <SafeAreaView edges={['bottom']} style={styles.bottomBar}>
           {showScanAction ? (
-            <TouchableOpacity
-              style={styles.scanButton}
-              activeOpacity={0.88}
-              onPress={onOpenScanner}>
-              <MaterialCommunityIcons name="qrcode-scan" size={20} color={colors.white} />
-              <Text style={styles.scanButtonText}>Load Scan</Text>
-            </TouchableOpacity>
+            isClaimed ? (
+              <TouchableOpacity
+                style={[styles.scanButton, styles.claimedButton]}
+                activeOpacity={1}
+                onPress={onAlreadyClaimedPress}
+              >
+                <MaterialCommunityIcons name="check-circle-outline" size={20} color="#8B97AB" />
+                <Text style={[styles.scanButtonText, styles.claimedButtonText]}>Already Claimed</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.scanButton}
+                activeOpacity={0.88}
+                onPress={onOpenScanner}>
+                <MaterialCommunityIcons name="qrcode-scan" size={20} color={colors.white} />
+                <Text style={styles.scanButtonText}>Load Scan</Text>
+              </TouchableOpacity>
+            )
           ) : (
             <View style={styles.redeemCard}>
               <View style={styles.redeemIconWrap}>
@@ -771,6 +786,14 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.white,
     fontFamily: fonts.BOLD,
+  },
+  claimedButton: {
+    backgroundColor: '#E8EDF5',
+    borderWidth: 1,
+    borderColor: '#D5DCE8',
+  },
+  claimedButtonText: {
+    color: '#8B97AB',
   },
   redeemCard: {
     alignItems: 'center',

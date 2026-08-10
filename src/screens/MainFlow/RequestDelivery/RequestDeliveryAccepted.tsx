@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { usePendingDeliveryRequest } from '../../../context/PendingDeliveryRequestContext';
 import { colors, fonts } from '../../../helpers/styles';
 import { openChatWithNumber, openPhoneDialer } from '../../../helpers/contactActions';
 import { MainStackParamList } from '../../../navigation/types';
@@ -20,6 +21,11 @@ const RequestDeliveryAccepted = () => {
   const route = useRoute();
   const params = route.params as MainStackParamList['RequestDeliveryAccepted'];
   const { shop, product, requestId, orderId, deliveryFee, eta } = params;
+  const { refreshPendingFromApi } = usePendingDeliveryRequest();
+
+  useEffect(() => {
+    void refreshPendingFromApi();
+  }, [refreshPendingFromApi]);
 
   const logoUri = shopApi.resolveImageUrl(shop.logo) ?? SHOP_LOGO_PLACEHOLDER;
   const address = formatShopAddress(shop);

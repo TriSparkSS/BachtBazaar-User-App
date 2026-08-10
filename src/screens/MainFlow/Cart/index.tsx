@@ -14,6 +14,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppContext } from '../../../context/AppContext';
+import { usePendingDeliveryRequest } from '../../../context/PendingDeliveryRequestContext';
 import { MainStackParamList } from '../../../navigation/types';
 import {
   cartApi,
@@ -21,9 +22,14 @@ import {
   CartSummary,
   formatCartPrice,
 } from '../../../services/cartApi';
+import {
+  deliveryApi,
+  extractDeliveryOrderId,
+} from '../../../services/deliveryApi';
 import { shopApi } from '../../../services/shopApi';
 import { showAppAlert } from '../../../services/appAlert';
 import { colors, fonts } from '../../../helpers/styles';
+import { cartItemToDeliveryTarget } from '../../../utils/cartDelivery';
 import {
   REQUEST_DELIVERY_FEE,
   REQUEST_PLATFORM_FEE,
@@ -42,13 +48,15 @@ const EMPTY_SUMMARY: CartSummary = {
 
 const Cart = () => {
   const navigation = useNavigation<StackNavigationProp<MainStackParamList, 'Cart'>>();
-  const { authToken } = useAppContext();
+  const { authToken, currentUser } = useAppContext();
+  const { setPendingRequest, refreshPendingFromApi } = usePendingDeliveryRequest();
   const [items, setItems] = useState<CartItem[]>([]);
   const [summary, setSummary] = useState<CartSummary>(EMPTY_SUMMARY);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [mutatingItemId, setMutatingItemId] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
+  const [isProceeding, setIsProceeding] = useState(false);
 
   const loadCart = useCallback(
     async (opts?: { refresh?: boolean }) => {
@@ -220,11 +228,134 @@ const Cart = () => {
     return { subtotal, discount, deliveryFee, platformFee, totalPayable };
   }, [items, summary]);
 
-  const handleProceed = () => {
-    showAppAlert(
-      'Checkout coming soon',
-      'Cart checkout will be available shortly. You can request delivery from a product page for now.',
-    );
+  const handleProceed = async () => {
+    if (isProceeding || mutatingItemId || isClearing || items.length === 0) {
+      return;
+    }
+
+    const token = requireToken();
+    if (!token) {
+      return;
+    }
+
+    const targets = items
+      .map(cartItemToDeliveryTarget)
+      .filter((target): target is NonNullable<typeof target> => Boolean(target));
+
+    if (targets.length === 0) {
+      showAppAlert(
+        'Missing product details',
+        'Some cart items are missing merchant or product info. Please remove them and try again.',
+      );
+      return;
+    }
+
+    const deliveryAddress = currentUser?.address?.trim() || '';
+    const normalizedMobile = (currentUser?.phone || '').replace(/\D/g, '').slice(-10);
+
+    // No saved address — reuse Request Delivery form with the first cart item.
+    if (!deliveryAddress) {
+      const primary = targets[0];
+      navigation.navigate('RequestDelivery', {
+        shop: primary.shop,
+        product: primary.product,
+      });
+      return;
+    }
+
+    if (normalizedMobile.length < 10) {
+      showAppAlert(
+        'Mobile required',
+        'Please update your profile mobile number, or request delivery from a product page.',
+      );
+      return;
+    }
+
+    try {
+      setIsProceeding(true);
+
+      const orderIds: string[] = [];
+      let lastError: Error | null = null;
+
+      for (let index = 0; index < targets.length; index += 1) {
+        const target = targets[index];
+        const extraNote =
+          targets.length > 1
+            ? `Cart checkout item ${index + 1} of ${targets.length}`
+            : '';
+        try {
+          const response = await deliveryApi.createOrder(
+            {
+              merchantId: target.merchantId,
+              productId: target.productId,
+              customItemName: target.product.title?.trim() || 'Item',
+              quantity: target.quantity,
+              itemPrice: target.itemPrice,
+              note: extraNote,
+              deliveryAddress,
+              phone: normalizedMobile,
+            },
+            token,
+          );
+
+          if (response.success === false) {
+            throw new Error(response.message || 'Could not send delivery request.');
+          }
+
+          const orderId = extractDeliveryOrderId(response);
+          if (orderId) {
+            orderIds.push(orderId);
+          } else {
+            orderIds.push(target.productId);
+          }
+        } catch (error) {
+          lastError =
+            error instanceof Error
+              ? error
+              : new Error('Could not send delivery request.');
+        }
+      }
+
+      if (orderIds.length === 0) {
+        throw lastError || new Error('Could not send your delivery request.');
+      }
+
+      const primary = targets[0];
+      const requestId = orderIds[0];
+      const itemPrice = primary.itemPrice;
+      const deliveryFee = REQUEST_DELIVERY_FEE;
+      const platformFee = REQUEST_PLATFORM_FEE;
+      const totalAmount = itemPrice + deliveryFee + platformFee;
+      const sentParams = {
+        shop: primary.shop,
+        product: primary.product,
+        requestId,
+        orderIds,
+        address: deliveryAddress,
+        mobile: normalizedMobile,
+        note: targets.length > 1 ? `Cart checkout (${orderIds.length} orders)` : undefined,
+        itemPrice,
+        deliveryFee,
+        platformFee,
+        totalAmount,
+      };
+
+      setPendingRequest({
+        ...sentParams,
+        orderIds,
+      });
+      // Source of truth is the list API — confirm waiting orders after create.
+      void refreshPendingFromApi();
+
+      navigation.replace('RequestDeliverySent', sentParams);
+    } catch (error) {
+      showAppAlert(
+        'Request failed',
+        error instanceof Error ? error.message : 'Could not send your delivery request.',
+      );
+    } finally {
+      setIsProceeding(false);
+    }
   };
 
   const renderItem = (item: CartItem) => {
@@ -433,15 +564,22 @@ const Cart = () => {
                   </View>
                 </View>
                 <TouchableOpacity
-                  style={styles.proceedBtn}
+                  style={[styles.proceedBtn, isProceeding && styles.proceedBtnOff]}
                   activeOpacity={0.9}
+                  disabled={isProceeding || Boolean(mutatingItemId) || isClearing}
                   onPress={handleProceed}>
-                  <Text style={styles.proceedBtnText}>Proceed</Text>
-                  <MaterialCommunityIcons
-                    name="arrow-right"
-                    size={18}
-                    color={colors.white}
-                  />
+                  {isProceeding ? (
+                    <ActivityIndicator size="small" color={colors.white} />
+                  ) : (
+                    <>
+                      <Text style={styles.proceedBtnText}>Proceed</Text>
+                      <MaterialCommunityIcons
+                        name="arrow-right"
+                        size={18}
+                        color={colors.white}
+                      />
+                    </>
+                  )}
                 </TouchableOpacity>
               </View>
             </SafeAreaView>
@@ -722,6 +860,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  proceedBtnOff: {
+    opacity: 0.7,
   },
   proceedBtnText: {
     color: colors.white,

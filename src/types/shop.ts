@@ -123,6 +123,8 @@ export interface OfferDetail extends ShopOffer {
   linkedProducts?: ShopProduct[];
   operationalRules?: OfferOperationalRules;
   isActive?: boolean;
+  /** True when the current user has already claimed/redeemed this offer. */
+  isClaimed?: boolean;
   createdAt?: string;
 }
 

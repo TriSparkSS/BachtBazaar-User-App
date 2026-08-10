@@ -15,6 +15,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppContext } from '../../../context/AppContext';
+import { usePendingDeliveryRequest } from '../../../context/PendingDeliveryRequestContext';
 import { colors, fonts } from '../../../helpers/styles';
 import { MainStackParamList } from '../../../navigation/types';
 import { showAppAlert } from '../../../services/appAlert';
@@ -47,6 +48,7 @@ const RequestDelivery = () => {
   const route = useRoute();
   const params = (route.params as MainStackParamList['RequestDelivery'] | undefined) ?? undefined;
   const { authToken, currentUser } = useAppContext();
+  const { setPendingRequest, refreshPendingFromApi } = usePendingDeliveryRequest();
 
   // Capture once from initial mount params so later address-only merges never drop product/shop.
   const [shop] = useState(() => params?.shop);
@@ -176,10 +178,12 @@ const RequestDelivery = () => {
       }
 
       const orderId = extractDeliveryOrderId(response);
-      navigation.replace('RequestDeliverySent', {
+      const requestId = orderId || productId;
+      const sentParams = {
         shop,
         product,
-        requestId: orderId || productId,
+        requestId,
+        orderIds: [requestId],
         address: deliveryAddress,
         mobile: normalizedMobile,
         note: note.trim() || undefined,
@@ -187,7 +191,14 @@ const RequestDelivery = () => {
         deliveryFee,
         platformFee,
         totalAmount,
+      };
+      setPendingRequest({
+        ...sentParams,
+        orderIds: [requestId],
       });
+      // Source of truth is the list API — confirm waiting orders after create.
+      void refreshPendingFromApi();
+      navigation.replace('RequestDeliverySent', sentParams);
     } catch (error) {
       showAppAlert(
         'Request failed',
@@ -206,6 +217,8 @@ const RequestDelivery = () => {
     note,
     platformFee,
     product,
+    refreshPendingFromApi,
+    setPendingRequest,
     shop,
     totalAmount,
   ]);

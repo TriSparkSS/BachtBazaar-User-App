@@ -7,13 +7,20 @@ import { useAppContext } from '../../../context/AppContext';
 import { shopApi } from '../../../services/shopApi';
 import { offerWishlistApi } from '../../../services/offerWishlistApi';
 import { showAppAlert } from '../../../services/appAlert';
+import { normalizeRedemptionStatusLabel } from '../../../services/dailyRewardsParser';
 import { OfferDetail as OfferDetailType } from '../../../types/shop';
+import { DailyRewardHistoryItem } from '../../../types/dailyRewards';
 
 const OFFER_PLACEHOLDER =
   'https://images.pexels.com/photos/5632402/pexels-photo-5632402.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=800';
 
 const SHOP_LOGO_PLACEHOLDER =
   'https://images.pexels.com/photos/264636/pexels-photo-264636.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=200';
+
+const isRedemptionHistoryClaimed = (item: DailyRewardHistoryItem): boolean => {
+  const statusLabel = normalizeRedemptionStatusLabel(item.statusLabel);
+  return statusLabel === 'Claimed' || statusLabel === 'Redeem';
+};
 
 const OfferDetail = () => {
   const navigation = useNavigation<StackNavigationProp<MainStackParamList, 'OfferDetail'>>();
@@ -24,6 +31,7 @@ const OfferDetail = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
   const [isTogglingWishlist, setIsTogglingWishlist] = useState(false);
+  const [isClaimed, setIsClaimed] = useState(Boolean((initialOffer as OfferDetailType).isClaimed));
 
   useEffect(() => {
     let cancelled = false;
@@ -35,6 +43,9 @@ const OfferDetail = () => {
 
         if (!cancelled) {
           setOffer(detail);
+          if (detail.isClaimed) {
+            setIsClaimed(true);
+          }
         }
       } catch {
         // Keep offer passed from previous screen when refresh fails.
@@ -51,6 +62,44 @@ const OfferDetail = () => {
       cancelled = true;
     };
   }, [authToken, initialOffer.id, shop.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const token = authToken?.trim();
+    const offerId = initialOffer.id?.trim();
+
+    if (!token || !offerId) {
+      return;
+    }
+
+    // Same pattern as calendar: merge /offer-redemption/user/history by offerId.
+    const loadClaimStatusFromHistory = async () => {
+      try {
+        const history = await shopApi.fetchOfferRedemptionHistory(token);
+        if (cancelled) {
+          return;
+        }
+
+        const match = history.find(item => {
+          const historyOfferId = item.offerId?.trim() || item.id.trim();
+          return historyOfferId === offerId;
+        });
+
+        if (match && isRedemptionHistoryClaimed(match)) {
+          setIsClaimed(true);
+          setOffer(prev => (prev.isClaimed ? prev : { ...prev, isClaimed: true }));
+        }
+      } catch {
+        // Offer-detail claim flags (if any) remain the source of truth on failure.
+      }
+    };
+
+    loadClaimStatusFromHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, initialOffer.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -140,6 +189,7 @@ const OfferDetail = () => {
       shopLogoUri={shopLogoUri}
       isLoading={isLoading}
       isSaved={isSaved}
+      isClaimed={isClaimed}
       isTogglingWishlist={isTogglingWishlist}
       onBack={() => navigation.goBack()}
       onToggleWishlist={handleToggleWishlist}
@@ -148,6 +198,9 @@ const OfferDetail = () => {
           expectedOfferId: offer.id?.trim() || initialOffer.id?.trim(),
           expectedOfferTitle: offer.title || initialOffer.title,
         })
+      }
+      onAlreadyClaimedPress={() =>
+        showAppAlert('Already Claimed', 'You have already claimed this offer.')
       }
       resolveImageUrl={shopApi.resolveImageUrl}
     />
