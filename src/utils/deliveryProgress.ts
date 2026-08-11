@@ -70,7 +70,7 @@ const ON_WAY_BANNER: DeliveryBannerTone = {
   bg: '#E3F2FD',
   text: '#1565C0',
   banner: '#366FE0',
-  icon: 'motorbike',
+  icon: 'truck-delivery',
   label: 'On the way',
 };
 
@@ -78,7 +78,7 @@ const DELIVERED_BANNER: DeliveryBannerTone = {
   bg: '#E8F5E9',
   text: '#2E7D32',
   banner: '#22A45A',
-  icon: 'package-check',
+  icon: 'check-decagram',
   label: 'Delivered',
 };
 
@@ -86,7 +86,7 @@ const COMPLETE_BANNER: DeliveryBannerTone = {
   bg: '#E8F5E9',
   text: '#2E7D32',
   banner: '#22A45A',
-  icon: 'check-decagram',
+  icon: 'home-check',
   label: 'Complete',
 };
 
@@ -94,7 +94,7 @@ const DISPATCHED_BANNER: DeliveryBannerTone = {
   bg: '#E3F2FD',
   text: '#1565C0',
   banner: '#366FE0',
-  icon: 'truck-delivery-outline',
+  icon: 'truck-fast',
   label: 'Dispatched',
 };
 
@@ -204,8 +204,9 @@ const mapNormalizedToStep = (n: string): number | null => {
   if (n === 'completed' || n === 'complete' || n.includes('complete') || n.includes('success')) {
     return 5;
   }
+  // Delivered finishes the stepper (Complete step filled), same as complete.
   if (n === 'delivered' || (n.includes('deliver') && !n.includes('out_for'))) {
-    return 4;
+    return 5;
   }
   if (n === 'arrived' || n.includes('arrived') || n.includes('at_door') || n.includes('reached')) {
     return 3;
@@ -302,6 +303,12 @@ export const resolveDeliveryProgress = (
   const stepIndex = fromMeta ?? fromStatus;
 
   if (stepIndex != null) {
+    const isDeliveredOnly =
+      (normalizedStatus === 'delivered' ||
+        (normalizedStatus.includes('deliver') &&
+          !normalizedStatus.includes('out_for') &&
+          !normalizedStatus.includes('complete'))) &&
+      stepIndex === 5;
     return {
       stepIndex,
       completedThrough: stepIndex,
@@ -309,7 +316,10 @@ export const resolveDeliveryProgress = (
       isCancelled: false,
       isWaiting: false,
       isAccepted: false,
-      banner: bannerForStep(stepIndex, status || ''),
+      // Keep "Delivered" banner when API says delivered; stepper is fully Complete.
+      banner: isDeliveredOnly
+        ? DELIVERED_BANNER
+        : bannerForStep(stepIndex, status || ''),
       normalizedStatus,
     };
   }

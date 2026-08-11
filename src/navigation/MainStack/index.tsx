@@ -24,6 +24,9 @@ import SavedOffers from '../../screens/MainFlow/SavedOffers';
 import ScannerScreen from '../../screens/MainFlow/ScannerScreen';
 import MyQrScreen from '../../screens/MainFlow/MyQrScreen';
 import LegalWebScreen from '../../screens/MainFlow/LegalWebScreen';
+import HelpSupport from '../../screens/MainFlow/HelpSupport';
+import CreateHelpTicket from '../../screens/MainFlow/HelpSupport/CreateHelpTicket';
+import HelpTicketDetail from '../../screens/MainFlow/HelpSupport/HelpTicketDetail';
 import WaitingForRequestBanner from '../../components/WaitingForRequestBanner';
 import {
   PendingDeliveryRequestProvider,
@@ -87,6 +90,9 @@ export const MainStack = () => {
                     <MainStackNav.Screen component={CreateRequestSearching} name={'CreateRequestSearching'} />
                     <MainStackNav.Screen component={CreateRequestResults} name={'CreateRequestResults'} />
                     <MainStackNav.Screen component={LegalWebScreen} name={'LegalWebScreen'} />
+                    <MainStackNav.Screen component={HelpSupport} name={'HelpSupport'} />
+                    <MainStackNav.Screen component={CreateHelpTicket} name={'CreateHelpTicket'} />
+                    <MainStackNav.Screen component={HelpTicketDetail} name={'HelpTicketDetail'} />
                 </MainStackNav.Navigator>
                 <WaitingForRequestBanner />
             </View>

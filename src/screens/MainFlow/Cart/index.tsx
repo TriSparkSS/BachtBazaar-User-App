@@ -347,6 +347,13 @@ const Cart = () => {
       // Source of truth is the list API — confirm waiting orders after create.
       void refreshPendingFromApi();
 
+      // Order placed — clear cart; ignore clear failures so Sent still opens.
+      try {
+        await cartApi.clearCart(token);
+      } catch (clearError) {
+        console.warn('[Cart] clearCart after createOrder failed', clearError);
+      }
+
       navigation.replace('RequestDeliverySent', sentParams);
     } catch (error) {
       showAppAlert(

@@ -26,6 +26,8 @@ const SCOOTER_IMAGE =
   'https://images.pexels.com/photos/4391470/pexels-photo-4391470.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=600';
 
 const DEFAULT_CANCEL_REASON = 'Order placed by mistake.';
+/** Brief pause on Request Sent before opening Delivery Order Detail. */
+const AUTO_NAVIGATE_DELAY_MS = 3000;
 
 const RequestDeliverySent = () => {
   const navigation =
@@ -38,6 +40,8 @@ const RequestDeliverySent = () => {
   const [isCancelling, setIsCancelling] = useState(false);
   const [isPolling, setIsPolling] = useState(true);
   const acceptedRef = useRef(false);
+  /** Set when user Cancels / taps X so the auto-nav timer must not fire. */
+  const leftScreenRef = useRef(false);
 
   const orderIds = useMemo(() => {
     const fromParams = (params.orderIds || []).map(id => String(id).trim()).filter(Boolean);
@@ -103,6 +107,8 @@ const RequestDeliverySent = () => {
   }, []);
 
   const goHome = useCallback(() => {
+    leftScreenRef.current = true;
+    acceptedRef.current = true;
     navigation.dispatch(
       CommonActions.reset({
         index: 0,
@@ -113,7 +119,7 @@ const RequestDeliverySent = () => {
 
   const openAccepted = useCallback(
     (orderId: string, _bidId?: string) => {
-      if (acceptedRef.current) {
+      if (acceptedRef.current || leftScreenRef.current) {
         return;
       }
       acceptedRef.current = true;
@@ -135,17 +141,39 @@ const RequestDeliverySent = () => {
     [navigation, orderIds, params.requestId, refreshPendingFromApi],
   );
 
+  // After a short delay, open Delivery Order Detail for the created order.
+  useEffect(() => {
+    const orderId =
+      orderIds[0] || String(params.requestId || '').trim();
+    if (!orderId) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (leftScreenRef.current || acceptedRef.current) {
+        return;
+      }
+      acceptedRef.current = true;
+      void refreshPendingFromApi();
+      navigation.replace('DeliveryOrderDetail', { orderId });
+    }, AUTO_NAVIGATE_DELAY_MS);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [navigation, orderIds, params.requestId, refreshPendingFromApi]);
+
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setInterval> | undefined;
 
     const poll = async () => {
-      if (!authToken?.trim() || acceptedRef.current) {
+      if (!authToken?.trim() || acceptedRef.current || leftScreenRef.current) {
         return;
       }
       try {
         const bids = await bestRequestApi.fetchBidsForRequest(params.requestId, authToken);
-        if (cancelled || acceptedRef.current) {
+        if (cancelled || acceptedRef.current || leftScreenRef.current) {
           return;
         }
         const accepted =
@@ -192,6 +220,8 @@ const RequestDeliverySent = () => {
         text: 'Cancel Request',
         style: 'destructive',
         onPress: async () => {
+          leftScreenRef.current = true;
+          acceptedRef.current = true;
           try {
             setIsCancelling(true);
             let lastMessage = 'Your delivery request was cancelled.';
@@ -209,6 +239,9 @@ const RequestDeliverySent = () => {
             showAppAlert('Cancelled', lastMessage);
             goHome();
           } catch (error) {
+            // Allow retry / auto-nav again if cancel API failed.
+            leftScreenRef.current = false;
+            acceptedRef.current = false;
             showAppAlert(
               'Cancel failed',
               error instanceof Error ? error.message : 'Could not cancel this request.',

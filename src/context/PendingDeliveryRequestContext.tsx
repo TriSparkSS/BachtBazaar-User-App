@@ -41,6 +41,10 @@ type PendingDeliveryRequestContextValue = {
   clearPendingRequest: () => void;
   /** Re-check GET /delivery/user/delivery-orders and sync banner state. */
   refreshPendingFromApi: () => Promise<void>;
+  /** True after user dismisses the waiting banner (X). Resets when pending clears or orderIds change. */
+  bannerDismissed: boolean;
+  /** Hide waiting banner locally — does not cancel the order. */
+  dismissBanner: () => void;
 };
 
 const defaultValue: PendingDeliveryRequestContextValue = {
@@ -48,6 +52,8 @@ const defaultValue: PendingDeliveryRequestContextValue = {
   setPendingRequest: () => undefined,
   clearPendingRequest: () => undefined,
   refreshPendingFromApi: async () => undefined,
+  bannerDismissed: false,
+  dismissBanner: () => undefined,
 };
 
 const PendingDeliveryRequestContext =
@@ -99,8 +105,21 @@ export const PendingDeliveryRequestProvider = ({ children }: PropsWithChildren) 
   const [pendingRequest, setPendingRequestState] = useState<PendingDeliveryRequest | null>(
     null,
   );
+  const [bannerDismissed, setBannerDismissed] = useState(false);
   const pendingRef = useRef<PendingDeliveryRequest | null>(null);
   const refreshGenRef = useRef(0);
+
+  const pendingOrderIdsKey =
+    pendingRequest == null
+      ? ''
+      : (pendingRequest.orderIds?.length
+          ? [...pendingRequest.orderIds].map(String).sort().join(',')
+          : pendingRequest.requestId || '');
+
+  // Reset dismiss when pending clears or the waiting order set changes.
+  useEffect(() => {
+    setBannerDismissed(false);
+  }, [pendingOrderIdsKey]);
 
   useEffect(() => {
     pendingRef.current = pendingRequest;
@@ -114,6 +133,10 @@ export const PendingDeliveryRequestProvider = ({ children }: PropsWithChildren) 
   const clearPendingRequest = useCallback(() => {
     pendingRef.current = null;
     setPendingRequestState(null);
+  }, []);
+
+  const dismissBanner = useCallback(() => {
+    setBannerDismissed(true);
   }, []);
 
   const refreshPendingFromApi = useCallback(async () => {
@@ -177,8 +200,17 @@ export const PendingDeliveryRequestProvider = ({ children }: PropsWithChildren) 
       setPendingRequest,
       clearPendingRequest,
       refreshPendingFromApi,
+      bannerDismissed,
+      dismissBanner,
     }),
-    [clearPendingRequest, pendingRequest, refreshPendingFromApi, setPendingRequest],
+    [
+      bannerDismissed,
+      clearPendingRequest,
+      dismissBanner,
+      pendingRequest,
+      refreshPendingFromApi,
+      setPendingRequest,
+    ],
   );
 
   return (

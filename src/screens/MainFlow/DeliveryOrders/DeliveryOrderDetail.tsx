@@ -29,6 +29,7 @@ import { shopApi } from '../../../services/shopApi';
 import { ShopProduct, ShopWithOffers } from '../../../types/shop';
 import {
   DELIVERY_PROGRESS_STEPS,
+  DeliveryProgressState,
   resolveDeliveryProgress,
 } from '../../../utils/deliveryProgress';
 import { formatShopAddress } from '../../../utils/shop';
@@ -42,6 +43,32 @@ const DEFAULT_CANCEL_REASON = 'Order placed by mistake.';
 const STEP_DONE_COLOR = colors.darkgreen;
 const STEP_MUTED_COLOR = '#C5CDD9';
 const STEP_LINE_MUTED = '#E0E5EE';
+
+/** MaterialCommunityIcons that match each delivery status banner label. */
+const STATUS_BANNER_ICON: Record<string, string> = {
+  Waiting: 'clock-outline',
+  Accepted: 'check-circle',
+  'Order picked': 'package-variant',
+  'On the way': 'truck-delivery',
+  Dispatched: 'truck-fast',
+  Arrived: 'map-marker-check',
+  Delivered: 'check-decagram',
+  Complete: 'home-check',
+  Cancelled: 'close-circle',
+};
+
+const resolveStatusBannerIcon = (progress: DeliveryProgressState): string => {
+  if (progress.isCancelled) {
+    return STATUS_BANNER_ICON.Cancelled;
+  }
+  if (progress.isWaiting) {
+    return STATUS_BANNER_ICON.Waiting;
+  }
+  if (progress.isAccepted) {
+    return STATUS_BANNER_ICON.Accepted;
+  }
+  return STATUS_BANNER_ICON[progress.banner.label] || progress.banner.icon;
+};
 
 const formatDate = (value?: string) => {
   if (!value) {
@@ -537,7 +564,7 @@ const DeliveryOrderDetail = () => {
                 ]}>
                 <View style={styles.statusBannerIcon}>
                   <MaterialCommunityIcons
-                    name={progress.banner.icon}
+                    name={resolveStatusBannerIcon(progress)}
                     size={18}
                     color={progress.banner.banner}
                   />

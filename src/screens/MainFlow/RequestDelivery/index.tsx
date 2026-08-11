@@ -19,6 +19,7 @@ import { usePendingDeliveryRequest } from '../../../context/PendingDeliveryReque
 import { colors, fonts } from '../../../helpers/styles';
 import { MainStackParamList } from '../../../navigation/types';
 import { showAppAlert } from '../../../services/appAlert';
+import { cartApi } from '../../../services/cartApi';
 import {
   deliveryApi,
   extractDeliveryOrderId,
@@ -198,6 +199,14 @@ const RequestDelivery = () => {
       });
       // Source of truth is the list API — confirm waiting orders after create.
       void refreshPendingFromApi();
+
+      // Order placed — clear cart; ignore clear failures so Sent still opens.
+      try {
+        await cartApi.clearCart(authToken);
+      } catch (clearError) {
+        console.warn('[RequestDelivery] clearCart after createOrder failed', clearError);
+      }
+
       navigation.replace('RequestDeliverySent', sentParams);
     } catch (error) {
       showAppAlert(

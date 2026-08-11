@@ -37,15 +37,17 @@ const getActiveRouteName = (state: unknown): string | undefined => {
  * (driven by GET /delivery/user/delivery-orders waiting statuses).
  * Sits at the bottom of the main stack (above any future tab bar / safe area).
  * Hidden on Request Sent / Accepted / Order Detail — those screens already show waiting UI + Cancel.
+ * User can dismiss with X (local only; does not cancel the order).
  */
 const WaitingForRequestBanner = () => {
   const insets = useSafeAreaInsets();
-  const { pendingRequest } = usePendingDeliveryRequest();
+  const { pendingRequest, bannerDismissed, dismissBanner } =
+    usePendingDeliveryRequest();
   // Banner is a sibling of MainStackNav (not inside it), but MainStack is a root
   // screen — so this hooks the root NavigationContext and re-renders on nested changes.
   const activeRoute = useNavigationState(state => getActiveRouteName(state));
 
-  if (!pendingRequest) {
+  if (!pendingRequest || bannerDismissed) {
     return null;
   }
 
@@ -79,20 +81,30 @@ const WaitingForRequestBanner = () => {
     <View
       pointerEvents="box-none"
       style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, 8) }]}>
-      <TouchableOpacity
-        style={styles.banner}
-        activeOpacity={0.9}
-        onPress={openSentScreen}
-        accessibilityRole="button"
-        accessibilityLabel="Waiting for request to accept. Tap to open request status.">
-        <View style={styles.iconWrap}>
-          <MaterialCommunityIcons name="clock-outline" size={18} color={colors.primary} />
-        </View>
-        <Text style={styles.text} numberOfLines={1}>
-          Waiting for request to accept
-        </Text>
-        <MaterialCommunityIcons name="chevron-right" size={20} color={colors.primary} />
-      </TouchableOpacity>
+      <View style={styles.banner}>
+        <TouchableOpacity
+          style={styles.bannerMain}
+          activeOpacity={0.9}
+          onPress={openSentScreen}
+          accessibilityRole="button"
+          accessibilityLabel="Waiting for request to accept. Tap to open request status.">
+          <View style={styles.iconWrap}>
+            <MaterialCommunityIcons name="clock-outline" size={18} color={colors.primary} />
+          </View>
+          <Text style={styles.text} numberOfLines={1}>
+            Waiting for request to accept
+          </Text>
+          <MaterialCommunityIcons name="chevron-right" size={20} color={colors.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.dismissBtn}
+          onPress={dismissBanner}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss waiting banner">
+          <MaterialCommunityIcons name="close" size={18} color={colors.text} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 };
@@ -112,18 +124,33 @@ const styles = StyleSheet.create({
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 4,
     backgroundColor: colors.primarySoft,
     borderWidth: 1,
     borderColor: colors.primaryBorder,
     borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingLeft: 14,
+    paddingRight: 8,
     shadowColor: '#1B2430',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
     shadowRadius: 10,
     elevation: 6,
+  },
+  bannerMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minWidth: 0,
+  },
+  dismissBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iconWrap: {
     width: 28,

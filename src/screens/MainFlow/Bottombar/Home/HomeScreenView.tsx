@@ -143,6 +143,7 @@ const sidebarIconPalette: Record<string, string> = {
   'Create request': '#E0F2FE',
   'Privacy Policy': '#E8EEFF',
   'Terms & Conditions': '#EAF5FF',
+  'Help & Support': '#E8F1FF',
 };
 
 const sidebarIconTint: Record<string, string> = {
@@ -166,6 +167,7 @@ const sidebarIconTint: Record<string, string> = {
   'Create request': '#0284C7',
   'Privacy Policy': '#3F5BD8',
   'Terms & Conditions': '#2E6FB8',
+  'Help & Support': '#366FE0',
 };
 
 const sidebarMciIcons: Record<AppIconName, string> = {
@@ -209,6 +211,7 @@ const sidebarMciIcons: Record<AppIconName, string> = {
   food: 'food-outline',
   'privacy-policy': 'shield-lock-outline',
   'terms-conditions': 'file-document-outline',
+  'help-support': 'headset',
 };
 
 const sidebarGroups: SidebarGroup[] = [
@@ -247,6 +250,7 @@ const sidebarGroups: SidebarGroup[] = [
     items: [
       { icon: 'privacy-policy', label: 'Privacy Policy' },
       { icon: 'terms-conditions', label: 'Terms & Conditions' },
+      { icon: 'help-support', label: 'Help & Support' },
     ],
   },
   {
@@ -707,6 +711,17 @@ const HomeScreenView = () => {
     },
     [navigation],
   );
+
+  const openHelpSupport = useCallback(() => {
+    const parentNavigation =
+      navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('HelpSupport');
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate('HelpSupport');
+  }, [navigation]);
 
   useEffect(() => {
     if (!authToken || !currentUser) {
@@ -1320,6 +1335,12 @@ const HomeScreenView = () => {
         'Terms & Conditions',
         'https://bachatbazaar.tech/legal/terms-and-condition',
       );
+      return;
+    }
+
+    if (label === 'Help & Support') {
+      setSidebarVisible(false);
+      openHelpSupport();
       return;
     }
 

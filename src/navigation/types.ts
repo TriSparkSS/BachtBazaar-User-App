@@ -104,4 +104,9 @@ export type MainStackParamList = {
     title: string;
     url: string;
   };
+  HelpSupport: undefined;
+  CreateHelpTicket: undefined;
+  HelpTicketDetail: {
+    ticketId: string;
+  };
 };
