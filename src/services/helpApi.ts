@@ -31,8 +31,12 @@ export type HelpTicketListItem = {
   description?: string;
   createdAt?: string;
   updatedAt?: string;
+  resolvedAt?: string;
+  closedAt?: string;
   raw: Record<string, unknown>;
 };
+
+export type HelpTicketStatusTab = 'Open' | 'All' | 'Closed';
 
 export type HelpTicketDetail = HelpTicketListItem & {
   messages: HelpTicketMessage[];
@@ -70,6 +74,97 @@ const pickString = (...candidates: unknown[]): string | undefined => {
     }
   }
   return undefined;
+};
+
+/** Normalize status strings for client-side tab filtering. */
+export const normalizeTicketStatus = (status?: string | null): string =>
+  String(status ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+
+const CLOSED_STATUS_TOKENS = [
+  'closed',
+  'close',
+  'resolved',
+  'resolve',
+  'done',
+  'completed',
+  'complete',
+] as const;
+
+const OPEN_STATUS_TOKENS = [
+  'open',
+  'pending',
+  'in_progress',
+  'inprogress',
+  'progress',
+  'waiting',
+  'wait',
+  'reopened',
+  're_open',
+  'active',
+  'new',
+] as const;
+
+export const isClosedLikeTicket = (ticket: HelpTicketListItem): boolean => {
+  if (ticket.resolvedAt || ticket.closedAt) {
+    return true;
+  }
+
+  const raw = ticket.raw;
+  const resolvedOrClosed = pickString(
+    raw.resolvedAt,
+    raw.resolved_at,
+    raw.closedAt,
+    raw.closed_at,
+  );
+  if (resolvedOrClosed) {
+    return true;
+  }
+
+  const status = normalizeTicketStatus(ticket.status);
+  if (!status) {
+    return false;
+  }
+
+  return CLOSED_STATUS_TOKENS.some(
+    token => status === token || status.includes(token),
+  );
+};
+
+export const isOpenLikeTicket = (ticket: HelpTicketListItem): boolean => {
+  if (isClosedLikeTicket(ticket)) {
+    return false;
+  }
+
+  const status = normalizeTicketStatus(ticket.status);
+  if (!status) {
+    // Missing status → treat as open so it does not leak into Closed.
+    return true;
+  }
+
+  if (
+    OPEN_STATUS_TOKENS.some(token => status === token || status.includes(token))
+  ) {
+    return true;
+  }
+
+  // Anything not closed-like stays in Open (API may use custom labels).
+  return true;
+};
+
+export const filterTicketsByTab = (
+  tickets: HelpTicketListItem[],
+  tab: HelpTicketStatusTab,
+): HelpTicketListItem[] => {
+  if (tab === 'All') {
+    return tickets;
+  }
+  if (tab === 'Closed') {
+    return tickets.filter(isClosedLikeTicket);
+  }
+  return tickets.filter(isOpenLikeTicket);
 };
 
 const extractList = (payload: unknown): unknown[] => {
@@ -270,8 +365,9 @@ const parseTicketListItem = (
       record.updatedAt,
       record.updated_at,
       record.lastReplyAt,
-      record.closedAt,
     ),
+    resolvedAt: pickString(record.resolvedAt, record.resolved_at),
+    closedAt: pickString(record.closedAt, record.closed_at),
     raw: record,
   };
 };

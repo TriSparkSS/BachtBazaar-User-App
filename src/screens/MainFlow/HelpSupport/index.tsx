@@ -16,11 +16,14 @@ import { useAppContext } from '../../../context/AppContext';
 import { colors, fonts } from '../../../helpers/styles';
 import { MainStackParamList } from '../../../navigation/types';
 import { showAppAlert } from '../../../services/appAlert';
-import { HelpTicketListItem, helpApi } from '../../../services/helpApi';
+import {
+  HelpTicketListItem,
+  HelpTicketStatusTab,
+  filterTicketsByTab,
+  helpApi,
+} from '../../../services/helpApi';
 
-type StatusTab = 'Open' | 'All' | 'Closed';
-
-const STATUS_TABS: StatusTab[] = ['Open', 'All', 'Closed'];
+const STATUS_TABS: HelpTicketStatusTab[] = ['Open', 'All', 'Closed'];
 
 const formatDate = (value?: string) => {
   if (!value) {
@@ -65,7 +68,7 @@ const HelpSupport = () => {
   const navigation =
     useNavigation<StackNavigationProp<MainStackParamList, 'HelpSupport'>>();
   const { authToken } = useAppContext();
-  const [activeTab, setActiveTab] = useState<StatusTab>('Open');
+  const [activeTab, setActiveTab] = useState<HelpTicketStatusTab>('Open');
   const [tickets, setTickets] = useState<HelpTicketListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -89,11 +92,13 @@ const HelpSupport = () => {
       }
 
       try {
+        // Still request by tab, but always re-filter client-side — API status
+        // query can return Open tickets for status=Closed.
         const list = await helpApi.fetchMyTickets(
           token,
           activeTab === 'All' ? undefined : activeTab,
         );
-        setTickets(list);
+        setTickets(filterTicketsByTab(list, activeTab));
         setError(null);
       } catch (err) {
         const message =

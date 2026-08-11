@@ -13,13 +13,20 @@ import {
 } from 'react-native';
 import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useAppContext } from '../../../context/AppContext';
 import { colors, fonts } from '../../../helpers/styles';
 import { MainStackParamList } from '../../../navigation/types';
 import { showAppAlert } from '../../../services/appAlert';
-import { HelpTicketDetail, helpApi } from '../../../services/helpApi';
+import {
+  HelpTicketDetail,
+  helpApi,
+  isClosedLikeTicket,
+} from '../../../services/helpApi';
 
 const formatDate = (value?: string) => {
   if (!value) {
@@ -54,6 +61,7 @@ const HelpTicketDetailScreen = () => {
     useNavigation<StackNavigationProp<MainStackParamList, 'HelpTicketDetail'>>();
   const route = useRoute<RouteProp<MainStackParamList, 'HelpTicketDetail'>>();
   const { authToken } = useAppContext();
+  const insets = useSafeAreaInsets();
   const ticketId = route.params.ticketId;
 
   const [ticket, setTicket] = useState<HelpTicketDetail | null>(null);
@@ -134,7 +142,10 @@ const HelpTicketDetailScreen = () => {
   };
 
   const tone = statusTone(ticket?.status);
-  const isClosed = (ticket?.status || '').toLowerCase().includes('close');
+  const isClosed = ticket ? isClosedLikeTicket(ticket) : false;
+  // Header sits outside KAV; offset keeps composer clear of keyboard.
+  const keyboardOffset =
+    Platform.OS === 'ios' ? insets.top + 52 : Math.max(insets.top, 0);
 
   return (
     <View style={styles.root}>
@@ -155,8 +166,8 @@ const HelpTicketDetailScreen = () => {
 
       <KeyboardAvoidingView
         style={styles.body}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}>
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={keyboardOffset}>
         {isLoading && !ticket ? (
           <View style={styles.center}>
             <ActivityIndicator size="small" color={colors.primary} />
@@ -174,11 +185,12 @@ const HelpTicketDetailScreen = () => {
             </TouchableOpacity>
           </View>
         ) : (
-          <>
+          <View style={styles.flex}>
             <ScrollView
               style={styles.flex}
               contentContainerStyle={styles.content}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
               refreshControl={
                 <RefreshControl
                   refreshing={isRefreshing}
@@ -244,38 +256,43 @@ const HelpTicketDetailScreen = () => {
             </ScrollView>
 
             {!isClosed ? (
-              <View style={styles.replyBar}>
-                <TextInput
-                  style={styles.replyInput}
-                  value={reply}
-                  onChangeText={setReply}
-                  placeholder="Write a reply..."
-                  placeholderTextColor={colors.mutedText}
-                  multiline
-                  maxLength={2000}
-                />
-                <TouchableOpacity
-                  style={[styles.sendBtn, isSending && styles.sendDisabled]}
-                  onPress={sendReply}
-                  disabled={isSending}
-                  activeOpacity={0.85}>
-                  {isSending ? (
-                    <ActivityIndicator size="small" color={colors.white} />
-                  ) : (
-                    <MaterialCommunityIcons
-                      name="send"
-                      size={18}
-                      color={colors.white}
-                    />
-                  )}
-                </TouchableOpacity>
-              </View>
+              <SafeAreaView edges={['bottom']} style={styles.replySafe}>
+                <View style={styles.replyBar}>
+                  <TextInput
+                    style={styles.replyInput}
+                    value={reply}
+                    onChangeText={setReply}
+                    placeholder="Write a reply..."
+                    placeholderTextColor={colors.mutedText}
+                    multiline
+                    maxLength={2000}
+                    textAlignVertical="top"
+                  />
+                  <TouchableOpacity
+                    style={[styles.sendBtn, isSending && styles.sendDisabled]}
+                    onPress={sendReply}
+                    disabled={isSending}
+                    activeOpacity={0.85}>
+                    {isSending ? (
+                      <ActivityIndicator size="small" color={colors.white} />
+                    ) : (
+                      <MaterialCommunityIcons
+                        name="send"
+                        size={18}
+                        color={colors.white}
+                      />
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </SafeAreaView>
             ) : (
-              <View style={styles.closedBar}>
-                <Text style={styles.closedText}>This ticket is closed.</Text>
-              </View>
+              <SafeAreaView edges={['bottom']} style={styles.replySafe}>
+                <View style={styles.closedBar}>
+                  <Text style={styles.closedText}>This ticket is closed.</Text>
+                </View>
+              </SafeAreaView>
             )}
-          </>
+          </View>
         )}
       </KeyboardAvoidingView>
     </View>
@@ -319,7 +336,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#F4F6FA',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    overflow: 'hidden',
+  },
+  replySafe: {
+    backgroundColor: colors.white,
   },
   center: {
     flex: 1,
