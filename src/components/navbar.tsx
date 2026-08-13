@@ -3,6 +3,7 @@ import { TextInput, View, Text, StyleSheet, TouchableOpacity } from 'react-nativ
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { AppTextInput } from './AppTextInput';
 import { colors, fonts } from '../helpers/styles';
+
 interface NavbarProps {
   onMenuPress?: () => void;
   onScannerPress?: () => void;
@@ -14,6 +15,11 @@ interface NavbarProps {
   onSearchChange?: (value: string) => void;
   onSearchSubmit?: () => void;
   onClearSearch?: () => void;
+  /** Coach-mark measure targets (Android needs collapsable={false}). */
+  headerRef?: React.RefObject<View | null>;
+  menuRef?: React.RefObject<View | null>;
+  headerActionsRef?: React.RefObject<View | null>;
+  searchRef?: React.RefObject<View | null>;
 }
 
 const Navbar: React.FC<NavbarProps> = ({
@@ -27,6 +33,10 @@ const Navbar: React.FC<NavbarProps> = ({
   onSearchChange,
   onSearchSubmit,
   onClearSearch,
+  headerRef,
+  menuRef,
+  headerActionsRef,
+  searchRef,
 }) => {
   const searchInputRef = useRef<TextInput>(null);
   const formattedSubtitle = subtitle.replace(/^Work\s*-\s*/i, '').trim();
@@ -34,17 +44,20 @@ const Navbar: React.FC<NavbarProps> = ({
   return (
     <>
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={onMenuPress}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="Open menu"
-        >
-          <MaterialCommunityIcons name="menu" size={24} color="#202843" />
-        </TouchableOpacity>
+        <View ref={menuRef} collapsable={false} style={styles.menuHighlightWrap}>
+          <TouchableOpacity
+            style={styles.menuButton}
+            onPress={onMenuPress}
+            activeOpacity={0.7}
+            accessibilityRole="button"
+            accessibilityLabel="Open menu"
+          >
+            <MaterialCommunityIcons name="menu" size={24} color="#202843" />
+          </TouchableOpacity>
+        </View>
 
-        <View style={styles.titleSection}>
+        {/* Welcome step: location / header title area only */}
+        <View ref={headerRef} collapsable={false} style={styles.titleSection}>
           <Text style={styles.locationTitle}>{title}</Text>
           <TouchableOpacity style={styles.locationSubRow} activeOpacity={0.75}>
             <Text style={styles.locationSubtext} numberOfLines={1}>
@@ -55,15 +68,18 @@ const Navbar: React.FC<NavbarProps> = ({
         </View>
 
         <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.cartButton}
-            onPress={onCartPress}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Open cart"
-          >
-            <MaterialCommunityIcons name="cart-outline" size={24} color="#202843" />
-          </TouchableOpacity>
+          {/* Cart step: cart icon only */}
+          <View ref={headerActionsRef} collapsable={false} style={styles.cartHighlightWrap}>
+            <TouchableOpacity
+              style={styles.cartButton}
+              onPress={onCartPress}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Open cart"
+            >
+              <MaterialCommunityIcons name="cart-outline" size={24} color="#202843" />
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
             style={styles.iconButton}
             activeOpacity={0.7}
@@ -77,34 +93,37 @@ const Navbar: React.FC<NavbarProps> = ({
 
       {showSearch && (
         <View style={styles.searchRow}>
-          <TouchableOpacity
-            style={styles.searchContainer}
-            activeOpacity={1}
-            onPress={() => searchInputRef.current?.focus()}>
-            <MaterialCommunityIcons name="magnify" size={22} color={colors.primary} />
-            <AppTextInput
-              ref={searchInputRef}
-              containerStyle={styles.searchInputWrap}
-              focusedContainerStyle={styles.searchInputFocused}
-              style={styles.searchInput}
-              placeholder="Search Product..."
-              placeholderTextColor={colors.lighterGray}
-              returnKeyType="search"
-              value={searchValue}
-              onChangeText={onSearchChange}
-              onSubmitEditing={onSearchSubmit}
-            />
-            {searchValue.trim() ? (
-              <TouchableOpacity
-                activeOpacity={0.75}
-                onPress={onClearSearch}
-                accessibilityRole="button"
-                accessibilityLabel="Clear search"
-              >
-                <MaterialCommunityIcons name="close-circle" size={18} color={colors.lightGray} />
-              </TouchableOpacity>
-            ) : null}
-          </TouchableOpacity>
+          {/* Search step: search bar only (exclude QR) */}
+          <View ref={searchRef} collapsable={false} style={styles.searchHighlightWrap}>
+            <TouchableOpacity
+              style={styles.searchContainer}
+              activeOpacity={1}
+              onPress={() => searchInputRef.current?.focus()}>
+              <MaterialCommunityIcons name="magnify" size={22} color={colors.primary} />
+              <AppTextInput
+                ref={searchInputRef}
+                containerStyle={styles.searchInputWrap}
+                focusedContainerStyle={styles.searchInputFocused}
+                style={styles.searchInput}
+                placeholder="Search Product..."
+                placeholderTextColor={colors.lighterGray}
+                returnKeyType="search"
+                value={searchValue}
+                onChangeText={onSearchChange}
+                onSubmitEditing={onSearchSubmit}
+              />
+              {searchValue.trim() ? (
+                <TouchableOpacity
+                  activeOpacity={0.75}
+                  onPress={onClearSearch}
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear search"
+                >
+                  <MaterialCommunityIcons name="close-circle" size={18} color={colors.lightGray} />
+                </TouchableOpacity>
+              ) : null}
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity style={styles.qrButton} activeOpacity={0.82} onPress={onScannerPress}>
             <MaterialCommunityIcons name="qrcode-scan" size={22} color={colors.white} />
           </TouchableOpacity>
@@ -125,6 +144,9 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
     gap: 10,
   },
+  menuHighlightWrap: {
+    borderRadius: 14,
+  },
   menuButton: {
     width: 44,
     height: 44,
@@ -143,6 +165,14 @@ const styles = StyleSheet.create({
   titleSection: {
     flex: 1,
     justifyContent: 'center',
+    paddingVertical: 2,
+  },
+  cartHighlightWrap: {
+    borderRadius: 14,
+  },
+  searchHighlightWrap: {
+    flex: 1,
+    borderRadius: 18,
   },
   locationTitle: {
     fontSize: 18,

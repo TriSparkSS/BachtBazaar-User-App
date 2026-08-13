@@ -43,6 +43,10 @@ import { getCurrentDeviceCoordinates, requestLocationPermission } from '../../..
 import OfferCountdownText from '../../../../components/OfferCountdownText';
 import PromoBannerCarousel from '../../../../components/PromoBannerCarousel';
 import DailyRewardsSheet from '../../../../components/DailyRewardsSheet';
+import FeatureWalkthrough, {
+  WalkthroughTargetRect,
+} from '../../../../components/FeatureWalkthrough';
+import { featureWalkthroughStorage } from '../../../../services/featureWalkthroughStorage';
 import { DailyCalendarDay, DailyRewardEntry, DailyRewardsCalendar } from '../../../../types/dailyRewards';
 
 const { width } = Dimensions.get('window');
@@ -139,11 +143,16 @@ const sidebarIconPalette: Record<string, string> = {
   Password: '#F3E5FF',
   'Edit Profile': '#E7F7D8',
   Notification: '#E8F0FF',
+  Language: '#E8F7F4',
   'Delete account': '#FFE5E5',
   'Create request': '#E0F2FE',
   'Privacy Policy': '#E8EEFF',
   'Terms & Conditions': '#EAF5FF',
+  FAQ: '#E8F1FF',
+  'Video Guide': '#FFE8F0',
+  'Help Articles': '#F3E8FF',
   'Help & Support': '#E8F1FF',
+  Contact: '#EAF8F0',
 };
 
 const sidebarIconTint: Record<string, string> = {
@@ -163,11 +172,16 @@ const sidebarIconTint: Record<string, string> = {
   Password: '#8A46CC',
   'Edit Profile': '#5E9631',
   Notification: '#4E73D8',
+  Language: '#1F8A70',
   'Delete account': '#D84B4B',
   'Create request': '#0284C7',
   'Privacy Policy': '#3F5BD8',
   'Terms & Conditions': '#2E6FB8',
+  FAQ: '#366FE0',
+  'Video Guide': '#C1487C',
+  'Help Articles': '#7C3AED',
   'Help & Support': '#366FE0',
+  Contact: '#2D8B5F',
 };
 
 const sidebarMciIcons: Record<AppIconName, string> = {
@@ -212,6 +226,11 @@ const sidebarMciIcons: Record<AppIconName, string> = {
   'privacy-policy': 'shield-lock-outline',
   'terms-conditions': 'file-document-outline',
   'help-support': 'headset',
+  faq: 'help-circle-outline',
+  'video-guide': 'play-circle-outline',
+  'help-articles': 'book-open-page-variant-outline',
+  contact: 'email-outline',
+  language: 'translate',
 };
 
 const sidebarGroups: SidebarGroup[] = [
@@ -246,16 +265,25 @@ const sidebarGroups: SidebarGroup[] = [
     ],
   },
   {
+    title: 'Help Center',
+    items: [
+      { icon: 'faq', label: 'FAQ' },
+      { icon: 'video-guide', label: 'Video Guide' },
+      { icon: 'help-support', label: 'Help & Support' },
+      { icon: 'contact', label: 'Contact' },
+    ],
+  },
+  {
     title: 'Legal',
     items: [
       { icon: 'privacy-policy', label: 'Privacy Policy' },
       { icon: 'terms-conditions', label: 'Terms & Conditions' },
-      { icon: 'help-support', label: 'Help & Support' },
     ],
   },
   {
     title: 'Setting',
     items: [
+      { icon: 'language', label: 'Language' },
       { icon: 'password', label: 'Password' },
       { icon: 'edit-profile', label: 'Edit Profile' },
       { icon: 'notification', label: 'Notification' },
@@ -301,15 +329,164 @@ const HomeScreenView = () => {
   );
   const [deviceCoordinates, setDeviceCoordinates] = useState<GeoCoordinates | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [featureWalkthroughVisible, setFeatureWalkthroughVisible] = useState(false);
+  const [walkthroughTargets, setWalkthroughTargets] = useState<
+    Partial<Record<string, WalkthroughTargetRect | null>>
+  >({});
   const bannerFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bannerRequestIdRef = useRef(0);
   const searchRequestIdRef = useRef(0);
   const lastCreateRequestPromptQueryRef = useRef<string | null>(null);
   const authTokenRef = useRef(authToken);
+  const walkthroughCheckedRef = useRef(false);
+  const homeScrollRef = useRef<ScrollView>(null);
+  const walkthroughHeaderRef = useRef<View>(null);
+  const walkthroughMenuRef = useRef<View>(null);
+  const walkthroughSearchRef = useRef<View>(null);
+  const walkthroughCartRef = useRef<View>(null);
+  const walkthroughCategoriesRef = useRef<View>(null);
+  const walkthroughOffersRef = useRef<View>(null);
+  const walkthroughRewardsRef = useRef<View>(null);
 
   useEffect(() => {
     authTokenRef.current = authToken;
   }, [authToken]);
+
+  const measureWalkthroughTargets = useCallback(() => {
+    // Offers wrapper is header + first-card region; clamp runaway lists.
+    const maxHeightById: Record<string, number> = {
+      offers: 340,
+      categories: 130,
+      welcome: 80,
+    };
+
+    const measure = (ref: React.RefObject<View | null>, id: string) => {
+      const node = ref.current;
+      if (!node || typeof node.measureInWindow !== 'function') {
+        setWalkthroughTargets(prev => ({ ...prev, [id]: null }));
+        return;
+      }
+      node.measureInWindow((x, y, width, height) => {
+        if (width > 8 && height > 8) {
+          const maxH = maxHeightById[id];
+          // Offers wrapper is the section header; extend hole over first shop cards below.
+          let nextHeight = id === 'offers' ? height + 250 : height;
+          if (maxH) {
+            nextHeight = Math.min(nextHeight, maxH);
+          }
+          setWalkthroughTargets(prev => ({
+            ...prev,
+            [id]: {
+              x,
+              y,
+              width,
+              height: nextHeight,
+            },
+          }));
+        } else {
+          setWalkthroughTargets(prev => ({ ...prev, [id]: null }));
+        }
+      });
+    };
+
+    measure(walkthroughHeaderRef, 'welcome');
+    measure(walkthroughSearchRef, 'search');
+    measure(walkthroughCategoriesRef, 'categories');
+    measure(walkthroughOffersRef, 'offers');
+    measure(walkthroughCartRef, 'cart');
+    measure(walkthroughRewardsRef, 'rewards');
+    measure(walkthroughMenuRef, 'menu');
+  }, []);
+
+  /** Double rAF after layout/scroll so measureInWindow sees settled frames. */
+  const scheduleWalkthroughMeasure = useCallback(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        measureWalkthroughTargets();
+      });
+    });
+  }, [measureWalkthroughTargets]);
+
+  const handleWalkthroughStepChange = useCallback(
+    (stepId: string) => {
+      const afterScrollSettle = (delayMs: number) => {
+        setTimeout(() => {
+          scheduleWalkthroughMeasure();
+          // Second pass once scroll inertia / layout finish.
+          setTimeout(scheduleWalkthroughMeasure, 90);
+        }, delayMs);
+      };
+
+      // Local offers sit lower — nudge scroll so the spotlight can land on it.
+      if (stepId === 'offers' || stepId === 'categories') {
+        homeScrollRef.current?.scrollTo({
+          y: stepId === 'offers' ? 240 : 140,
+          animated: true,
+        });
+        afterScrollSettle(360);
+        return;
+      }
+      if (
+        stepId === 'welcome' ||
+        stepId === 'search' ||
+        stepId === 'menu' ||
+        stepId === 'cart' ||
+        stepId === 'rewards'
+      ) {
+        homeScrollRef.current?.scrollTo({ y: 0, animated: true });
+        afterScrollSettle(320);
+        return;
+      }
+      scheduleWalkthroughMeasure();
+    },
+    [scheduleWalkthroughMeasure],
+  );
+
+  // First-time Home feature guide — only after login / main stack Home is visible.
+  useEffect(() => {
+    if (!authToken?.trim() || walkthroughCheckedRef.current) {
+      return;
+    }
+    walkthroughCheckedRef.current = true;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          // One-shot for coach-mark deploy so the guide reappears after install.
+          await featureWalkthroughStorage.ensureForcedOnceForVersion();
+          const done = await featureWalkthroughStorage.isDone();
+          if (!cancelled && !done) {
+            setFeatureWalkthroughVisible(true);
+          }
+        } catch {
+          if (!cancelled) {
+            setFeatureWalkthroughVisible(true);
+          }
+        }
+      })();
+    }, 450);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [authToken]);
+
+  useEffect(() => {
+    if (!featureWalkthroughVisible) {
+      return;
+    }
+    const t1 = setTimeout(scheduleWalkthroughMeasure, 80);
+    const t2 = setTimeout(scheduleWalkthroughMeasure, 380);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [featureWalkthroughVisible, scheduleWalkthroughMeasure]);
+
+  const handleFeatureWalkthroughComplete = useCallback(async () => {
+    setFeatureWalkthroughVisible(false);
+    await featureWalkthroughStorage.markDone();
+  }, []);
 
   const loadWishlistIds = useCallback(async () => {
     const token = authToken?.trim();
@@ -721,6 +898,63 @@ const HomeScreenView = () => {
     }
 
     (navigation as StackNavigationProp<MainStackParamList>).navigate('HelpSupport');
+  }, [navigation]);
+
+  const openFaq = useCallback(() => {
+    const parentNavigation =
+      navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('FAQ');
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate('FAQ');
+  }, [navigation]);
+
+  const openVideoGuide = useCallback(() => {
+    const parentNavigation =
+      navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('VideoGuide');
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate('VideoGuide');
+  }, [navigation]);
+
+  const openContact = useCallback(() => {
+    const parentNavigation =
+      navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('Contact');
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate('Contact');
+  }, [navigation]);
+
+  const openHelpArticles = useCallback(() => {
+    const parentNavigation =
+      navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('HelpArticles');
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate(
+      'HelpArticles',
+    );
+  }, [navigation]);
+
+  const openLanguage = useCallback(() => {
+    const parentNavigation =
+      navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('Language');
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate('Language');
   }, [navigation]);
 
   useEffect(() => {
@@ -1338,9 +1572,39 @@ const HomeScreenView = () => {
       return;
     }
 
+    if (label === 'FAQ') {
+      setSidebarVisible(false);
+      openFaq();
+      return;
+    }
+
+    if (label === 'Video Guide') {
+      setSidebarVisible(false);
+      openVideoGuide();
+      return;
+    }
+
+    if (label === 'Help Articles') {
+      setSidebarVisible(false);
+      openHelpArticles();
+      return;
+    }
+
     if (label === 'Help & Support') {
       setSidebarVisible(false);
       openHelpSupport();
+      return;
+    }
+
+    if (label === 'Contact') {
+      setSidebarVisible(false);
+      openContact();
+      return;
+    }
+
+    if (label === 'Language') {
+      setSidebarVisible(false);
+      openLanguage();
       return;
     }
 
@@ -1593,9 +1857,14 @@ const HomeScreenView = () => {
           onSearchChange={handleSearchChange}
           onSearchSubmit={handleSearchSubmit}
           onClearSearch={handleClearSearch}
+          headerRef={walkthroughHeaderRef}
+          menuRef={walkthroughMenuRef}
+          headerActionsRef={walkthroughCartRef}
+          searchRef={walkthroughSearchRef}
         />
 
         <ScrollView
+          ref={homeScrollRef}
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           nestedScrollEnabled
@@ -1625,23 +1894,32 @@ const HomeScreenView = () => {
               style={styles.quickActionsScroll}
               contentContainerStyle={styles.quickActionsContent}
             >
-              {quickActions.map(action => (
-                <TouchableOpacity
-                  key={action.label}
-                  style={styles.quickActionItem}
-                  activeOpacity={0.82}
-                  onPress={() => handleQuickActionPress(action.id, action.label)}
-                >
-                  <View style={[styles.quickActionCircle, { backgroundColor: action.bgColor }]}>
-                    <MaterialCommunityIcons
-                      name={action.icon}
-                      size={25}
-                      color={action.color}
-                    />
+              {quickActions.map(action => {
+                const isRewards = action.id === 'daily-rewards';
+                return (
+                  <View
+                    key={action.label}
+                    ref={isRewards ? walkthroughRewardsRef : undefined}
+                    collapsable={isRewards ? false : undefined}
+                    style={isRewards ? styles.walkthroughRewardsWrap : undefined}
+                  >
+                    <TouchableOpacity
+                      style={styles.quickActionItem}
+                      activeOpacity={0.82}
+                      onPress={() => handleQuickActionPress(action.id, action.label)}
+                    >
+                      <View style={[styles.quickActionCircle, { backgroundColor: action.bgColor }]}>
+                        <MaterialCommunityIcons
+                          name={action.icon}
+                          size={25}
+                          color={action.color}
+                        />
+                      </View>
+                      <Text style={styles.quickActionLabel}>{action.label}</Text>
+                    </TouchableOpacity>
                   </View>
-                  <Text style={styles.quickActionLabel}>{action.label}</Text>
-                </TouchableOpacity>
-              ))}
+                );
+              })}
             </ScrollView>
 
             <View style={styles.categoriesSection}>
@@ -1656,22 +1934,45 @@ const HomeScreenView = () => {
                   </TouchableOpacity>
                 ) : null}
               </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.categoriesScroll}
-                contentContainerStyle={styles.categoriesContent}
+              {/* Categories step: chips row only */}
+              <View
+                ref={walkthroughCategoriesRef}
+                collapsable={false}
+                style={styles.walkthroughCategoriesWrap}
+                onLayout={() => {
+                  if (featureWalkthroughVisible) {
+                    scheduleWalkthroughMeasure();
+                  }
+                }}
               >
-                {visibleCategoryChips.map(renderCategoryChip)}
-                {isLoadingCategories && categoryChips.length <= 1 ? (
-                  <View style={styles.categoryLoadingPill}>
-                    <ActivityIndicator size="small" color={colors.primary} />
-                  </View>
-                ) : null}
-              </ScrollView>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.categoriesScroll}
+                  contentContainerStyle={styles.categoriesContent}
+                >
+                  {visibleCategoryChips.map(renderCategoryChip)}
+                  {isLoadingCategories && categoryChips.length <= 1 ? (
+                    <View style={styles.categoryLoadingPill}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    </View>
+                  ) : null}
+                </ScrollView>
+              </View>
             </View>
 
             <View style={styles.localOffersSection}>
+              {/* Offers step: header + first-card region (extra shops stay outside) */}
+              <View
+                ref={walkthroughOffersRef}
+                collapsable={false}
+                style={styles.walkthroughOffersWrap}
+                onLayout={() => {
+                  if (featureWalkthroughVisible) {
+                    scheduleWalkthroughMeasure();
+                  }
+                }}
+              >
               <View style={styles.localOffersHeader}>
                 <View style={styles.localOffersTitleWrap}>
                   <Text style={styles.localOffersTitle}>
@@ -1701,6 +2002,7 @@ const HomeScreenView = () => {
                   </TouchableOpacity>
                   </View>
                 ) : null}
+              </View>
               </View>
 
               {isSearchActive && isSearching ? (
@@ -2219,6 +2521,13 @@ const HomeScreenView = () => {
         onOpenHistory={openOfferRedemptionHistory}
         resolveImageUrl={shopApi.resolveImageUrl}
       />
+
+      <FeatureWalkthrough
+        visible={featureWalkthroughVisible}
+        onComplete={handleFeatureWalkthroughComplete}
+        targets={walkthroughTargets}
+        onStepChange={handleWalkthroughStepChange}
+      />
     </View>
   );
 };
@@ -2591,6 +2900,15 @@ const styles = StyleSheet.create({
   categoriesSection: {
     marginBottom: 10,
     paddingBottom: 2,
+  },
+  walkthroughCategoriesWrap: {
+    borderRadius: 18,
+  },
+  walkthroughRewardsWrap: {
+    borderRadius: 18,
+  },
+  walkthroughOffersWrap: {
+    borderRadius: 18,
   },
   categoriesHeaderRow: {
     flexDirection: 'row',

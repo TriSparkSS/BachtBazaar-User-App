@@ -27,6 +27,11 @@ import LegalWebScreen from '../../screens/MainFlow/LegalWebScreen';
 import HelpSupport from '../../screens/MainFlow/HelpSupport';
 import CreateHelpTicket from '../../screens/MainFlow/HelpSupport/CreateHelpTicket';
 import HelpTicketDetail from '../../screens/MainFlow/HelpSupport/HelpTicketDetail';
+import FAQ from '../../screens/MainFlow/FAQ';
+import VideoGuide from '../../screens/MainFlow/VideoGuide';
+import HelpArticles from '../../screens/MainFlow/HelpArticles';
+import Contact from '../../screens/MainFlow/Contact';
+import Language from '../../screens/MainFlow/Language';
 import WaitingForRequestBanner from '../../components/WaitingForRequestBanner';
 import {
   PendingDeliveryRequestProvider,
@@ -93,6 +98,14 @@ export const MainStack = () => {
                     <MainStackNav.Screen component={HelpSupport} name={'HelpSupport'} />
                     <MainStackNav.Screen component={CreateHelpTicket} name={'CreateHelpTicket'} />
                     <MainStackNav.Screen component={HelpTicketDetail} name={'HelpTicketDetail'} />
+                    <MainStackNav.Screen component={FAQ} name={'FAQ'} />
+                    <MainStackNav.Screen component={VideoGuide} name={'VideoGuide'} />
+                    <MainStackNav.Screen
+                      component={HelpArticles}
+                      name={'HelpArticles'}
+                    />
+                    <MainStackNav.Screen component={Contact} name={'Contact'} />
+                    <MainStackNav.Screen component={Language} name={'Language'} />
                 </MainStackNav.Navigator>
                 <WaitingForRequestBanner />
             </View>

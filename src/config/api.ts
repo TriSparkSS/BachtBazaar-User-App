@@ -15,6 +15,12 @@ export const CART_API_BASE_URL = 'https://bachatbazaar.tech/api';
 /** Help & Support tickets live under /api (same root as delivery/cart). */
 export const HELP_API_BASE_URL = 'https://bachatbazaar.tech/api';
 
+/** FAQs live under /api (same root as help/delivery). */
+export const FAQ_API_BASE_URL = 'https://bachatbazaar.tech/api';
+
+/** Help articles live under /api (same root as FAQs/help). */
+export const HELP_ARTICLES_API_BASE_URL = 'https://bachatbazaar.tech/api';
+
 export const API_ENDPOINTS = {
   sendOtp: '/auth/send-otp',
   verifyOtp: '/auth/verify-otp',
@@ -121,6 +127,13 @@ export const API_ENDPOINTS = {
     `/help/user/tickets/${encodeURIComponent(ticketId.trim())}`,
   helpTicketReply: (ticketId: string) =>
     `/help/user/tickets/${encodeURIComponent(ticketId.trim())}/reply`,
+  /** FAQs — under /api (FAQ_API_BASE_URL). */
+  faqsUser: '/faqs/user',
+  faqDetail: (faqId: string) => `/faqs/${encodeURIComponent(faqId.trim())}`,
+  /** Help articles — under /api (HELP_ARTICLES_API_BASE_URL). */
+  helpArticlesUser: '/help-articles/user',
+  helpArticleDetail: (articleId: string) =>
+    `/help-articles/${encodeURIComponent(articleId.trim())}`,
 } as const;
 
 export const getShopLogoUrl = (shopId: string) =>

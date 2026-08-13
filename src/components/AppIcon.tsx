@@ -43,7 +43,12 @@ export type AppIconName =
   | 'food'
   | 'privacy-policy'
   | 'terms-conditions'
-  | 'help-support';
+  | 'help-support'
+  | 'faq'
+  | 'video-guide'
+  | 'help-articles'
+  | 'contact'
+  | 'language';
 
 const iconMap: Record<AppIconName, string> = {
   menu: 'menu',
@@ -87,6 +92,11 @@ const iconMap: Record<AppIconName, string> = {
   'privacy-policy': 'shield-lock-outline',
   'terms-conditions': 'file-document-outline',
   'help-support': 'headset',
+  faq: 'help-circle-outline',
+  'video-guide': 'play-circle-outline',
+  'help-articles': 'book-open-page-variant-outline',
+  contact: 'email-outline',
+  language: 'translate',
 };
 
 interface AppIconProps {

@@ -109,4 +109,9 @@ export type MainStackParamList = {
   HelpTicketDetail: {
     ticketId: string;
   };
+  FAQ: undefined;
+  VideoGuide: undefined;
+  HelpArticles: undefined;
+  Contact: undefined;
+  Language: undefined;
 };

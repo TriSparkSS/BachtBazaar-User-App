@@ -61,11 +61,14 @@ export type DeliveryOrderListItem = {
  * Matches flexibly (pending / waiting / requested / awaiting_acceptance / …)
  * while excluding accepted, cancelled, delivered, and other terminal states.
  */
-export const isWaitingDeliveryStatus = (status?: string | null): boolean => {
-  const normalized = String(status ?? '')
+const normalizeDeliveryStatus = (status?: string | null): string =>
+  String(status ?? '')
     .toLowerCase()
     .trim()
     .replace(/[\s-]+/g, '_');
+
+export const isWaitingDeliveryStatus = (status?: string | null): boolean => {
+  const normalized = normalizeDeliveryStatus(status);
 
   if (!normalized) {
     return false;
@@ -112,6 +115,42 @@ export const isWaitingDeliveryStatus = (status?: string | null): boolean => {
 
   return false;
 };
+
+/** Merchant has accepted / confirmed; order is in progress but not delivered. */
+export const isAcceptedDeliveryStatus = (status?: string | null): boolean => {
+  const normalized = normalizeDeliveryStatus(status);
+  if (!normalized || isWaitingDeliveryStatus(normalized)) {
+    return false;
+  }
+  if (
+    normalized.includes('cancel') ||
+    normalized.includes('reject') ||
+    normalized.includes('declin') ||
+    normalized.includes('fail') ||
+    normalized.includes('complete') ||
+    normalized.includes('success') ||
+    (normalized.includes('deliver') && !normalized.includes('out_for'))
+  ) {
+    return false;
+  }
+  return (
+    normalized === 'accepted' ||
+    normalized === 'confirmed' ||
+    normalized === 'assigned' ||
+    normalized.includes('accept') ||
+    normalized.includes('confirm') ||
+    normalized.includes('assign')
+  );
+};
+
+/**
+ * Orders that should drive the floating delivery chip:
+ * waiting for acceptance, or accepted (in progress) — not delivered/cancelled.
+ */
+export const isBannerTrackableDeliveryStatus = (
+  status?: string | null,
+): boolean =>
+  isWaitingDeliveryStatus(status) || isAcceptedDeliveryStatus(status);
 
 export type DeliveryOrderItemDetail = {
   id?: string;
