@@ -3,8 +3,10 @@ import { apiRequest } from './apiClient';
 
 export type HelpArticleItem = {
   id: string;
+  slug: string;
   title: string;
   content?: string;
+  summary?: string;
   category?: string;
   raw: Record<string, unknown>;
 };
@@ -74,6 +76,7 @@ const parseHelpArticleItem = (
   const id =
     pickString(raw._id, raw.id, raw.articleId, raw.article_id) ||
     `help-article-${index}`;
+  const slug = pickString(raw.slug, raw.articleSlug, raw.article_slug) || '';
   const title = pickString(
     raw.title,
     raw.headline,
@@ -85,18 +88,22 @@ const parseHelpArticleItem = (
     return null;
   }
 
+  const summary = pickString(raw.summary, raw.excerpt, raw.preview);
   const content = pickString(
     raw.content,
     raw.answer,
     raw.description,
     raw.body,
     raw.text,
+    summary,
   );
 
   return {
     id,
+    slug,
     title,
     content,
+    summary,
     category: pickString(raw.category, raw.targetAudience, raw.audience),
     raw,
   };
@@ -130,17 +137,17 @@ export const helpArticlesApi = {
   },
 
   async fetchHelpArticleDetail(
-    articleId: string,
+    slug: string,
     token?: string | null,
   ): Promise<HelpArticleItem> {
-    const trimmedId = String(articleId ?? '').trim();
-    if (!trimmedId) {
-      throw new Error('Help article id is required.');
+    const trimmedSlug = String(slug ?? '').trim();
+    if (!trimmedSlug) {
+      throw new Error('Help article slug is required.');
     }
 
     const trimmedToken = String(token ?? '').trim();
     const response = await apiRequest<unknown>(
-      API_ENDPOINTS.helpArticleDetail(trimmedId),
+      API_ENDPOINTS.helpArticleBySlug(trimmedSlug),
       {
         method: 'GET',
         baseUrl: HELP_ARTICLES_API_BASE_URL,

@@ -89,6 +89,41 @@ const normalizeSearchProduct = (value: unknown): ShopProduct | undefined => {
   };
 };
 
+const buildSearchOfferDiscount = (value: Record<string, unknown>): string | undefined => {
+  const offerTypeRecord = isRecord(value.offer_type_id) ? value.offer_type_id : undefined;
+  const offerType = pickString(
+    offerTypeRecord?.value,
+    offerTypeRecord?.label,
+    value.offerType,
+    value.offer_type,
+  )?.toLowerCase();
+  const discountValue = pickNumber(value.discount_value, value.discountValue);
+  const discountPercentage = pickNumber(value.discount_percentage, value.discountPercentage);
+
+  if (discountValue && discountValue > 0) {
+    return `₹${discountValue} OFF`;
+  }
+
+  if (discountPercentage && discountPercentage > 0) {
+    if (offerType?.includes('flat') || offerType?.includes('rupee')) {
+      return `₹${discountPercentage} OFF`;
+    }
+    if (offerType?.includes('free')) {
+      return pickString(offerTypeRecord?.label) ?? 'FREE';
+    }
+    return `${discountPercentage}% OFF`;
+  }
+
+  return pickString(
+    offerTypeRecord?.label,
+    value.discount,
+    value.discountLabel,
+    value.discount_label,
+    value.badge,
+    value.tag,
+  );
+};
+
 const normalizeSearchOffer = (value: unknown): ShopOffer | undefined => {
   if (!isRecord(value)) {
     return undefined;
@@ -101,15 +136,52 @@ const normalizeSearchOffer = (value: unknown): ShopOffer | undefined => {
     return undefined;
   }
 
+  const merchant = isRecord(value.merchant_id)
+    ? value.merchant_id
+    : isRecord(value.merchantId)
+      ? value.merchantId
+      : isRecord(value.shop)
+        ? value.shop
+        : undefined;
+
+  const shopId =
+    pickString(
+      value.shopId,
+      value.shop_id,
+      isRecord(value.shop) ? value.shop._id ?? value.shop.id : undefined,
+      merchant?._id,
+      merchant?.id,
+      typeof value.merchant_id === 'string' ? value.merchant_id : undefined,
+      typeof value.merchantId === 'string' ? value.merchantId : undefined,
+    ) ?? '';
+
+  const shopName = pickString(
+    value.shopName,
+    value.shop_name,
+    value.storeName,
+    isRecord(value.shop) ? value.shop.name ?? value.shop.shopName : undefined,
+    merchant?.name,
+    merchant?.shopName,
+  );
+
+  const offerTypeRecord = isRecord(value.offer_type_id) ? value.offer_type_id : undefined;
+
   return {
     id,
-    shopId: pickString(value.shopId, value.shop_id, value.merchant_id, value.merchantId) ?? '',
+    shopId,
     title,
     subtitle: pickString(value.subtitle, value.shortDescription, value.short_description),
-    discount: pickString(value.discount, value.discountLabel, value.discount_label),
+    discount: buildSearchOfferDiscount(value),
     image: pickString(value.thumbnail, value.image, value.imageUrl, value.image_url),
-    expiresAt: pickString(value.expiresAt, value.expires_at, value.endDate, value.end_date),
+    expiresAt: pickString(
+      value.expiresAt,
+      value.expires_at,
+      value.endDate,
+      value.end_date,
+    ),
     description: pickString(value.description, value.details),
+    offerType: pickString(offerTypeRecord?.label, offerTypeRecord?.value, value.offerType),
+    shopName,
   };
 };
 

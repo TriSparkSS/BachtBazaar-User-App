@@ -74,6 +74,8 @@ export interface ShopOffer {
   description?: string;
   minimumPurchaseAmount?: number;
   offerType?: string;
+  /** Shop / store display name when present on search payloads. */
+  shopName?: string;
   redeemSteps?: Array<{
     title: string;
     description: string;

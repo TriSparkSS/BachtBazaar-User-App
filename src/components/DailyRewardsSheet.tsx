@@ -129,22 +129,48 @@ const CalendarRewardThumb = ({
   imageUri,
   dayIndex,
   showLock,
+  isSelected,
 }: {
   imageUri?: string;
   dayIndex: number;
   showLock: boolean;
+  isSelected?: boolean;
 }) => {
   const palette = GIFT_PALETTE[dayIndex % GIFT_PALETTE.length];
+  const trimmedUri = imageUri?.trim() || undefined;
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageLoaded(false);
+    setImageFailed(false);
+  }, [trimmedUri]);
+
+  // Keep gift visible as the base layer. Offer images only cover it after a successful load —
+  // selecting a day used to swap to a broken/blank Image and leave an empty grey box.
+  const showOfferImage = Boolean(trimmedUri) && !imageFailed;
 
   return (
-    <View style={styles.rewardThumbWrap}>
-      {imageUri ? (
-        <Image source={{ uri: imageUri }} style={styles.rewardThumbImage} />
-      ) : (
-        <View style={[styles.rewardThumbFallback, { backgroundColor: palette.bg }]}>
-          <MaterialCommunityIcons name="gift" size={22} color={palette.icon} />
-        </View>
-      )}
+    <View style={[styles.rewardThumbWrap, isSelected && styles.rewardThumbSelected]}>
+      <View style={[styles.rewardThumbFallback, { backgroundColor: palette.bg }]}>
+        <MaterialCommunityIcons name="gift" size={22} color={palette.icon} />
+      </View>
+
+      {showOfferImage ? (
+        <Image
+          source={{ uri: trimmedUri }}
+          style={[
+            styles.rewardThumbImage,
+            StyleSheet.absoluteFillObject,
+            !imageLoaded && styles.rewardThumbImageHidden,
+          ]}
+          onLoad={() => setImageLoaded(true)}
+          onError={() => {
+            setImageFailed(true);
+            setImageLoaded(false);
+          }}
+        />
+      ) : null}
 
       {showLock ? (
         <View style={styles.lockOverlay}>
@@ -688,7 +714,8 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
                 const isToday = day.date === todayKey;
                 // Lock only past days — never today or future
                 const showLock = isPast || Boolean(day.isLocked && !isToday);
-                const imageUri = resolveImageUrl(day.image) ?? day.image;
+                const rawImage = resolveImageUrl(day.image) ?? day.image;
+                const imageUri = rawImage?.trim() || undefined;
 
                 return (
                   <TouchableOpacity
@@ -716,6 +743,7 @@ const DailyRewardsSheet: React.FC<DailyRewardsSheetProps> = ({
                       imageUri={imageUri}
                       dayIndex={index}
                       showLock={showLock}
+                      isSelected={isSelected}
                     />
                   </TouchableOpacity>
                 );
@@ -856,10 +884,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: 'hidden',
     backgroundColor: '#F3F4F6',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  rewardThumbSelected: {
+    borderColor: ACTIVE_BLUE,
   },
   rewardThumbImage: {
     width: '100%',
     height: '100%',
+  },
+  rewardThumbImageHidden: {
+    opacity: 0,
   },
   rewardThumbFallback: {
     width: '100%',

@@ -79,7 +79,17 @@ const HelpArticlesScreen = () => {
 
   const ensureContent = useCallback(
     async (item: HelpArticleItem) => {
-      if (item.content?.trim()) {
+      const slug = item.slug?.trim();
+      if (!slug) {
+        setDetailErrors(prev => ({
+          ...prev,
+          [item.id]: 'Help article slug is missing.',
+        }));
+        return;
+      }
+
+      // List may only include summary; always load full body by slug when expanding.
+      if (item.content?.trim() && item.content !== item.summary) {
         return;
       }
 
@@ -92,16 +102,19 @@ const HelpArticlesScreen = () => {
 
       try {
         const detail = await helpArticlesApi.fetchHelpArticleDetail(
-          item.id,
+          slug,
           authToken,
         );
         setArticles(prev =>
           prev.map(article =>
-            article.id === item.id
+            article.id === item.id || article.slug === slug
               ? {
                   ...article,
+                  id: detail.id || article.id,
+                  slug: detail.slug || article.slug,
                   title: detail.title || article.title,
                   content: detail.content || article.content,
+                  summary: detail.summary || article.summary,
                   category: detail.category || article.category,
                   raw: detail.raw,
                 }

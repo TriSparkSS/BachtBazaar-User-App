@@ -91,13 +91,16 @@ type FeatureWalkthroughProps = {
   onStepChange?: (stepId: string, stepIndex: number) => void;
 };
 
-const SPOTLIGHT_PADDING = 10;
+const SPOTLIGHT_PADDING = 6;
 const DEFAULT_SPOTLIGHT_RADIUS = 16;
 const TOOLTIP_GAP = 14;
-const ARROW_SIZE = 9;
-const TOOLTIP_EST_HEIGHT = 200;
+const ARROW_SIZE = 10;
+const TOOLTIP_EST_HEIGHT = 210;
 const SIDE_MARGIN = 18;
-const MASK_COLOR = 'rgba(18, 24, 38, 0.62)';
+const MASK_COLOR = 'rgba(15, 23, 42, 0.68)';
+/** Deep Bachat blue card (FinX-style coach mark). */
+const CARD_BG = colors.primary;
+const CARD_BG_SOFT = colors.primaryDark;
 
 const STEP_RADIUS: Record<string, number> = {
   welcome: 14,
@@ -108,16 +111,6 @@ const STEP_RADIUS: Record<string, number> = {
   rewards: 18,
   menu: 14,
 };
-
-const ICON_TINTS = [
-  { bg: '#EEF4FF', fg: '#366FE0' },
-  { bg: '#E8F8F0', fg: '#1F9D63' },
-  { bg: '#FFF4E8', fg: '#E08A2B' },
-  { bg: '#F3E8FF', fg: '#7C3AED' },
-  { bg: '#FFE8EF', fg: '#E11D48' },
-  { bg: '#E8F4FF', fg: '#0284C7' },
-  { bg: '#F0FDF4', fg: '#15803D' },
-];
 
 const roundedRectPath = (
   x: number,
@@ -209,7 +202,6 @@ const FeatureWalkthrough = ({
   const total = steps.length;
   const step = steps[Math.min(stepIndex, Math.max(total - 1, 0))];
   const isLast = stepIndex >= total - 1;
-  const iconTint = ICON_TINTS[stepIndex % ICON_TINTS.length];
 
   useEffect(() => {
     if (!visible || !step) {
@@ -223,7 +215,7 @@ const FeatureWalkthrough = ({
     onComplete();
   }, [onComplete]);
 
-  /** Advance to the next step (or Done on last). */
+  /** Advance to the next step (or finish on last). */
   const handleNext = useCallback(() => {
     if (isLast) {
       finish();
@@ -232,13 +224,16 @@ const FeatureWalkthrough = ({
     setStepIndex(prev => Math.min(prev + 1, total - 1));
   }, [finish, isLast, total]);
 
-  /** Skip current section only — same advance as Next. */
+  /**
+   * Skip THIS tip only — advances to the next step.
+   * Does not mark complete / dismiss the whole tour (except on last step).
+   */
   const handleSkip = useCallback(() => {
     handleNext();
   }, [handleNext]);
 
-  /** Exit entire walkthrough and mark complete. */
-  const handleSkipAll = useCallback(() => {
+  /** ✕ / back — exit entire walkthrough and mark complete. */
+  const handleCloseTour = useCallback(() => {
     finish();
   }, [finish]);
 
@@ -287,8 +282,7 @@ const FeatureWalkthrough = ({
     const estimated = Math.max(tooltipHeight, 170);
     const spaceBelow = bottomSafe - (spotlight.y + spotlight.height + TOOLTIP_GAP);
     const spaceAbove = spotlight.y - TOOLTIP_GAP - topSafe;
-    const placeAbove =
-      spaceBelow < estimated && spaceAbove > spaceBelow;
+    const placeAbove = spaceBelow < estimated && spaceAbove > spaceBelow;
 
     let top = placeAbove
       ? spotlight.y - TOOLTIP_GAP - estimated
@@ -326,7 +320,8 @@ const FeatureWalkthrough = ({
       ),
     );
 
-    const finalPlaceAbove = top + estimated / 2 < spotlight.y + spotlight.height / 2;
+    const finalPlaceAbove =
+      top + estimated / 2 < spotlight.y + spotlight.height / 2;
 
     return {
       mode: 'anchored' as const,
@@ -348,7 +343,7 @@ const FeatureWalkthrough = ({
       transparent
       animationType="fade"
       statusBarTranslucent
-      onRequestClose={handleSkipAll}
+      onRequestClose={handleCloseTour}
     >
       <View style={styles.root} pointerEvents="box-none">
         <Svg width={screenW} height={screenH} style={StyleSheet.absoluteFill}>
@@ -365,7 +360,7 @@ const FeatureWalkthrough = ({
                 fill="transparent"
                 stroke="#FFFFFF"
                 strokeWidth={5}
-                opacity={0.14}
+                opacity={0.12}
               />
               <Rect
                 x={spotlight.x - 1}
@@ -377,7 +372,7 @@ const FeatureWalkthrough = ({
                 fill="transparent"
                 stroke="#FFFFFF"
                 strokeWidth={2}
-                opacity={0.55}
+                opacity={0.5}
               />
             </>
           ) : null}
@@ -424,39 +419,32 @@ const FeatureWalkthrough = ({
               }
             }}
           >
-            <View style={styles.skipAllRow}>
+            <View style={styles.headerRow}>
+              <View style={styles.iconCircle}>
+                <MaterialCommunityIcons
+                  name={step.icon}
+                  size={22}
+                  color={CARD_BG}
+                />
+              </View>
+              <View style={styles.headerSpacer} />
               <TouchableOpacity
-                onPress={handleSkipAll}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                onPress={handleCloseTour}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 activeOpacity={0.7}
+                style={styles.closeBtn}
+                accessibilityLabel="Close tour"
               >
-                <Text style={styles.skipAllText}>Skip all</Text>
+                <Text style={styles.closeText}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            <View style={styles.contentRow}>
-              <View
-                style={[
-                  styles.iconCircle,
-                  { backgroundColor: iconTint.bg },
-                ]}
-              >
-                <MaterialCommunityIcons
-                  name={step.icon}
-                  size={24}
-                  color={iconTint.fg}
-                />
-              </View>
-
-              <View style={styles.textCol}>
-                <Text style={styles.title} numberOfLines={2}>
-                  {step.title}
-                </Text>
-                <Text style={styles.description} numberOfLines={4}>
-                  {step.description}
-                </Text>
-              </View>
-            </View>
+            <Text style={styles.title} numberOfLines={2}>
+              {step.title}
+            </Text>
+            <Text style={styles.description} numberOfLines={4}>
+              {step.description}
+            </Text>
 
             <View style={styles.footer}>
               <TouchableOpacity
@@ -518,7 +506,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: ARROW_SIZE,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderBottomColor: colors.white,
+    borderBottomColor: CARD_BG,
     marginBottom: -1,
     alignSelf: 'flex-start',
   },
@@ -530,87 +518,92 @@ const styles = StyleSheet.create({
     borderTopWidth: ARROW_SIZE,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderTopColor: colors.white,
+    borderTopColor: CARD_BG,
     marginTop: -1,
     alignSelf: 'flex-start',
   },
   card: {
-    backgroundColor: colors.white,
-    borderRadius: 16,
+    backgroundColor: CARD_BG,
+    borderRadius: 18,
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 14,
+    borderWidth: 1,
+    borderColor: CARD_BG_SOFT,
     shadowColor: '#0F172A',
-    shadowOpacity: 0.22,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 16,
+    shadowOpacity: 0.35,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 18,
   },
-  skipAllRow: {
-    alignItems: 'flex-end',
-    marginBottom: 8,
-  },
-  skipAllText: {
-    fontSize: 12,
-    fontFamily: fonts.BOLD,
-    color: '#94A3B8',
-    letterSpacing: 0.1,
-  },
-  contentRow: {
+  headerRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 14,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  headerSpacer: {
+    flex: 1,
   },
   iconCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    backgroundColor: colors.white,
   },
-  textCol: {
-    flex: 1,
-    paddingTop: 1,
+  closeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+  },
+  closeText: {
+    fontSize: 14,
+    color: colors.white,
+    fontFamily: fonts.BOLD,
+    lineHeight: 18,
   },
   title: {
-    fontSize: 16,
-    lineHeight: 21,
+    fontSize: 17,
+    lineHeight: 22,
     fontFamily: fonts.BOLD,
-    color: colors.text,
-    marginBottom: 4,
+    color: colors.white,
+    marginBottom: 6,
   },
   description: {
     fontSize: 13,
     lineHeight: 19,
-    color: colors.mutedText,
+    color: 'rgba(255,255,255,0.88)',
+    marginBottom: 14,
   },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E8EDF5',
+    borderTopColor: 'rgba(255,255,255,0.22)',
     paddingTop: 12,
-    marginTop: 2,
   },
   footerSide: {
-    minWidth: 52,
+    minWidth: 48,
   },
   skipText: {
     fontSize: 14,
     fontFamily: fonts.BOLD,
-    color: '#64748B',
+    color: 'rgba(255,255,255,0.85)',
   },
   stepCounter: {
     flex: 1,
     textAlign: 'center',
     fontSize: 13,
     fontFamily: fonts.BOLD,
-    color: '#94A3B8',
+    color: 'rgba(255,255,255,0.72)',
   },
   primaryButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.white,
     borderRadius: 10,
     minHeight: 36,
     paddingHorizontal: 18,
@@ -619,7 +612,7 @@ const styles = StyleSheet.create({
     minWidth: 72,
   },
   primaryButtonText: {
-    color: colors.white,
+    color: CARD_BG,
     fontSize: 14,
     fontFamily: fonts.BOLD,
   },

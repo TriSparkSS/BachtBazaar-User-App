@@ -126,6 +126,14 @@ const EMPTY_SEARCH_RESULTS: SearchResults = {
   offers: [],
 };
 
+const SEARCH_SUGGESTION_DEBOUNCE_MS = 300;
+const SEARCH_SUGGESTION_MIN_CHARS = 2;
+/**
+ * Optional offer_type_id when restricting Home autocomplete to one offer type.
+ * Leave undefined so products, shops, and offers of any type can appear together.
+ */
+const HOME_OFFER_SEARCH_TYPE_ID: string | undefined = undefined;
+
 const sidebarIconPalette: Record<string, string> = {
   Overview: '#F7DCA8',
   Shop: '#D9E8FF',
@@ -150,7 +158,7 @@ const sidebarIconPalette: Record<string, string> = {
   'Terms & Conditions': '#EAF5FF',
   FAQ: '#E8F1FF',
   'Video Guide': '#FFE8F0',
-  'Help Articles': '#F3E8FF',
+  'Help Articles': '#FFF4E5',
   'Help & Support': '#E8F1FF',
   Contact: '#EAF8F0',
 };
@@ -179,7 +187,7 @@ const sidebarIconTint: Record<string, string> = {
   'Terms & Conditions': '#2E6FB8',
   FAQ: '#366FE0',
   'Video Guide': '#C1487C',
-  'Help Articles': '#7C3AED',
+  'Help Articles': '#B86E00',
   'Help & Support': '#366FE0',
   Contact: '#2D8B5F',
 };
@@ -269,6 +277,7 @@ const sidebarGroups: SidebarGroup[] = [
     items: [
       { icon: 'faq', label: 'FAQ' },
       { icon: 'video-guide', label: 'Video Guide' },
+      { icon: 'help-articles', label: 'Help Articles' },
       { icon: 'help-support', label: 'Help & Support' },
       { icon: 'contact', label: 'Contact' },
     ],
@@ -312,6 +321,9 @@ const HomeScreenView = () => {
   const [searchResults, setSearchResults] = useState<SearchResults>(EMPTY_SEARCH_RESULTS);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchSuggestions, setSearchSuggestions] = useState<SearchResults>(EMPTY_SEARCH_RESULTS);
+  const [searchSuggestionsVisible, setSearchSuggestionsVisible] = useState(false);
+  const [isSearchingSuggestions, setIsSearchingSuggestions] = useState(false);
   const [isPhoneVisible, setIsPhoneVisible] = useState(false);
   const [profileImageLoadError, setProfileImageLoadError] = useState(false);
   const [dailyRewardsVisible, setDailyRewardsVisible] = useState(false);
@@ -336,67 +348,91 @@ const HomeScreenView = () => {
   const bannerFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bannerRequestIdRef = useRef(0);
   const searchRequestIdRef = useRef(0);
+  const searchSuggestionRequestIdRef = useRef(0);
+  const searchSuggestionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastCreateRequestPromptQueryRef = useRef<string | null>(null);
   const authTokenRef = useRef(authToken);
   const walkthroughCheckedRef = useRef(false);
   const homeScrollRef = useRef<ScrollView>(null);
+  const homeScrollYRef = useRef(0);
+  const homeScrollViewportHRef = useRef(Dimensions.get('window').height * 0.6);
   const walkthroughHeaderRef = useRef<View>(null);
   const walkthroughMenuRef = useRef<View>(null);
   const walkthroughSearchRef = useRef<View>(null);
   const walkthroughCartRef = useRef<View>(null);
   const walkthroughCategoriesRef = useRef<View>(null);
   const walkthroughOffersRef = useRef<View>(null);
+  const walkthroughOffersFirstCardRef = useRef<View>(null);
   const walkthroughRewardsRef = useRef<View>(null);
 
   useEffect(() => {
     authTokenRef.current = authToken;
   }, [authToken]);
 
+  const measureNodeInWindow = useCallback(
+    (ref: React.RefObject<View | null>): Promise<WalkthroughTargetRect | null> =>
+      new Promise(resolve => {
+        const node = ref.current;
+        if (!node || typeof node.measureInWindow !== 'function') {
+          resolve(null);
+          return;
+        }
+        node.measureInWindow((x, y, width, height) => {
+          if (width > 8 && height > 8) {
+            resolve({ x, y, width, height });
+          } else {
+            resolve(null);
+          }
+        });
+      }),
+    [],
+  );
+
+  const unionRects = (
+    a: WalkthroughTargetRect,
+    b: WalkthroughTargetRect | null,
+  ): WalkthroughTargetRect => {
+    if (!b) {
+      return a;
+    }
+    const x = Math.min(a.x, b.x);
+    const y = Math.min(a.y, b.y);
+    const right = Math.max(a.x + a.width, b.x + b.width);
+    const bottom = Math.max(a.y + a.height, b.y + b.height);
+    return { x, y, width: right - x, height: bottom - y };
+  };
+
   const measureWalkthroughTargets = useCallback(() => {
-    // Offers wrapper is header + first-card region; clamp runaway lists.
-    const maxHeightById: Record<string, number> = {
-      offers: 340,
-      categories: 130,
-      welcome: 80,
+    const apply = (id: string, rect: WalkthroughTargetRect | null) => {
+      setWalkthroughTargets(prev => ({ ...prev, [id]: rect }));
     };
 
-    const measure = (ref: React.RefObject<View | null>, id: string) => {
-      const node = ref.current;
-      if (!node || typeof node.measureInWindow !== 'function') {
-        setWalkthroughTargets(prev => ({ ...prev, [id]: null }));
+    const measure = async (
+      ref: React.RefObject<View | null>,
+      id: string,
+    ) => {
+      const rect = await measureNodeInWindow(ref);
+      apply(id, rect);
+    };
+
+    void measure(walkthroughHeaderRef, 'welcome');
+    void measure(walkthroughSearchRef, 'search');
+    void measure(walkthroughCategoriesRef, 'categories');
+    void measure(walkthroughCartRef, 'cart');
+    void measure(walkthroughRewardsRef, 'rewards');
+    void measure(walkthroughMenuRef, 'menu');
+
+    // Offers: section header + first shop card (exact union, no fake height).
+    void (async () => {
+      const header = await measureNodeInWindow(walkthroughOffersRef);
+      if (!header) {
+        apply('offers', null);
         return;
       }
-      node.measureInWindow((x, y, width, height) => {
-        if (width > 8 && height > 8) {
-          const maxH = maxHeightById[id];
-          // Offers wrapper is the section header; extend hole over first shop cards below.
-          let nextHeight = id === 'offers' ? height + 250 : height;
-          if (maxH) {
-            nextHeight = Math.min(nextHeight, maxH);
-          }
-          setWalkthroughTargets(prev => ({
-            ...prev,
-            [id]: {
-              x,
-              y,
-              width,
-              height: nextHeight,
-            },
-          }));
-        } else {
-          setWalkthroughTargets(prev => ({ ...prev, [id]: null }));
-        }
-      });
-    };
-
-    measure(walkthroughHeaderRef, 'welcome');
-    measure(walkthroughSearchRef, 'search');
-    measure(walkthroughCategoriesRef, 'categories');
-    measure(walkthroughOffersRef, 'offers');
-    measure(walkthroughCartRef, 'cart');
-    measure(walkthroughRewardsRef, 'rewards');
-    measure(walkthroughMenuRef, 'menu');
-  }, []);
+      const firstCard = await measureNodeInWindow(walkthroughOffersFirstCardRef);
+      apply('offers', unionRects(header, firstCard));
+    })();
+  }, [measureNodeInWindow]);
 
   /** Double rAF after layout/scroll so measureInWindow sees settled frames. */
   const scheduleWalkthroughMeasure = useCallback(() => {
@@ -407,39 +443,130 @@ const HomeScreenView = () => {
     });
   }, [measureWalkthroughTargets]);
 
-  const handleWalkthroughStepChange = useCallback(
-    (stepId: string) => {
-      const afterScrollSettle = (delayMs: number) => {
+  const getWalkthroughStepRef = useCallback(
+    (stepId: string): React.RefObject<View | null> | null => {
+      switch (stepId) {
+        case 'welcome':
+          return walkthroughHeaderRef;
+        case 'search':
+          return walkthroughSearchRef;
+        case 'categories':
+          return walkthroughCategoriesRef;
+        case 'offers':
+          return walkthroughOffersRef;
+        case 'cart':
+          return walkthroughCartRef;
+        case 'rewards':
+          return walkthroughRewardsRef;
+        case 'menu':
+          return walkthroughMenuRef;
+        default:
+          return null;
+      }
+    },
+    [],
+  );
+
+  /**
+   * Scroll Home so the target’s vertical center sits near the ScrollView
+   * viewport center (header/navbar is outside the ScrollView).
+   * Formula: y = targetContentY - viewportH/2 + targetH/2
+   */
+  const scrollWalkthroughTargetIntoCenter = useCallback(
+    (stepId: string, onSettled: () => void) => {
+      const FIXED_TOP_STEPS = new Set([
+        'welcome',
+        'search',
+        'menu',
+        'cart',
+      ]);
+
+      const settleAfter = (delayMs: number) => {
         setTimeout(() => {
           scheduleWalkthroughMeasure();
-          // Second pass once scroll inertia / layout finish.
-          setTimeout(scheduleWalkthroughMeasure, 90);
+          setTimeout(scheduleWalkthroughMeasure, 100);
+          onSettled();
         }, delayMs);
       };
 
-      // Local offers sit lower — nudge scroll so the spotlight can land on it.
-      if (stepId === 'offers' || stepId === 'categories') {
-        homeScrollRef.current?.scrollTo({
-          y: stepId === 'offers' ? 240 : 140,
-          animated: true,
-        });
-        afterScrollSettle(360);
-        return;
-      }
-      if (
-        stepId === 'welcome' ||
-        stepId === 'search' ||
-        stepId === 'menu' ||
-        stepId === 'cart' ||
-        stepId === 'rewards'
-      ) {
+      if (FIXED_TOP_STEPS.has(stepId)) {
         homeScrollRef.current?.scrollTo({ y: 0, animated: true });
-        afterScrollSettle(320);
+        settleAfter(420);
         return;
       }
-      scheduleWalkthroughMeasure();
+
+      const targetRef = getWalkthroughStepRef(stepId);
+      const scrollView = homeScrollRef.current;
+      if (!targetRef?.current || !scrollView) {
+        scheduleWalkthroughMeasure();
+        onSettled();
+        return;
+      }
+
+      const scrollNative = scrollView as unknown as {
+        measureInWindow?: (
+          cb: (x: number, y: number, w: number, h: number) => void,
+        ) => void;
+        scrollTo: (opts: { y: number; animated?: boolean }) => void;
+      };
+
+      const finishWithScroll = (
+        targetWindowY: number,
+        targetHeight: number,
+        viewportWindowY: number,
+        viewportHeight: number,
+      ) => {
+        const contentY =
+          targetWindowY - viewportWindowY + homeScrollYRef.current;
+        const nextY = Math.max(
+          0,
+          contentY - viewportHeight / 2 + targetHeight / 2,
+        );
+        scrollNative.scrollTo({ y: nextY, animated: true });
+        settleAfter(480);
+      };
+
+      const measureAndCenter = async () => {
+        let targetRect = await measureNodeInWindow(targetRef);
+        if (stepId === 'offers' && targetRect) {
+          const firstCard = await measureNodeInWindow(
+            walkthroughOffersFirstCardRef,
+          );
+          targetRect = unionRects(targetRect, firstCard);
+        }
+        if (!targetRect) {
+          scheduleWalkthroughMeasure();
+          onSettled();
+          return;
+        }
+
+        if (typeof scrollNative.measureInWindow === 'function') {
+          scrollNative.measureInWindow((_sx, sy, _sw, sh) => {
+            const viewportH =
+              sh > 40 ? sh : homeScrollViewportHRef.current || sh;
+            finishWithScroll(targetRect!.y, targetRect!.height, sy, viewportH);
+          });
+          return;
+        }
+
+        finishWithScroll(
+          targetRect.y,
+          targetRect.height,
+          0,
+          homeScrollViewportHRef.current,
+        );
+      };
+
+      void measureAndCenter();
     },
-    [scheduleWalkthroughMeasure],
+    [getWalkthroughStepRef, measureNodeInWindow, scheduleWalkthroughMeasure],
+  );
+
+  const handleWalkthroughStepChange = useCallback(
+    (stepId: string) => {
+      scrollWalkthroughTargetIntoCenter(stepId, () => undefined);
+    },
+    [scrollWalkthroughTargetIntoCenter],
   );
 
   // First-time Home feature guide — only after login / main stack Home is visible.
@@ -1062,6 +1189,84 @@ const HomeScreenView = () => {
     void runSearch(activeSearchQuery);
   }, [activeSearchQuery, runSearch]);
 
+  const dismissSearchSuggestions = useCallback(() => {
+    setSearchSuggestionsVisible(false);
+  }, []);
+
+  const runSearchSuggestions = useCallback(async (query: string) => {
+    const trimmed = query.trim();
+    const requestId = ++searchSuggestionRequestIdRef.current;
+
+    if (trimmed.length < SEARCH_SUGGESTION_MIN_CHARS) {
+      setSearchSuggestions(EMPTY_SEARCH_RESULTS);
+      setSearchSuggestionsVisible(false);
+      setIsSearchingSuggestions(false);
+      return;
+    }
+
+    setIsSearchingSuggestions(true);
+
+    try {
+      const result = await shopApi.searchShopsProductsAndOffers(
+        trimmed,
+        authTokenRef.current ?? undefined,
+        HOME_OFFER_SEARCH_TYPE_ID
+          ? { offerTypeId: HOME_OFFER_SEARCH_TYPE_ID }
+          : undefined,
+      );
+
+      if (searchSuggestionRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setSearchSuggestions({
+        ...result,
+        query: result.query?.trim() || trimmed,
+      });
+      // Keep the dropdown open while typing (Chrome-style) even when empty —
+      // never show the product "not available" dialog for live suggestions.
+      setSearchSuggestionsVisible(true);
+    } catch {
+      if (searchSuggestionRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setSearchSuggestions({ ...EMPTY_SEARCH_RESULTS, query: trimmed });
+      setSearchSuggestionsVisible(true);
+    } finally {
+      if (searchSuggestionRequestIdRef.current === requestId) {
+        setIsSearchingSuggestions(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (searchSuggestionTimerRef.current) {
+      clearTimeout(searchSuggestionTimerRef.current);
+      searchSuggestionTimerRef.current = null;
+    }
+
+    const trimmed = searchQuery.trim();
+    if (trimmed.length < SEARCH_SUGGESTION_MIN_CHARS) {
+      searchSuggestionRequestIdRef.current += 1;
+      setSearchSuggestions(EMPTY_SEARCH_RESULTS);
+      setSearchSuggestionsVisible(false);
+      setIsSearchingSuggestions(false);
+      return;
+    }
+
+    searchSuggestionTimerRef.current = setTimeout(() => {
+      void runSearchSuggestions(trimmed);
+    }, SEARCH_SUGGESTION_DEBOUNCE_MS);
+
+    return () => {
+      if (searchSuggestionTimerRef.current) {
+        clearTimeout(searchSuggestionTimerRef.current);
+        searchSuggestionTimerRef.current = null;
+      }
+    };
+  }, [runSearchSuggestions, searchQuery]);
+
   const handleSearchChange = useCallback((value: string) => {
     setSearchQuery(value);
 
@@ -1069,6 +1274,8 @@ const HomeScreenView = () => {
     if (!value.trim()) {
       setActiveSearchQuery('');
       setIsSearching(false);
+      setSearchSuggestions(EMPTY_SEARCH_RESULTS);
+      setSearchSuggestionsVisible(false);
       return;
     }
 
@@ -1085,6 +1292,7 @@ const HomeScreenView = () => {
   const handleSearchSubmit = useCallback(() => {
     const wordQuery = searchQuery.trim();
     setSearchQuery(wordQuery);
+    setSearchSuggestionsVisible(false);
     if (wordQuery) {
       setIsSearching(true);
     }
@@ -1094,6 +1302,8 @@ const HomeScreenView = () => {
   const handleClearSearch = useCallback(() => {
     setSearchQuery('');
     setActiveSearchQuery('');
+    setSearchSuggestions(EMPTY_SEARCH_RESULTS);
+    setSearchSuggestionsVisible(false);
     lastCreateRequestPromptQueryRef.current = '';
   }, []);
 
@@ -1178,6 +1388,12 @@ const HomeScreenView = () => {
     searchResults.totalProductsFound > 0 ||
     searchResults.totalServicesFound > 0 ||
     searchResults.totalShopsFound > 0;
+  const hasProductHits =
+    searchResults.products.length > 0 || searchResults.totalProductsFound > 0;
+  const suggestionHitCount =
+    searchSuggestions.products.length +
+    searchSuggestions.shops.length +
+    searchSuggestions.offers.length;
   const searchResultCount =
     searchResults.products.length +
     searchResults.services.length +
@@ -1236,9 +1452,16 @@ const HomeScreenView = () => {
       return;
     }
 
+    // Live autocomplete must never open the product create-request dialog.
+    if (searchSuggestionsVisible) {
+      return;
+    }
+
     const query = activeSearchQuery.trim();
     // Wait until this query's response is applied — avoid racing an empty previous state.
-    if (!query || !resultsMatchActiveQuery || hasSearchHits) {
+    // Dialog is product-gated: empty offers/shops alone must not suppress it when no product
+    // exists, and a product hit must never trigger it just because offers are empty.
+    if (!query || !resultsMatchActiveQuery || hasProductHits) {
       return;
     }
 
@@ -1262,9 +1485,10 @@ const HomeScreenView = () => {
     isSearchActive,
     isSearching,
     openCreateRequest,
+    searchSuggestionsVisible,
     searchError,
     activeSearchQuery,
-    hasSearchHits,
+    hasProductHits,
     resultsMatchActiveQuery,
   ]);
 
@@ -1415,7 +1639,33 @@ const HomeScreenView = () => {
     (navigation as any).navigate('OfferDetail', { shop, offer });
   };
 
+  const openOfferSuggestion = useCallback(
+    (offer: ShopOffer) => {
+      const matchingShop =
+        searchSuggestions.shops.find(shop => shop.id === offer.shopId) ??
+        searchResults.shops.find(shop => shop.id === offer.shopId) ??
+        shops.find(shop => shop.id === offer.shopId || shop.merchantId === offer.shopId) ??
+        ({
+          id: offer.shopId || 'unknown-shop',
+          name: offer.shopName || 'Partner store',
+          offers: [offer],
+        } as ShopWithOffers);
+
+      setSearchSuggestionsVisible(false);
+
+      const parentNavigation = navigation.getParent<StackNavigationProp<MainStackParamList>>();
+      if (parentNavigation) {
+        parentNavigation.navigate('OfferDetail', { shop: matchingShop, offer });
+        return;
+      }
+
+      (navigation as any).navigate('OfferDetail', { shop: matchingShop, offer });
+    },
+    [navigation, searchResults.shops, searchSuggestions.shops, shops],
+  );
+
   const openStoreDetail = (shop: ShopWithOffers) => {
+    setSearchSuggestionsVisible(false);
     const parentNavigation = navigation.getParent<StackNavigationProp<MainStackParamList>>();
     if (parentNavigation) {
       parentNavigation.navigate('StoreDetail', { shop });
@@ -1427,6 +1677,8 @@ const HomeScreenView = () => {
 
   const openSearchProduct = useCallback(
     async (product: ShopProduct) => {
+      setSearchSuggestionsVisible(false);
+
       const parentNavigation = navigation.getParent<StackNavigationProp<MainStackParamList>>();
       const navigateToProduct = (shop: ShopWithOffers) => {
         if (parentNavigation) {
@@ -1443,17 +1695,79 @@ const HomeScreenView = () => {
         products: [product],
       };
 
-      if (product.shopId?.trim() && authToken?.trim()) {
-        try {
-          shop = await shopApi.fetchShopByIdWithOffers(product.shopId, authToken);
-        } catch {
-          // Keep minimal shop payload.
+      const token = authToken?.trim() || undefined;
+      const rawShopId = product.shopId?.trim() ?? '';
+
+      const tryFetchShop = async (shopId: string): Promise<ShopWithOffers | null> => {
+        if (!shopId) {
+          return null;
         }
+        try {
+          return await shopApi.fetchShopByIdWithOffers(shopId, token);
+        } catch {
+          return null;
+        }
+      };
+
+      // 1) Direct shop id from product payload.
+      let resolved = await tryFetchShop(rawShopId);
+
+      // 2) Search payloads sometimes put merchantId in shopId — resolve to real shop.
+      if (!resolved && rawShopId && token) {
+        try {
+          const shopId = await shopApi.resolveShopIdByMerchantId(
+            { merchantId: rawShopId, shopName: product.shopName },
+            token,
+          );
+          if (shopId) {
+            resolved = await tryFetchShop(shopId);
+          }
+        } catch {
+          // Keep fallback shop below.
+        }
+      }
+
+      // 3) Resolve via shop name from search / nearby lists.
+      if (!resolved && product.shopName?.trim()) {
+        const nameNorm = product.shopName.trim().toLowerCase();
+        const fromSuggestions =
+          searchSuggestions.shops.find(s => s.name.trim().toLowerCase() === nameNorm) ??
+          searchResults.shops.find(s => s.name.trim().toLowerCase() === nameNorm) ??
+          shops.find(s => s.name.trim().toLowerCase() === nameNorm);
+
+        if (fromSuggestions) {
+          resolved = (await tryFetchShop(fromSuggestions.id)) ?? {
+            ...fromSuggestions,
+            products: [product],
+          };
+        } else if (token) {
+          try {
+            const search = await shopApi.searchShopsProductsAndOffers(product.shopName, token);
+            const nameHit =
+              search.shops.find(s => s.name.trim().toLowerCase() === nameNorm) ??
+              search.shops.find(s => s.name.trim().toLowerCase().includes(nameNorm));
+            if (nameHit) {
+              resolved = (await tryFetchShop(nameHit.id)) ?? {
+                ...nameHit,
+                products: [product],
+              };
+            }
+          } catch {
+            // Keep minimal shop payload.
+          }
+        }
+      }
+
+      if (resolved) {
+        shop = {
+          ...resolved,
+          products: resolved.products?.length ? resolved.products : [product],
+        };
       }
 
       navigateToProduct(shop);
     },
-    [authToken, navigation],
+    [authToken, navigation, searchResults.shops, searchSuggestions.shops, shops],
   );
 
   const handleLogout = () => {
@@ -1846,28 +2160,221 @@ const HomeScreenView = () => {
       <View style={styles.bgAccent} />
 
       <SafeAreaView style={styles.safeArea} edges={['top']}>
-        <Navbar
-          onMenuPress={() => setSidebarVisible(true)}
-          onScannerPress={openScannerScreen}
-          onCartPress={openCart}
-          title="Bacht Bazaar"
-          subtitle={headerAddress}
-          showSearch
-          searchValue={searchQuery}
-          onSearchChange={handleSearchChange}
-          onSearchSubmit={handleSearchSubmit}
-          onClearSearch={handleClearSearch}
-          headerRef={walkthroughHeaderRef}
-          menuRef={walkthroughMenuRef}
-          headerActionsRef={walkthroughCartRef}
-          searchRef={walkthroughSearchRef}
-        />
+        <View style={styles.searchHeaderWrap}>
+          <Navbar
+            onMenuPress={() => setSidebarVisible(true)}
+            onScannerPress={openScannerScreen}
+            onCartPress={openCart}
+            title="Bacht Bazaar"
+            subtitle={headerAddress}
+            showSearch
+            searchValue={searchQuery}
+            onSearchChange={handleSearchChange}
+            onSearchSubmit={handleSearchSubmit}
+            onClearSearch={handleClearSearch}
+            headerRef={walkthroughHeaderRef}
+            menuRef={walkthroughMenuRef}
+            headerActionsRef={walkthroughCartRef}
+            searchRef={walkthroughSearchRef}
+          />
+
+          {searchSuggestionsVisible ? (
+            <>
+              <Pressable
+                style={styles.offerSuggestionDismissOverlay}
+                onPress={dismissSearchSuggestions}
+                accessibilityRole="button"
+                accessibilityLabel="Dismiss search suggestions"
+              />
+              <View style={styles.offerSuggestionsDropdown} pointerEvents="box-none">
+                <View style={styles.offerSuggestionsCard}>
+                  {isSearchingSuggestions && suggestionHitCount === 0 ? (
+                    <View style={styles.offerSuggestionStatusRow}>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text style={styles.offerSuggestionStatusText}>Searching…</Text>
+                    </View>
+                  ) : suggestionHitCount === 0 ? (
+                    <View style={styles.offerSuggestionStatusRow}>
+                      <MaterialCommunityIcons name="magnify-close" size={18} color="#98A2B3" />
+                      <Text style={styles.offerSuggestionStatusText}>No matching results</Text>
+                    </View>
+                  ) : (
+                    <ScrollView
+                      keyboardShouldPersistTaps="handled"
+                      nestedScrollEnabled
+                      style={styles.offerSuggestionsList}
+                      showsVerticalScrollIndicator={false}
+                    >
+                      {searchSuggestions.products.length > 0 ? (
+                        <>
+                          <Text style={styles.suggestionSectionTitle}>Products</Text>
+                          {searchSuggestions.products.map((product, index) => {
+                            const isLast =
+                              index === searchSuggestions.products.length - 1 &&
+                              searchSuggestions.shops.length === 0 &&
+                              searchSuggestions.offers.length === 0;
+                            return (
+                              <TouchableOpacity
+                                key={`suggest-product-${product.id}`}
+                                style={[
+                                  styles.offerSuggestionRow,
+                                  !isLast && styles.offerSuggestionRowBorder,
+                                ]}
+                                activeOpacity={0.75}
+                                onPress={() => {
+                                  void openSearchProduct(product);
+                                }}
+                              >
+                                <View
+                                  style={[
+                                    styles.offerSuggestionIconWrap,
+                                    styles.suggestionProductIconWrap,
+                                  ]}
+                                >
+                                  <MaterialCommunityIcons
+                                    name="package-variant-closed"
+                                    size={18}
+                                    color={colors.primary}
+                                  />
+                                </View>
+                                <View style={styles.offerSuggestionBody}>
+                                  <Text style={styles.offerSuggestionTitle} numberOfLines={1}>
+                                    {product.title}
+                                  </Text>
+                                  {product.shopName || product.price ? (
+                                    <Text style={styles.offerSuggestionShop} numberOfLines={1}>
+                                      {[product.shopName, product.price].filter(Boolean).join(' · ')}
+                                    </Text>
+                                  ) : null}
+                                </View>
+                                <MaterialCommunityIcons
+                                  name="chevron-right"
+                                  size={18}
+                                  color="#98A2B3"
+                                />
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </>
+                      ) : null}
+
+                      {searchSuggestions.shops.length > 0 ? (
+                        <>
+                          <Text style={styles.suggestionSectionTitle}>Stores</Text>
+                          {searchSuggestions.shops.map((shop, index) => {
+                            const isLast =
+                              index === searchSuggestions.shops.length - 1 &&
+                              searchSuggestions.offers.length === 0;
+                            return (
+                              <TouchableOpacity
+                                key={`suggest-shop-${shop.id}`}
+                                style={[
+                                  styles.offerSuggestionRow,
+                                  !isLast && styles.offerSuggestionRowBorder,
+                                ]}
+                                activeOpacity={0.75}
+                                onPress={() => openStoreDetail(shop)}
+                              >
+                                <View
+                                  style={[
+                                    styles.offerSuggestionIconWrap,
+                                    styles.suggestionShopIconWrap,
+                                  ]}
+                                >
+                                  <MaterialCommunityIcons
+                                    name="storefront-outline"
+                                    size={18}
+                                    color="#366FE0"
+                                  />
+                                </View>
+                                <View style={styles.offerSuggestionBody}>
+                                  <Text style={styles.offerSuggestionTitle} numberOfLines={1}>
+                                    {shop.name}
+                                  </Text>
+                                  {shop.tagline || shop.address || shop.city ? (
+                                    <Text style={styles.offerSuggestionShop} numberOfLines={1}>
+                                      {shop.tagline || shop.address || shop.city}
+                                    </Text>
+                                  ) : null}
+                                </View>
+                                <MaterialCommunityIcons
+                                  name="chevron-right"
+                                  size={18}
+                                  color="#98A2B3"
+                                />
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </>
+                      ) : null}
+
+                      {searchSuggestions.offers.length > 0 ? (
+                        <>
+                          <Text style={styles.suggestionSectionTitle}>Offers</Text>
+                          {searchSuggestions.offers.map((offer, index) => {
+                            const isLast = index === searchSuggestions.offers.length - 1;
+                            return (
+                              <TouchableOpacity
+                                key={`suggest-offer-${offer.id}`}
+                                style={[
+                                  styles.offerSuggestionRow,
+                                  !isLast && styles.offerSuggestionRowBorder,
+                                ]}
+                                activeOpacity={0.75}
+                                onPress={() => openOfferSuggestion(offer)}
+                              >
+                                <View style={styles.offerSuggestionIconWrap}>
+                                  <MaterialCommunityIcons
+                                    name="tag-outline"
+                                    size={18}
+                                    color={colors.primary}
+                                  />
+                                </View>
+                                <View style={styles.offerSuggestionBody}>
+                                  <Text style={styles.offerSuggestionTitle} numberOfLines={1}>
+                                    {offer.title}
+                                  </Text>
+                                  {offer.shopName ? (
+                                    <Text style={styles.offerSuggestionShop} numberOfLines={1}>
+                                      {offer.shopName}
+                                    </Text>
+                                  ) : null}
+                                </View>
+                                {offer.discount ? (
+                                  <View style={styles.offerSuggestionBadge}>
+                                    <Text style={styles.offerSuggestionBadgeText}>
+                                      {offer.discount}
+                                    </Text>
+                                  </View>
+                                ) : null}
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </>
+                      ) : null}
+                    </ScrollView>
+                  )}
+                </View>
+              </View>
+            </>
+          ) : null}
+        </View>
 
         <ScrollView
           ref={homeScrollRef}
           style={styles.scrollView}
           showsVerticalScrollIndicator={false}
           nestedScrollEnabled
+          scrollEventThrottle={16}
+          onScroll={event => {
+            homeScrollYRef.current = event.nativeEvent.contentOffset.y;
+          }}
+          onLayout={event => {
+            const nextH = event.nativeEvent.layout.height;
+            if (nextH > 40) {
+              homeScrollViewportHRef.current = nextH;
+            }
+          }}
           refreshControl={
             <RefreshControl
               refreshing={isRefreshing}
@@ -2080,7 +2587,7 @@ const HomeScreenView = () => {
                           searchResults.shops.find(shop => shop.id === offer.shopId) ??
                           ({
                             id: offer.shopId || 'unknown-shop',
-                            name: 'Partner store',
+                            name: offer.shopName || 'Partner store',
                             offers: [offer],
                           } as ShopWithOffers);
 
@@ -2143,14 +2650,20 @@ const HomeScreenView = () => {
                 </>
               ) : (
                 <>
-                  {displayedShops.map(shop => {
+                  {displayedShops.map((shop, shopIndex) => {
                   const shopLogo = shopApi.resolveImageUrl(shop.logo) ?? PLACEHOLDER_SHOP_LOGO;
                   const hasOffers = shop.offers.length > 0;
                   const shopSaved = Boolean(savedShopIds[shop.id]);
                   const shopToggling = togglingShopId === shop.id;
+                  const isOffersHighlightCard = !isSearchActive && shopIndex === 0;
 
                   return (
-                    <View key={shop.id} style={styles.localOffersFeatureCard}>
+                    <View
+                      key={shop.id}
+                      ref={isOffersHighlightCard ? walkthroughOffersFirstCardRef : undefined}
+                      collapsable={isOffersHighlightCard ? false : undefined}
+                      style={styles.localOffersFeatureCard}
+                    >
                       <TouchableOpacity
                         style={styles.storeHeader}
                         activeOpacity={0.86}
@@ -2542,6 +3055,111 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     paddingTop: 6,
+  },
+  searchHeaderWrap: {
+    zIndex: 30,
+    elevation: 30,
+  },
+  offerSuggestionDismissOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    top: 0,
+    bottom: -Dimensions.get('window').height,
+    zIndex: 31,
+  },
+  offerSuggestionsDropdown: {
+    position: 'absolute',
+    left: 16,
+    right: 78,
+    top: '100%',
+    marginTop: -10,
+    zIndex: 40,
+  },
+  offerSuggestionsCard: {
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E7ECF5',
+    maxHeight: 320,
+    overflow: 'hidden',
+    shadowColor: '#1B2430',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  offerSuggestionsList: {
+    maxHeight: 320,
+  },
+  suggestionSectionTitle: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 4,
+    fontSize: 11,
+    color: '#667085',
+    fontFamily: fonts.BOLD,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  suggestionProductIconWrap: {
+    backgroundColor: '#EEF4FF',
+  },
+  suggestionShopIconWrap: {
+    backgroundColor: '#E8F1FF',
+  },
+  offerSuggestionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    gap: 10,
+  },
+  offerSuggestionRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E7ECF5',
+  },
+  offerSuggestionIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF0EB',
+  },
+  offerSuggestionBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  offerSuggestionTitle: {
+    fontSize: 13,
+    color: '#202843',
+    fontFamily: fonts.BOLD,
+  },
+  offerSuggestionShop: {
+    marginTop: 2,
+    fontSize: 11,
+    color: '#667085',
+  },
+  offerSuggestionBadge: {
+    backgroundColor: '#E9F8EF',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  offerSuggestionBadgeText: {
+    fontSize: 10,
+    color: DINEOUT_GREEN,
+    fontFamily: fonts.BOLD,
+  },
+  offerSuggestionStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  offerSuggestionStatusText: {
+    fontSize: 12,
+    color: '#667085',
   },
   bgAccent: {
     position: 'absolute',

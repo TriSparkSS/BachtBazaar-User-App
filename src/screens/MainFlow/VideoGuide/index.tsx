@@ -22,25 +22,25 @@ type GuideVideo = {
   youtubeId: string;
 };
 
-/** Placeholder shopping-app style guides (public YouTube). */
+/** Placeholder shopping/how-to guides (public YouTube). */
 const GUIDE_VIDEOS: GuideVideo[] = [
   {
-    id: 'browse-shop',
-    title: 'How to browse & shop online',
-    subtitle: 'Find products, compare options, and place an order confidently.',
-    youtubeId: 'oqNf4O5u7zY',
+    id: 'shop-safe',
+    title: 'How to shop online safely',
+    subtitle: 'Tips to browse stores, spot scams, and buy with confidence.',
+    youtubeId: '0QPctmPaeOk',
   },
   {
-    id: 'cart-checkout',
-    title: 'Cart & checkout basics',
-    subtitle: 'Review items in your cart and complete a smooth checkout flow.',
-    youtubeId: '7EHNMhC7K3c',
+    id: 'shop-basics',
+    title: 'Online shopping basics (2026)',
+    subtitle: 'A quick walkthrough of safer checkout habits for everyday shopping.',
+    youtubeId: 'Uth9FVfyXx4',
   },
   {
-    id: 'local-deals',
-    title: 'Finding local deals nearby',
-    subtitle: 'Discover nearby offers and save more on everyday shopping.',
-    youtubeId: 'RLxHq7zqW0Q',
+    id: 'stay-safe-short',
+    title: 'Stay safe while shopping online',
+    subtitle: 'Short checklist for HTTPS, passwords, and secure payments.',
+    youtubeId: '0t8mXRYRwkM',
   },
 ];
 

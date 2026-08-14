@@ -7,7 +7,7 @@ export const FEATURE_WALKTHROUGH_DONE_KEY = '@bachatbazaar/feature_walkthrough_d
  * Bump this when a deploy should re-show the guide once (e.g. new coach-mark UI).
  * After one reset, Skip/Done persists normally again.
  */
-const FEATURE_WALKTHROUGH_FORCE_VERSION = 'coachmark-v3';
+const FEATURE_WALKTHROUGH_FORCE_VERSION = 'coachmark-v5';
 const FEATURE_WALKTHROUGH_FORCE_KEY = `@bachatbazaar/feature_walkthrough_force_${FEATURE_WALKTHROUGH_FORCE_VERSION}`;
 
 export const featureWalkthroughStorage = {

@@ -206,17 +206,24 @@ export const shopApi = {
     }).then(payload => parseDailyRewardsCalendarResponse(payload, normalizedDate));
   },
 
-  searchShopsProductsAndOffers(query: string, token?: string): Promise<SearchResults> {
+  searchShopsProductsAndOffers(
+    query: string,
+    token?: string,
+    options?: { offerTypeId?: string },
+  ): Promise<SearchResults> {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) {
       return Promise.resolve(parseSearchResponse({ query: '', results: {} }));
     }
 
-    return apiRequest<unknown>(API_ENDPOINTS.shopSearch(normalizedQuery), {
-      method: 'GET',
-      token,
-      baseUrl: SHOPS_API_BASE_URL,
-    }).then(parseSearchResponse);
+    return apiRequest<unknown>(
+      API_ENDPOINTS.shopSearch(normalizedQuery, options?.offerTypeId),
+      {
+        method: 'GET',
+        token,
+        baseUrl: SHOPS_API_BASE_URL,
+      },
+    ).then(parseSearchResponse);
   },
 
   fetchShopById(shopId: string, token?: string) {

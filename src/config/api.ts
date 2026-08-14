@@ -49,7 +49,13 @@ export const API_ENDPOINTS = {
     }`,
   shopsAllByCategory: (categoryId: string) =>
     `/shop/all?category=${encodeURIComponent(categoryId.trim())}`,
-  shopSearch: (query: string) => `/shop/search?q=${encodeURIComponent(query.trim())}`,
+  shopSearch: (query: string, offerTypeId?: string) => {
+    const base = `/shop/search?q=${encodeURIComponent(query.trim())}`;
+    const normalizedType = offerTypeId?.trim();
+    return normalizedType
+      ? `${base}&offer_type_id=${encodeURIComponent(normalizedType)}`
+      : base;
+  },
   shopById: (shopId: string) => `/shop/${encodeURIComponent(shopId)}`,
   shopOffers: (shopId: string) => `/shop/offers/${shopId}`,
   dailyRewardsCalendar: (date: string) =>
@@ -132,8 +138,8 @@ export const API_ENDPOINTS = {
   faqDetail: (faqId: string) => `/faqs/${encodeURIComponent(faqId.trim())}`,
   /** Help articles — under /api (HELP_ARTICLES_API_BASE_URL). */
   helpArticlesUser: '/help-articles/user',
-  helpArticleDetail: (articleId: string) =>
-    `/help-articles/${encodeURIComponent(articleId.trim())}`,
+  helpArticleBySlug: (slug: string) =>
+    `/help-articles/by-slug/${encodeURIComponent(slug.trim())}`,
 } as const;
 
 export const getShopLogoUrl = (shopId: string) =>
