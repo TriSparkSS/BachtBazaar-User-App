@@ -14,15 +14,17 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import AnimatedScreen from '../../../components/AnimatedScreen';
 import { AppTextInput } from '../../../components/AppTextInput';
 import ProfileLocationMap from '../../../components/ProfileLocationMap';
+import type { MapLocationSelection } from '../../../components/FullScreenLocationMapModal';
 import { ScreenScaffold } from '../../../components/ScreenScaffold';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
 import { parseCoordinateInput } from '../../../utils/googleGeocoding';
-import type { PoiClickEvent } from '../../../utils/mapPoi';
 
 import { GenderUi } from '../../../utils/profile';
+
+const FALLBACK_MAP_CENTER = { latitude: 30.7046, longitude: 76.7179 };
 
 const { width, height } = Dimensions.get('window');
 
@@ -40,7 +42,8 @@ interface ProfileSetupScreenViewProps {
   longitude: string;
   setLongitude: (longitude: string) => void;
   onUseCurrentLocation: () => void;
-  onMapPoiClick?: (event: PoiClickEvent) => void;
+  onMapLocationChange?: (selection: MapLocationSelection) => void;
+  onMapClearLocation?: () => void;
   isLoadingLocation?: boolean;
   profileImageUri?: string;
   onAvatarPress: () => void;
@@ -73,7 +76,8 @@ const ProfileSetupScreenView: React.FC<ProfileSetupScreenViewProps> = ({
   longitude,
   setLongitude,
   onUseCurrentLocation,
-  onMapPoiClick,
+  onMapLocationChange,
+  onMapClearLocation,
   isLoadingLocation = false,
   profileImageUri,
   onAvatarPress,
@@ -92,16 +96,16 @@ const ProfileSetupScreenView: React.FC<ProfileSetupScreenViewProps> = ({
 
   const parsedLatitude = parseCoordinateInput(latitude);
   const parsedLongitude = parseCoordinateInput(longitude);
-  const showMap =
+  const hasValidCoordinates =
     parsedLatitude != null &&
     parsedLongitude != null &&
     parsedLatitude >= -90 &&
     parsedLatitude <= 90 &&
     parsedLongitude >= -180 &&
     parsedLongitude <= 180;
-  const mapCoordinates = showMap
+  const mapCoordinates = hasValidCoordinates
     ? { latitude: parsedLatitude as number, longitude: parsedLongitude as number }
-    : undefined;
+    : FALLBACK_MAP_CENTER;
 
   return (
     <ScreenScaffold
@@ -305,17 +309,18 @@ const ProfileSetupScreenView: React.FC<ProfileSetupScreenViewProps> = ({
             </Text>
           </TouchableOpacity>
 
-          {mapCoordinates ? (
-            <View style={styles.mapSection}>
-              <Text style={styles.fieldLabel}>Location on map</Text>
-              <ProfileLocationMap
-                latitude={mapCoordinates.latitude}
-                longitude={mapCoordinates.longitude}
-                height={160}
-                onPoiClick={onMapPoiClick}
-              />
-            </View>
-          ) : null}
+          <View style={styles.mapSection}>
+            <Text style={styles.fieldLabel}>Location on map</Text>
+            <ProfileLocationMap
+              latitude={mapCoordinates.latitude}
+              longitude={mapCoordinates.longitude}
+              height={160}
+              markerTitle={hasValidCoordinates ? 'Your location' : 'Search a location'}
+              markerDescription={address.trim() || undefined}
+              onLocationChange={onMapLocationChange}
+              onClearLocation={onMapClearLocation}
+            />
+          </View>
 
           <TouchableOpacity
             style={[styles.actionButton, isSubmitting && styles.actionButtonDisabled]}

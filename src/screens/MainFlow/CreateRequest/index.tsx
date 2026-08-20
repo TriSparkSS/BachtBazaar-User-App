@@ -98,6 +98,7 @@ const CreateRequestForm = () => {
         const requestPayload = {
           title: payload.product,
           categoryId: payload.categoryId,
+          description: payload.description ?? '',
           budget: payload.budget,
           urgency: payload.urgency,
           formattedAddress: payload.location,

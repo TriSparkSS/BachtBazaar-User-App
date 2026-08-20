@@ -48,7 +48,8 @@ export type AppIconName =
   | 'video-guide'
   | 'help-articles'
   | 'contact'
-  | 'language';
+  | 'language'
+  | 'bachat-circle';
 
 const iconMap: Record<AppIconName, string> = {
   menu: 'menu',
@@ -97,6 +98,7 @@ const iconMap: Record<AppIconName, string> = {
   'help-articles': 'book-open-page-variant-outline',
   contact: 'email-outline',
   language: 'translate',
+  'bachat-circle': 'account-group-outline',
 };
 
 interface AppIconProps {

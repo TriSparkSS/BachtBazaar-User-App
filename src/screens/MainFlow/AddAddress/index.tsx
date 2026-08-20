@@ -15,6 +15,7 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import ProfileLocationMap from '../../../components/ProfileLocationMap';
+import type { MapLocationSelection } from '../../../components/FullScreenLocationMapModal';
 import { useAppContext } from '../../../context/AppContext';
 import { colors, fonts } from '../../../helpers/styles';
 import { MainStackParamList } from '../../../navigation/types';
@@ -29,7 +30,8 @@ import {
   parseCoordinateInput,
   reverseGeocodeWithGoogle,
 } from '../../../utils/googleGeocoding';
-import { parsePoiClickEvent, type PoiClickEvent } from '../../../utils/mapPoi';
+
+const FALLBACK_MAP_CENTER = { latitude: 30.7046, longitude: 76.7179 };
 
 const AddAddress = () => {
   const navigation = useNavigation<StackNavigationProp<MainStackParamList, 'AddAddress'>>();
@@ -134,21 +136,23 @@ const AddAddress = () => {
     }
   }, [applyCoordinates]);
 
-  const handleMapPoiClick = useCallback(
-    async (event: PoiClickEvent) => {
-      const poi = parsePoiClickEvent(event);
-      await applyCoordinates({
-        latitude: poi.latitude,
-        longitude: poi.longitude,
-      });
-      showAppAlert(
-        poi.name || 'Location updated',
-        'Selected place has been set as your delivery address.',
-        [{ text: 'OK' }],
-      );
-    },
-    [applyCoordinates],
-  );
+  const handleMapLocationChange = useCallback((selection: MapLocationSelection) => {
+    setLatitude(formatCoordinate(selection.latitude));
+    setLongitude(formatCoordinate(selection.longitude));
+    if (selection.address?.trim()) {
+      setAddress(selection.address.trim());
+    }
+    if (selection.city?.trim()) {
+      setCity(selection.city.trim());
+    }
+  }, []);
+
+  const handleMapClearLocation = useCallback(() => {
+    setAddress('');
+    setCity('');
+    setLatitude('');
+    setLongitude('');
+  }, []);
 
   const returnSelectedAddress = useCallback(
     (selectedAddress: string, selectedCity: string) => {
@@ -231,13 +235,16 @@ const AddAddress = () => {
 
   const parsedLatitude = parseCoordinateInput(latitude);
   const parsedLongitude = parseCoordinateInput(longitude);
-  const showMap =
+  const hasValidCoordinates =
     parsedLatitude != null &&
     parsedLongitude != null &&
     parsedLatitude >= -90 &&
     parsedLatitude <= 90 &&
     parsedLongitude >= -180 &&
     parsedLongitude <= 180;
+  const mapCoordinates = hasValidCoordinates
+    ? { latitude: parsedLatitude as number, longitude: parsedLongitude as number }
+    : FALLBACK_MAP_CENTER;
 
   return (
     <View style={styles.root}>
@@ -305,18 +312,21 @@ const AddAddress = () => {
             </Text>
           </TouchableOpacity>
 
-          {showMap ? (
-            <View style={styles.mapSection}>
-              <Text style={styles.sectionLabel}>Location on map</Text>
-              <ProfileLocationMap
-                latitude={parsedLatitude as number}
-                longitude={parsedLongitude as number}
-                height={180}
-                onPoiClick={handleMapPoiClick}
-              />
-              <Text style={styles.mapHint}>Tap a place on the map to set your address</Text>
-            </View>
-          ) : null}
+          <View style={styles.mapSection}>
+            <Text style={styles.sectionLabel}>Location on map</Text>
+            <ProfileLocationMap
+              latitude={mapCoordinates.latitude}
+              longitude={mapCoordinates.longitude}
+              height={180}
+              markerTitle={hasValidCoordinates ? 'Your location' : 'Search a location'}
+              markerDescription={address.trim() || undefined}
+              onLocationChange={handleMapLocationChange}
+              onClearLocation={handleMapClearLocation}
+            />
+            <Text style={styles.mapHint}>
+              Tap the map to search or pick a place for your address
+            </Text>
+          </View>
         </ScrollView>
 
         <SafeAreaView edges={['bottom']} style={styles.footer}>

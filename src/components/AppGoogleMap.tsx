@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import FullScreenLocationMapModal from './FullScreenLocationMapModal';
+import FullScreenLocationMapModal, {
+  type MapLocationSelection,
+} from './FullScreenLocationMapModal';
 import NativeGoogleMapPreview from './NativeGoogleMapPreview';
 import { colors, fonts } from '../helpers/styles';
 import type { PoiClickEvent } from '../utils/mapPoi';
@@ -14,8 +16,11 @@ type AppGoogleMapProps = {
   markerTitle?: string;
   markerDescription?: string;
   expandLabel?: string;
+  searchable?: boolean;
   onPress?: () => void;
   onPoiClick?: (event: PoiClickEvent) => void;
+  onLocationChange?: (selection: MapLocationSelection) => void;
+  onClearLocation?: () => void;
 };
 
 const AppGoogleMap: React.FC<AppGoogleMapProps> = ({
@@ -24,8 +29,11 @@ const AppGoogleMap: React.FC<AppGoogleMapProps> = ({
   markerTitle = 'Selected location',
   markerDescription,
   expandLabel = 'Tap to open full map',
+  searchable = true,
   onPress,
   onPoiClick,
+  onLocationChange,
+  onClearLocation,
 }) => {
   const [isFullscreenVisible, setIsFullscreenVisible] = useState(false);
 
@@ -73,7 +81,10 @@ const AppGoogleMap: React.FC<AppGoogleMapProps> = ({
         coordinates={coordinates}
         markerTitle={markerTitle}
         markerDescription={markerDescription}
+        searchable={searchable}
         onPoiClick={handlePoiClick}
+        onLocationChange={onLocationChange}
+        onClearLocation={onClearLocation}
         onClose={() => setIsFullscreenVisible(false)}
       />
     </>

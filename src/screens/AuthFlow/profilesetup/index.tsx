@@ -13,13 +13,12 @@ import { userAuthApi } from '../../../services/userAuthApi';
 import { resolveProfileImageUrl } from '../../../config/api';
 import { showAppAlert } from '../../../services/appAlert';
 import { GenderUi, mapGenderToApi, mapGenderToUi } from '../../../utils/profile';
-import type { PoiClickEvent } from '../../../utils/mapPoi';
+import type { MapLocationSelection } from '../../../components/FullScreenLocationMapModal';
 import {
   formatCoordinate,
   parseCoordinateInput,
   reverseGeocodeWithGoogle,
 } from '../../../utils/googleGeocoding';
-import { parsePoiClickEvent } from '../../../utils/mapPoi';
 import {
   getCurrentDeviceCoordinates,
   requestLocationPermission,
@@ -327,17 +326,22 @@ const ProfileSetup = () => {
     }
   };
 
-  const handleMapPoiClick = async (event: PoiClickEvent) => {
-    const poi = parsePoiClickEvent(event);
-    await applyCoordinates({
-      latitude: poi.latitude,
-      longitude: poi.longitude,
-    });
-    showAppAlert(
-      poi.name || 'Location updated',
-      'Selected place has been set as your location.',
-      [{ text: 'OK' }],
-    );
+  const handleMapLocationChange = (selection: MapLocationSelection) => {
+    setLatitude(formatCoordinate(selection.latitude));
+    setLongitude(formatCoordinate(selection.longitude));
+    if (selection.address?.trim()) {
+      setAddress(selection.address.trim());
+    }
+    if (selection.city?.trim()) {
+      setCity(selection.city.trim());
+    }
+  };
+
+  const handleMapClearLocation = () => {
+    setAddress('');
+    setCity('');
+    setLatitude('');
+    setLongitude('');
   };
 
   return (
@@ -355,7 +359,8 @@ const ProfileSetup = () => {
       longitude={longitude}
       setLongitude={setLongitude}
       onUseCurrentLocation={handleUseCurrentLocation}
-      onMapPoiClick={handleMapPoiClick}
+      onMapLocationChange={handleMapLocationChange}
+      onMapClearLocation={handleMapClearLocation}
       isLoadingLocation={isLoadingLocation}
       profileImageUri={profileImageUri}
       onAvatarPress={handleAvatarPress}

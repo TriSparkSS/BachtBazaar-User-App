@@ -1,80 +1,83 @@
-import React, { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  LayoutChangeEvent,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { colors } from '../helpers/styles';
-import { createGoogleStaticMapUrl } from '../utils/googleStaticMap';
 import type { PoiClickEvent } from '../utils/mapPoi';
-import { MapCoordinates } from '../utils/mapRegion';
+import { createMapRegion, MapCoordinates } from '../utils/mapRegion';
 
 type NativeFullScreenLocationMapProps = {
-  coordinates: MapCoordinates;
+  coordinates: MapCoordinates | null;
+  cameraCoordinates?: MapCoordinates | null;
   markerTitle?: string;
   markerDescription?: string;
+  showLocationCard?: boolean;
   onPoiClick?: (event: PoiClickEvent) => void;
 };
 
 const NativeFullScreenLocationMap: React.FC<NativeFullScreenLocationMapProps> = ({
   coordinates,
+  cameraCoordinates,
   markerTitle = 'Selected location',
   markerDescription,
+  showLocationCard = true,
+  onPoiClick,
 }) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [layout, setLayout] = useState({ width: 0, height: 0 });
-  const mapUrl = useMemo(
+  const mapRef = useRef<MapView | null>(null);
+  const [isReady, setIsReady] = useState(false);
+  const focusCoordinates = coordinates ?? cameraCoordinates;
+  const region = useMemo(
     () =>
-      layout.width && layout.height
-        ? createGoogleStaticMapUrl({
-            coordinates,
-            width: layout.width,
-            height: layout.height,
-            zoom: 16,
-          })
-        : undefined,
-    [coordinates, layout.height, layout.width],
+      focusCoordinates
+        ? createMapRegion(focusCoordinates, 0.008, 0.008)
+        : createMapRegion({ latitude: 30.7046, longitude: 76.7179 }, 0.08, 0.08),
+    [focusCoordinates],
   );
 
-  const handleLayout = (event: LayoutChangeEvent) => {
-    const { width, height } = event.nativeEvent.layout;
-    setIsLoading(true);
-    setLayout({ width, height });
-  };
+  useEffect(() => {
+    if (!isReady || !focusCoordinates || !mapRef.current) {
+      return;
+    }
+
+    mapRef.current.animateToRegion(createMapRegion(focusCoordinates, 0.008, 0.008), 350);
+  }, [focusCoordinates, isReady]);
 
   return (
-    <View style={styles.root} onLayout={handleLayout}>
-      {mapUrl ? (
-        <Image
-          key={mapUrl}
-          source={{ uri: mapUrl }}
-          style={styles.mapImage}
-          resizeMode="cover"
-          onLoadStart={() => setIsLoading(true)}
-          onLoadEnd={() => setIsLoading(false)}
-        />
+    <View style={styles.root}>
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+        initialRegion={region}
+        showsUserLocation={false}
+        showsMyLocationButton={false}
+        toolbarEnabled={false}
+        onMapReady={() => setIsReady(true)}
+        onPoiClick={onPoiClick}>
+        {coordinates ? (
+          <Marker
+            coordinate={coordinates}
+            title={markerTitle}
+            description={markerDescription}
+          />
+        ) : null}
+      </MapView>
+
+      {showLocationCard && (markerTitle || markerDescription) ? (
+        <View style={styles.locationCard} pointerEvents="none">
+          {markerTitle ? (
+            <Text style={styles.locationTitle} numberOfLines={1}>
+              {markerTitle}
+            </Text>
+          ) : null}
+          {markerDescription ? (
+            <Text style={styles.locationDescription} numberOfLines={2}>
+              {markerDescription}
+            </Text>
+          ) : null}
+        </View>
       ) : null}
 
-      <View style={styles.markerWrap} pointerEvents="none">
-        <MaterialCommunityIcons name="map-marker" size={48} color={colors.primary} />
-      </View>
-
-      <View style={styles.locationCard} pointerEvents="none">
-        <Text style={styles.locationTitle} numberOfLines={1}>
-          {markerTitle}
-        </Text>
-        {markerDescription ? (
-          <Text style={styles.locationDescription} numberOfLines={2}>
-            {markerDescription}
-          </Text>
-        ) : null}
-      </View>
-
-      {isLoading ? (
+      {!isReady ? (
         <View style={styles.loading}>
           <ActivityIndicator size="small" color={colors.primary} />
         </View>
@@ -91,22 +94,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#EEF2F8',
   },
-  mapImage: {
+  map: {
     ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
-  },
-  markerWrap: {
-    position: 'absolute',
-    left: '50%',
-    top: '50%',
-    marginLeft: -24,
-    marginTop: -48,
-    shadowColor: '#1B2430',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
   },
   locationCard: {
     position: 'absolute',

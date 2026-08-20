@@ -32,6 +32,14 @@ import VideoGuide from '../../screens/MainFlow/VideoGuide';
 import HelpArticles from '../../screens/MainFlow/HelpArticles';
 import Contact from '../../screens/MainFlow/Contact';
 import Language from '../../screens/MainFlow/Language';
+import BachatCircleLanding from '../../screens/MainFlow/BachatCircle/LandingScreen';
+import BachatCircleCreate from '../../screens/MainFlow/BachatCircle/CreateCircleScreen';
+import BachatCircleAddMembers from '../../screens/MainFlow/BachatCircle/AddMembersScreen';
+import BachatCircleFeed from '../../screens/MainFlow/BachatCircle/CircleFeedScreen';
+import BachatCircleMembers from '../../screens/MainFlow/BachatCircle/MembersScreen';
+import BachatCircleShareOffer from '../../screens/MainFlow/BachatCircle/ShareOfferScreen';
+import BachatCircleOfferDetail from '../../screens/MainFlow/BachatCircle/CircleOfferDetailScreen';
+import BachatCircleNotifications from '../../screens/MainFlow/BachatCircle/CircleNotificationsScreen';
 import WaitingForRequestBanner from '../../components/WaitingForRequestBanner';
 import {
   PendingDeliveryRequestProvider,
@@ -106,6 +114,38 @@ export const MainStack = () => {
                     />
                     <MainStackNav.Screen component={Contact} name={'Contact'} />
                     <MainStackNav.Screen component={Language} name={'Language'} />
+                    <MainStackNav.Screen
+                      component={BachatCircleLanding}
+                      name={'BachatCircle'}
+                    />
+                    <MainStackNav.Screen
+                      component={BachatCircleCreate}
+                      name={'BachatCircleCreate'}
+                    />
+                    <MainStackNav.Screen
+                      component={BachatCircleAddMembers}
+                      name={'BachatCircleAddMembers'}
+                    />
+                    <MainStackNav.Screen
+                      component={BachatCircleFeed}
+                      name={'BachatCircleFeed'}
+                    />
+                    <MainStackNav.Screen
+                      component={BachatCircleMembers}
+                      name={'BachatCircleMembers'}
+                    />
+                    <MainStackNav.Screen
+                      component={BachatCircleShareOffer}
+                      name={'BachatCircleShareOffer'}
+                    />
+                    <MainStackNav.Screen
+                      component={BachatCircleOfferDetail}
+                      name={'BachatCircleOfferDetail'}
+                    />
+                    <MainStackNav.Screen
+                      component={BachatCircleNotifications}
+                      name={'BachatCircleNotifications'}
+                    />
                 </MainStackNav.Navigator>
                 <WaitingForRequestBanner />
             </View>

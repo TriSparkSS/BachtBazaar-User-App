@@ -1,16 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  LayoutChangeEvent,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { colors } from '../helpers/styles';
-import { createGoogleStaticMapUrl } from '../utils/googleStaticMap';
-import { MapCoordinates } from '../utils/mapRegion';
+import { createMapRegion, MapCoordinates } from '../utils/mapRegion';
 
 type NativeGoogleMapPreviewProps = {
   coordinates: MapCoordinates;
@@ -23,43 +15,33 @@ const NativeGoogleMapPreview: React.FC<NativeGoogleMapPreviewProps> = ({
   markerTitle = 'Selected location',
   markerDescription,
 }) => {
-  const [isLoading, setIsLoading] = useState(true);
-  const [layout, setLayout] = useState({ width: 0, height: 0 });
-  const mapUrl = useMemo(
-    () =>
-      layout.width && layout.height
-        ? createGoogleStaticMapUrl({
-            coordinates,
-            width: layout.width,
-            height: layout.height,
-            zoom: 15,
-          })
-        : undefined,
-    [coordinates, layout.height, layout.width],
+  const [isReady, setIsReady] = useState(false);
+  const region = useMemo(
+    () => createMapRegion(coordinates, 0.01, 0.01),
+    [coordinates],
   );
 
-  const handleLayout = (event: LayoutChangeEvent) => {
-    const { width, height } = event.nativeEvent.layout;
-    setIsLoading(true);
-    setLayout({ width, height });
-  };
-
   return (
-    <View style={styles.root} onLayout={handleLayout}>
-      {mapUrl ? (
-        <Image
-          key={mapUrl}
-          source={{ uri: mapUrl }}
-          style={styles.mapImage}
-          resizeMode="cover"
-          onLoadStart={() => setIsLoading(true)}
-          onLoadEnd={() => setIsLoading(false)}
+    <View style={styles.root}>
+      <MapView
+        key={`${coordinates.latitude}-${coordinates.longitude}`}
+        style={styles.map}
+        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
+        initialRegion={region}
+        scrollEnabled={false}
+        zoomEnabled={false}
+        rotateEnabled={false}
+        pitchEnabled={false}
+        toolbarEnabled={false}
+        moveOnMarkerPress={false}
+        pointerEvents="none"
+        onMapReady={() => setIsReady(true)}>
+        <Marker
+          coordinate={coordinates}
+          title={markerTitle}
+          description={markerDescription}
         />
-      ) : null}
-
-      <View style={styles.markerWrap} pointerEvents="none">
-        <MaterialCommunityIcons name="map-marker" size={38} color={colors.primary} />
-      </View>
+      </MapView>
 
       <View style={styles.label} pointerEvents="none">
         <Text style={styles.labelTitle} numberOfLines={1}>
@@ -72,7 +54,7 @@ const NativeGoogleMapPreview: React.FC<NativeGoogleMapPreviewProps> = ({
         ) : null}
       </View>
 
-      {isLoading ? (
+      {!isReady ? (
         <View style={styles.loading}>
           <ActivityIndicator size="small" color={colors.primary} />
         </View>
@@ -89,22 +71,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#EEF2F8',
   },
-  mapImage: {
+  map: {
     ...StyleSheet.absoluteFillObject,
-    width: '100%',
-    height: '100%',
-  },
-  markerWrap: {
-    position: 'absolute',
-    left: '50%',
-    top: '50%',
-    marginLeft: -19,
-    marginTop: -38,
-    shadowColor: '#1B2430',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 3,
   },
   label: {
     position: 'absolute',

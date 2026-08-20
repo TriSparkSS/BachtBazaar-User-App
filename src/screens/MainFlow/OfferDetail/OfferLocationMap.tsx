@@ -101,6 +101,7 @@ const OfferLocationMap: React.FC<OfferLocationMapProps> = ({
             markerTitle={label}
             markerDescription={[address, city].filter(Boolean).join(', ')}
             expandLabel="Tap to open full map"
+            searchable={false}
           />
         )}
       </View>

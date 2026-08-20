@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -18,6 +18,7 @@ import { Category } from '../../../types/category';
 import { CreateRequestFormParams, RequestUrgency } from '../../../types/createRequest';
 import { estimateAveragePriceRange } from '../../../utils/createRequestMocks';
 import { showAppAlert } from '../../../services/appAlert';
+import { useSpeechToText } from '../../../hooks/useSpeechToText';
 import {
   getCurrentDeviceCoordinates,
   requestLocationPermission,
@@ -40,7 +41,6 @@ type CreateRequestFormViewProps = {
 
 const PRIMARY = colors.primary;
 const MIC = '#E67E22';
-const CAM = '#22A45A';
 const PIN = '#22A45A';
 const FLASH = '#F5A623';
 
@@ -113,6 +113,7 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
   const [budget, setBudget] = useState(
     editingRequest?.budget != null ? String(editingRequest.budget) : '',
   );
+  const [description, setDescription] = useState(editingRequest?.description?.trim() ?? '');
   const [urgency, setUrgency] = useState<RequestUrgency>(
     mapTimeframeToUrgency(editingRequest?.timeframe),
   );
@@ -121,10 +122,29 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
   );
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
 
+  const handleVoiceProductResult = useCallback((transcript: string) => {
+    const next = transcript.trim();
+    if (next) {
+      setProduct(next);
+    }
+  }, []);
+
+  const { isListening, partialTranscript, toggleListening } = useSpeechToText({
+    onResult: handleVoiceProductResult,
+  });
+
+  useEffect(() => {
+    if (!isListening || !partialTranscript.trim()) {
+      return;
+    }
+    setProduct(partialTranscript.trim());
+  }, [isListening, partialTranscript]);
+
   useEffect(() => {
     setProduct(editingRequest?.title ?? initialProduct?.trim() ?? '');
     setCategoryId(editingRequest?.categoryId ?? '');
     setBudget(editingRequest?.budget != null ? String(editingRequest.budget) : '');
+    setDescription(editingRequest?.description?.trim() ?? '');
     setUrgency(mapTimeframeToUrgency(editingRequest?.timeframe));
     setLocation(editingRequest?.formattedAddress?.trim() || initialLocation);
   }, [editingRequest, initialLocation, initialProduct]);
@@ -177,6 +197,7 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
       category: selectedCategory?.label || selectedCategory?.value || 'General',
       categoryId: effectiveCategoryId,
       budget: budget.trim() || undefined,
+      description: description.trim(),
       urgency,
       location: location.trim() || initialLocation,
       requestId: editingRequest?._id,
@@ -232,20 +253,16 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
               <TouchableOpacity
                 style={styles.trailIcon}
                 activeOpacity={0.75}
-                onPress={() =>
-                  showAppAlert('Voice', 'Voice input will be available soon.', [{ text: 'OK' }])
-                }>
-                <MaterialCommunityIcons name="microphone" size={18} color={MIC} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.trailIcon}
-                activeOpacity={0.75}
-                onPress={() =>
-                  showAppAlert('Camera', 'Product photo scan will be available soon.', [
-                    { text: 'OK' },
-                  ])
-                }>
-                <MaterialCommunityIcons name="camera" size={18} color={CAM} />
+                onPress={() => {
+                  void toggleListening();
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={isListening ? 'Stop voice input' : 'Product voice input'}>
+                <MaterialCommunityIcons
+                  name={isListening ? 'microphone' : 'microphone-outline'}
+                  size={18}
+                  color={isListening ? '#E53935' : MIC}
+                />
               </TouchableOpacity>
             </View>
 
@@ -314,6 +331,20 @@ const CreateRequestFormView: React.FC<CreateRequestFormViewProps> = ({
                 value={budget}
                 onChangeText={setBudget}
                 keyboardType="numeric"
+                underlineColorAndroid="transparent"
+              />
+            </View>
+
+            <Text style={styles.label}>Description (Optional)</Text>
+            <View style={[styles.inputBox, styles.descriptionBox]}>
+              <TextInput
+                style={[styles.input, styles.descriptionInput]}
+                placeholder="Add details about what you need"
+                placeholderTextColor="#B0B7C3"
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                textAlignVertical="top"
                 underlineColorAndroid="transparent"
               />
             </View>
@@ -464,6 +495,17 @@ const styles = StyleSheet.create({
   },
   budgetInput: {
     paddingLeft: 4,
+  },
+  descriptionBox: {
+    minHeight: 88,
+    alignItems: 'flex-start',
+    paddingRight: 14,
+    paddingVertical: 4,
+  },
+  descriptionInput: {
+    minHeight: 76,
+    paddingTop: 10,
+    paddingBottom: 10,
   },
   trailIcon: {
     width: 36,

@@ -5,6 +5,7 @@ export type CreateRequestFormParams = {
   category: string;
   categoryId: string;
   budget?: string;
+  description?: string;
   urgency: RequestUrgency;
   location: string;
   requestId?: string;

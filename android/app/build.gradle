@@ -127,6 +127,8 @@ dependencies {
     // Pin location to 20.0.0 to avoid FusedLocationProviderClient class/interface crash
     // with react-native-geolocation-service.
     implementation("com.google.android.gms:play-services-location:20.0.0")
+    // Explicit Maps SDK so Google MapView tiles resolve with the AndroidManifest API key.
+    implementation("com.google.android.gms:play-services-maps:18.2.0")
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

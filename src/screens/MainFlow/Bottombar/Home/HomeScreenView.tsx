@@ -25,6 +25,7 @@ import { colors, fonts } from '../../../../helpers/styles';
 import { useAppContext } from '../../../../context/AppContext';
 import { userAuthApi } from '../../../../services/userAuthApi';
 import { showAppAlert } from '../../../../services/appAlert';
+import { useSpeechToText } from '../../../../hooks/useSpeechToText';
 import { logApiEvent } from '../../../../services/apiClient';
 import { ShopOffer, ShopProduct, ShopWithOffers } from '../../../../types/shop';
 import { SearchResults } from '../../../../types/search';
@@ -161,6 +162,7 @@ const sidebarIconPalette: Record<string, string> = {
   'Help Articles': '#FFF4E5',
   'Help & Support': '#E8F1FF',
   Contact: '#EAF8F0',
+  'Bachat Circle': '#EEF4FF',
 };
 
 const sidebarIconTint: Record<string, string> = {
@@ -190,6 +192,7 @@ const sidebarIconTint: Record<string, string> = {
   'Help Articles': '#B86E00',
   'Help & Support': '#366FE0',
   Contact: '#2D8B5F',
+  'Bachat Circle': '#366FE0',
 };
 
 const sidebarMciIcons: Record<AppIconName, string> = {
@@ -239,6 +242,7 @@ const sidebarMciIcons: Record<AppIconName, string> = {
   'help-articles': 'book-open-page-variant-outline',
   contact: 'email-outline',
   language: 'translate',
+  'bachat-circle': 'account-group-outline',
 };
 
 const sidebarGroups: SidebarGroup[] = [
@@ -264,6 +268,7 @@ const sidebarGroups: SidebarGroup[] = [
   {
     title: 'Utility & Features',
     items: [
+      { icon: 'bachat-circle', label: 'Bachat Circle' },
       { icon: 'tips', label: 'Tips & Tricks' },
       { icon: 'coupons', label: 'My coupons' },
       { icon: 'qr', label: 'My QR' },
@@ -1084,6 +1089,32 @@ const HomeScreenView = () => {
     (navigation as StackNavigationProp<MainStackParamList>).navigate('Language');
   }, [navigation]);
 
+  const openBachatCircle = useCallback(() => {
+    const parentNavigation =
+      navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('BachatCircle');
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate(
+      'BachatCircle',
+    );
+  }, [navigation]);
+
+  const openBachatCircleNotifications = useCallback(() => {
+    const parentNavigation =
+      navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('BachatCircleNotifications');
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate(
+      'BachatCircleNotifications',
+    );
+  }, [navigation]);
+
   useEffect(() => {
     if (!authToken || !currentUser) {
       return;
@@ -1306,6 +1337,28 @@ const HomeScreenView = () => {
     setSearchSuggestionsVisible(false);
     lastCreateRequestPromptQueryRef.current = '';
   }, []);
+
+  const handleVoiceSearchResult = useCallback((transcript: string) => {
+    const wordQuery = transcript.trim();
+    if (!wordQuery) {
+      return;
+    }
+    setSearchQuery(wordQuery);
+    setSearchSuggestionsVisible(false);
+    setIsSearching(true);
+    setActiveSearchQuery(wordQuery);
+  }, []);
+
+  const { isListening, partialTranscript, toggleListening } = useSpeechToText({
+    onResult: handleVoiceSearchResult,
+  });
+
+  useEffect(() => {
+    if (!isListening || !partialTranscript.trim()) {
+      return;
+    }
+    setSearchQuery(partialTranscript.trim());
+  }, [isListening, partialTranscript]);
 
   const loadCategories = useCallback(async () => {
     try {
@@ -1555,7 +1608,7 @@ const HomeScreenView = () => {
 
           try {
             const { latitude, longitude } = coordinates;
-            const reverseGeocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=***`;
+            const reverseGeocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}`;
             const reverseGeocodeStartedAt = Date.now();
 
             logApiEvent('GET request', {
@@ -1922,6 +1975,18 @@ const HomeScreenView = () => {
       return;
     }
 
+    if (label === 'Bachat Circle') {
+      setSidebarVisible(false);
+      openBachatCircle();
+      return;
+    }
+
+    if (label === 'Notification') {
+      setSidebarVisible(false);
+      openBachatCircleNotifications();
+      return;
+    }
+
     if (label === 'Edit Profile') {
       openProfileSetup();
       return;
@@ -2165,6 +2230,9 @@ const HomeScreenView = () => {
             onMenuPress={() => setSidebarVisible(true)}
             onScannerPress={openScannerScreen}
             onCartPress={openCart}
+            onVoicePress={() => {
+              void toggleListening();
+            }}
             title="Bacht Bazaar"
             subtitle={headerAddress}
             showSearch
@@ -2172,6 +2240,7 @@ const HomeScreenView = () => {
             onSearchChange={handleSearchChange}
             onSearchSubmit={handleSearchSubmit}
             onClearSearch={handleClearSearch}
+            isListening={isListening}
             headerRef={walkthroughHeaderRef}
             menuRef={walkthroughMenuRef}
             headerActionsRef={walkthroughCartRef}

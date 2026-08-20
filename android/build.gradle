@@ -11,6 +11,8 @@ buildscript {
         // react-native-geolocation-service with IncompatibleClassChangeError.
         playServicesLocationVersion = "20.0.0"
         googlePlayServicesVersion = "20.0.0"
+        // Used by react-native-maps for play-services-maps / play-services-base.
+        playServicesVersion = "18.2.0"
     }
     repositories {
         google()

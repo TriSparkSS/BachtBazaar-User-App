@@ -114,4 +114,19 @@ export type MainStackParamList = {
   HelpArticles: undefined;
   Contact: undefined;
   Language: undefined;
+  BachatCircle: undefined;
+  BachatCircleCreate: undefined;
+  BachatCircleAddMembers: {
+    circleName: string;
+    category: 'Family' | 'Friends' | 'Office Team' | 'Other';
+  };
+  BachatCircleFeed: undefined;
+  BachatCircleMembers: undefined;
+  BachatCircleShareOffer: {
+    offerId: string;
+  };
+  BachatCircleOfferDetail: {
+    offerId: string;
+  };
+  BachatCircleNotifications: undefined;
 };

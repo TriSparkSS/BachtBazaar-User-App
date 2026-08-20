@@ -8,6 +8,7 @@ interface NavbarProps {
   onMenuPress?: () => void;
   onScannerPress?: () => void;
   onCartPress?: () => void;
+  onVoicePress?: () => void;
   title?: string;
   subtitle?: string;
   showSearch?: boolean;
@@ -15,6 +16,7 @@ interface NavbarProps {
   onSearchChange?: (value: string) => void;
   onSearchSubmit?: () => void;
   onClearSearch?: () => void;
+  isListening?: boolean;
   /** Coach-mark measure targets (Android needs collapsable={false}). */
   headerRef?: React.RefObject<View | null>;
   menuRef?: React.RefObject<View | null>;
@@ -26,6 +28,7 @@ const Navbar: React.FC<NavbarProps> = ({
   onMenuPress,
   onScannerPress,
   onCartPress,
+  onVoicePress,
   title = 'Bacht Bazaar',
   subtitle = 'Work - Mohan Sharn',
   showSearch = true,
@@ -33,6 +36,7 @@ const Navbar: React.FC<NavbarProps> = ({
   onSearchChange,
   onSearchSubmit,
   onClearSearch,
+  isListening = false,
   headerRef,
   menuRef,
   headerActionsRef,
@@ -96,7 +100,7 @@ const Navbar: React.FC<NavbarProps> = ({
           {/* Search step: search bar only (exclude QR) */}
           <View ref={searchRef} collapsable={false} style={styles.searchHighlightWrap}>
             <TouchableOpacity
-              style={styles.searchContainer}
+              style={[styles.searchContainer, isListening && styles.searchContainerListening]}
               activeOpacity={1}
               onPress={() => searchInputRef.current?.focus()}>
               <MaterialCommunityIcons name="magnify" size={22} color={colors.primary} />
@@ -105,7 +109,7 @@ const Navbar: React.FC<NavbarProps> = ({
                 containerStyle={styles.searchInputWrap}
                 focusedContainerStyle={styles.searchInputFocused}
                 style={styles.searchInput}
-                placeholder="Search Product..."
+                placeholder={isListening ? 'Listening…' : 'Search Product...'}
                 placeholderTextColor={colors.lighterGray}
                 returnKeyType="search"
                 value={searchValue}
@@ -122,6 +126,19 @@ const Navbar: React.FC<NavbarProps> = ({
                   <MaterialCommunityIcons name="close-circle" size={18} color={colors.lightGray} />
                 </TouchableOpacity>
               ) : null}
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={onVoicePress}
+                accessibilityRole="button"
+                accessibilityLabel={isListening ? 'Stop voice search' : 'Search by voice'}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <MaterialCommunityIcons
+                  name={isListening ? 'microphone' : 'microphone-outline'}
+                  size={22}
+                  color={isListening ? '#E53935' : colors.primary}
+                />
+              </TouchableOpacity>
             </TouchableOpacity>
           </View>
           <TouchableOpacity style={styles.qrButton} activeOpacity={0.82} onPress={onScannerPress}>
@@ -250,6 +267,9 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 3,
   },
+  searchContainerListening: {
+    borderColor: '#F5A3A3',
+  },
   searchInputWrap: {
     flex: 1,
     minHeight: 0,
@@ -271,7 +291,8 @@ const styles = StyleSheet.create({
     padding: 0,
     fontFamily: fonts.BOLD,
     minHeight: 0,
-  },  qrButton: {
+  },
+  qrButton: {
     width: 52,
     height: 52,
     justifyContent: 'center',
