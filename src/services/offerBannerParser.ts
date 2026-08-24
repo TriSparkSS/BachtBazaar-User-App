@@ -30,6 +30,65 @@ const pickNumber = (...values: unknown[]): number | undefined => {
   return undefined;
 };
 
+const pickBoolean = (...values: unknown[]): boolean | undefined => {
+  for (const value of values) {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+        return true;
+      }
+      if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+        return false;
+      }
+    }
+  }
+  return undefined;
+};
+
+const pickTerms = (value: Record<string, unknown>): string[] | undefined => {
+  const candidates = [
+    value.terms,
+    value.termsAndConditions,
+    value.terms_and_conditions,
+    value.tnc,
+    value.conditions,
+  ];
+
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) {
+      const terms = candidate
+        .map(item => {
+          if (typeof item === 'string') {
+            return item.trim();
+          }
+          if (isRecord(item)) {
+            return pickString(item.text, item.title, item.description, item.condition) || '';
+          }
+          return '';
+        })
+        .filter(Boolean);
+      if (terms.length) {
+        return terms;
+      }
+    }
+
+    if (typeof candidate === 'string' && candidate.trim()) {
+      const parts = candidate
+        .split(/\n|•|;|\|/)
+        .map(part => part.trim())
+        .filter(Boolean);
+      if (parts.length) {
+        return parts;
+      }
+    }
+  }
+
+  return undefined;
+};
+
 const buildBannerDiscount = (value: Record<string, unknown>): string | undefined => {
   const offerType = isRecord(value.offer_type_id)
     ? pickString(value.offer_type_id.value, value.offer_type_id.label)?.toLowerCase()
@@ -77,20 +136,34 @@ const normalizeOfferBanner = (value: unknown): OfferBanner | undefined => {
 
   const shop = isRecord(value.shop) ? value.shop : undefined;
   const merchant = isRecord(value.merchant) ? value.merchant : undefined;
+  const shopName = pickString(
+    value.shopName,
+    value.shop_name,
+    shop?.shopName,
+    shop?.name,
+    merchant?.storeName,
+    merchant?.name,
+  );
+  const ratingValue = pickNumber(
+    value.rating,
+    value.avgRating,
+    value.avg_rating,
+    shop?.rating,
+    shop?.avgRating,
+  );
+  const distanceValue = pickNumber(
+    value.distanceKm,
+    value.distance_km,
+    value.distance,
+    shop?.distanceKm,
+    shop?.distance,
+  );
 
   return {
     id,
     title: discount || title,
     subtitle:
-      pickString(
-        value.subtitle,
-        value.shopName,
-        value.shop_name,
-        shop?.shopName,
-        shop?.name,
-        merchant?.storeName,
-        value.description,
-      ) || 'Nearby Stores',
+      pickString(value.subtitle, shopName, value.description) || 'Nearby Stores',
     badgeLabel:
       pickString(value.badgeLabel, value.badge_label, value.badgeText, value.badge_text) ||
       'LIMITED TIME',
@@ -103,9 +176,56 @@ const normalizeOfferBanner = (value: unknown): OfferBanner | undefined => {
       value.imageUrl,
       value.image_url,
     ),
-    expiresAt: pickString(value.expiresAt, value.expires_at, value.endDate, value.end_date),
+    expiresAt: pickString(
+      value.expiresAt,
+      value.expires_at,
+      value.endDate,
+      value.end_date,
+      value.validTill,
+      value.valid_till,
+    ),
     shopId: pickString(value.shopId, value.shop_id, shop?._id, shop?.id),
     offerId: pickString(value.offerId, value.offer_id, id),
+    description: pickString(
+      value.description,
+      value.longDescription,
+      value.long_description,
+      value.offerDescription,
+      value.offer_description,
+      value.details,
+    ),
+    shopName,
+    shopCategory: pickString(
+      value.shopCategory,
+      value.shop_category,
+      value.category,
+      shop?.category,
+      shop?.shopCategory,
+      Array.isArray(shop?.categories) ? shop?.categories[0] : undefined,
+    ),
+    shopLogo: pickString(
+      value.shopLogo,
+      value.shop_logo,
+      shop?.logo,
+      shop?.avatar,
+      merchant?.avatar,
+      merchant?.logo,
+    ),
+    rating: ratingValue != null ? String(ratingValue) : pickString(value.rating, shop?.rating),
+    distance:
+      distanceValue != null
+        ? `${distanceValue.toFixed(1)} km`
+        : pickString(value.distanceLabel, value.distance_label, shop?.distance),
+    isVerified:
+      pickBoolean(
+        value.isVerified,
+        value.is_verified,
+        value.verified,
+        shop?.isVerified,
+        shop?.is_verified,
+        shop?.verified,
+      ) ?? false,
+    terms: pickTerms(value),
   };
 };
 
@@ -152,6 +272,9 @@ const normalizeAdminBanner = (value: unknown): OfferBanner | undefined => {
     return undefined;
   }
 
+  const shop = isRecord(value.shop) ? value.shop : undefined;
+  const merchant = isRecord(value.merchant) ? value.merchant : undefined;
+
   return {
     id,
     title: discount || title,
@@ -185,6 +308,29 @@ const normalizeAdminBanner = (value: unknown): OfferBanner | undefined => {
       value.validTill,
       value.valid_till,
     ),
+    shopId: pickString(value.shopId, value.shop_id, shop?._id, shop?.id),
+    offerId: pickString(value.offerId, value.offer_id, value.linkedOfferId, value.linked_offer_id),
+    description: pickString(
+      value.description,
+      value.longDescription,
+      value.long_description,
+      value.details,
+    ),
+    shopName: pickString(
+      value.shopName,
+      value.shop_name,
+      shop?.shopName,
+      shop?.name,
+      merchant?.storeName,
+    ),
+    shopCategory: pickString(value.shopCategory, value.shop_category, value.category, shop?.category),
+    shopLogo: pickString(value.shopLogo, value.shop_logo, shop?.logo, merchant?.avatar),
+    rating: pickString(value.rating, shop?.rating),
+    distance: pickString(value.distanceLabel, value.distance_label, value.distance),
+    isVerified:
+      pickBoolean(value.isVerified, value.is_verified, shop?.isVerified, shop?.verified) ?? false,
+    terms: pickTerms(value),
+    isAdminBanner: true,
   };
 };
 
@@ -195,5 +341,12 @@ export const parseOfferBannersResponse = (payload: unknown): OfferBanner[] =>
 
 export const parseAdminBannersResponse = (payload: unknown): OfferBanner[] =>
   unwrapBannerList(payload)
-    .map(item => normalizeAdminBanner(item) ?? normalizeOfferBanner(item))
+    .map(item => {
+      const fromAdmin = normalizeAdminBanner(item);
+      if (fromAdmin) {
+        return { ...fromAdmin, isAdminBanner: true };
+      }
+      const fromOffer = normalizeOfferBanner(item);
+      return fromOffer ? { ...fromOffer, isAdminBanner: true } : undefined;
+    })
     .filter((banner): banner is OfferBanner => Boolean(banner));

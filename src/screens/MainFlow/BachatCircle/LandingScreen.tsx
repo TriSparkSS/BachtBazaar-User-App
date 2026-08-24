@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,8 +12,14 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { fonts, colors } from '../../../helpers/styles';
+import { useAppContext } from '../../../context/AppContext';
 import { MainStackParamList } from '../../../navigation/types';
 import { showAppAlert } from '../../../services/appAlert';
+import {
+  BachatCircleDto,
+  CircleInvitationDto,
+  bachatCircleApi,
+} from '../../../services/bachatCircleApi';
 import { circleStorage } from './circleStorage';
 import { circleColors, circleShadow } from './theme';
 
@@ -54,12 +61,14 @@ const HERO_AVATARS = [
 const LandingScreen = () => {
   const navigation =
     useNavigation<StackNavigationProp<MainStackParamList, 'BachatCircle'>>();
+  const { authToken } = useAppContext();
   const [checking, setChecking] = useState(true);
+  const [invitations, setInvitations] = useState<CircleInvitationDto[]>([]);
+  const [respondingId, setRespondingId] = useState<string | null>(null);
 
   const avatarPositions = useMemo(() => {
     const center = HERO_SIZE / 2;
     return HERO_AVATARS.map((item, index) => {
-      // Pentagon starting at top (-90°)
       const angle = ((index * 72 - 90) * Math.PI) / 180;
       const left = center + RING_RADIUS * Math.cos(angle) - AVATAR_SIZE / 2;
       const top = center + RING_RADIUS * Math.sin(angle) - AVATAR_SIZE / 2;
@@ -71,24 +80,107 @@ const LandingScreen = () => {
     useCallback(() => {
       let alive = true;
       (async () => {
-        const state = await circleStorage.load();
-        if (!alive) {
+        setChecking(true);
+        const token = authToken?.trim();
+        const local = await circleStorage.load();
+
+        if (token) {
+          try {
+            const [circles, invites] = await Promise.all([
+              bachatCircleApi.listMyCircles(token),
+              bachatCircleApi.myInvitations(token),
+            ]);
+            if (!alive) {
+              return;
+            }
+
+            let active: BachatCircleDto | undefined = circles[0];
+            if (!active && local.circleId) {
+              try {
+                active = await bachatCircleApi.getCircle(token, local.circleId);
+              } catch {
+                active = undefined;
+              }
+            }
+
+            if (active?.id) {
+              await circleStorage.save({
+                created: true,
+                circleId: active.id,
+                name: active.name,
+                category: local.category || 'Family',
+                description: active.description,
+                memberIds: active.members.map(m => m.userId),
+                pendingInviteIds: active.pendingInvitations.map(i => i.id),
+              });
+              navigation.replace('BachatCircleFeed', { circleId: active.id });
+              return;
+            }
+
+            setInvitations(invites);
+          } catch {
+            if (local.created && local.circleId) {
+              navigation.replace('BachatCircleFeed', { circleId: local.circleId });
+              return;
+            }
+          }
+        } else if (local.created && local.circleId) {
+          navigation.replace('BachatCircleFeed', { circleId: local.circleId });
           return;
         }
-        if (state.created && state.name.trim()) {
-          navigation.replace('BachatCircleFeed');
-          return;
+
+        if (alive) {
+          setChecking(false);
         }
-        setChecking(false);
       })();
       return () => {
         alive = false;
       };
-    }, [navigation]),
+    }, [authToken, navigation]),
   );
 
+  const onRespondInvite = async (
+    invite: CircleInvitationDto,
+    action: 'ACCEPT' | 'REJECT',
+  ) => {
+    const token = authToken?.trim();
+    if (!token) {
+      return;
+    }
+    setRespondingId(invite.id);
+    try {
+      await bachatCircleApi.respondInvitation(token, invite.id, action);
+      if (action === 'ACCEPT') {
+        await circleStorage.save({
+          created: true,
+          circleId: invite.circleId,
+          name: invite.circleName,
+          category: 'Friends',
+          description: invite.circleDescription,
+          memberIds: [],
+          pendingInviteIds: [],
+        });
+        navigation.replace('BachatCircleFeed', { circleId: invite.circleId });
+        return;
+      }
+      setInvitations(prev => prev.filter(item => item.id !== invite.id));
+      showAppAlert('Invite declined', 'Invitation rejected.');
+    } catch (error) {
+      showAppAlert(
+        'Could not respond',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    } finally {
+      setRespondingId(null);
+    }
+  };
+
   if (checking) {
-    return <SafeAreaView style={styles.safe} edges={['top']} />;
+    return (
+      <SafeAreaView style={[styles.safe, styles.loading]} edges={['top']}>
+        <ActivityIndicator color={circleColors.green} />
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -204,6 +296,47 @@ const LandingScreen = () => {
           ))}
         </View>
 
+        {invitations.length > 0 ? (
+          <View style={styles.inviteBox}>
+            <Text style={styles.inviteTitle}>Pending invitations</Text>
+            {invitations.map(invite => (
+              <View key={invite.id} style={styles.inviteCard}>
+                <Text style={styles.inviteName}>{invite.circleName}</Text>
+                <Text style={styles.inviteMeta}>
+                  From {invite.invitedByName || 'a friend'}
+                  {invite.memberCount != null
+                    ? ` · ${invite.memberCount} members`
+                    : ''}
+                </Text>
+                <View style={styles.inviteActions}>
+                  <TouchableOpacity
+                    style={styles.acceptBtn}
+                    disabled={respondingId === invite.id}
+                    onPress={() => {
+                      void onRespondInvite(invite, 'ACCEPT');
+                    }}
+                  >
+                    {respondingId === invite.id ? (
+                      <ActivityIndicator color={circleColors.white} size="small" />
+                    ) : (
+                      <Text style={styles.acceptText}>Accept</Text>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.rejectBtn}
+                    disabled={respondingId === invite.id}
+                    onPress={() => {
+                      void onRespondInvite(invite, 'REJECT');
+                    }}
+                  >
+                    <Text style={styles.rejectText}>Decline</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         <TouchableOpacity
           style={[styles.cta, circleShadow.cta]}
           activeOpacity={0.9}
@@ -234,6 +367,70 @@ const LandingScreen = () => {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: circleColors.cream },
+  loading: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inviteBox: {
+    width: '100%',
+    marginBottom: 16,
+  },
+  inviteTitle: {
+    alignSelf: 'flex-start',
+    fontSize: 15,
+    fontFamily: fonts.BOLD,
+    color: circleColors.text,
+    marginBottom: 8,
+  },
+  inviteCard: {
+    width: '100%',
+    backgroundColor: circleColors.white,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: circleColors.border,
+  },
+  inviteName: {
+    fontSize: 15,
+    fontFamily: fonts.BOLD,
+    color: circleColors.text,
+  },
+  inviteMeta: {
+    fontSize: 12,
+    color: circleColors.muted,
+    marginTop: 2,
+    marginBottom: 10,
+  },
+  inviteActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  acceptBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: circleColors.green,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  acceptText: {
+    color: circleColors.white,
+    fontFamily: fonts.BOLD,
+  },
+  rejectBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: circleColors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rejectText: {
+    color: circleColors.text,
+    fontFamily: fonts.BOLD,
+  },
   backBtn: {
     position: 'absolute',
     top: 8,

@@ -5,6 +5,8 @@ import {
 } from '../types/createRequest';
 import { MerchantBidData } from '../services/bestRequestApi';
 
+import { OfferBanner } from '../types/offerBanner';
+
 export type MainStackParamList = {
   BottomStack: undefined;
   StoreDetail: {
@@ -12,6 +14,9 @@ export type MainStackParamList = {
     shopId?: string;
     /** Full shop from lists, or a minimal `{ id }` stub from scanner. */
     shop?: ShopWithOffers | { id: string };
+  };
+  BannerDetail: {
+    banner: OfferBanner;
   };
   OfferDetail: {
     shop: ShopWithOffers;
@@ -113,20 +118,34 @@ export type MainStackParamList = {
   VideoGuide: undefined;
   HelpArticles: undefined;
   Contact: undefined;
+  InviteEarn: undefined;
+  Notifications: undefined;
   Language: undefined;
   BachatCircle: undefined;
   BachatCircleCreate: undefined;
   BachatCircleAddMembers: {
     circleName: string;
     category: 'Family' | 'Friends' | 'Office Team' | 'Other';
+    circleId: string;
+    description?: string;
   };
-  BachatCircleFeed: undefined;
-  BachatCircleMembers: undefined;
+  BachatCircleFeed: {
+    circleId?: string;
+  } | undefined;
+  BachatCircleMembers: {
+    circleId?: string;
+  } | undefined;
   BachatCircleShareOffer: {
     offerId: string;
+    offerTitle?: string;
+    offerSubtitle?: string;
+    offerImage?: string;
+    discount?: string;
+    circleId?: string;
   };
   BachatCircleOfferDetail: {
-    offerId: string;
+    sharedOfferId: string;
+    circleId: string;
   };
   BachatCircleNotifications: undefined;
 };

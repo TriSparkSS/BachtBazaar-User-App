@@ -139,9 +139,7 @@ const CircleNotificationsScreen = () => {
             activeOpacity={0.9}
             onPress={() => {
               if (item.type === 'shared' || item.type === 'new-offer') {
-                navigation.navigate('BachatCircleOfferDetail', {
-                  offerId: 'offer-1',
-                });
+                navigation.navigate('BachatCircleFeed');
               }
             }}
           >

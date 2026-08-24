@@ -8,6 +8,7 @@ interface NavbarProps {
   onMenuPress?: () => void;
   onScannerPress?: () => void;
   onCartPress?: () => void;
+  onNotificationPress?: () => void;
   onVoicePress?: () => void;
   title?: string;
   subtitle?: string;
@@ -17,6 +18,7 @@ interface NavbarProps {
   onSearchSubmit?: () => void;
   onClearSearch?: () => void;
   isListening?: boolean;
+  notificationUnreadCount?: number;
   /** Coach-mark measure targets (Android needs collapsable={false}). */
   headerRef?: React.RefObject<View | null>;
   menuRef?: React.RefObject<View | null>;
@@ -28,6 +30,7 @@ const Navbar: React.FC<NavbarProps> = ({
   onMenuPress,
   onScannerPress,
   onCartPress,
+  onNotificationPress,
   onVoicePress,
   title = 'Bacht Bazaar',
   subtitle = 'Work - Mohan Sharn',
@@ -37,6 +40,7 @@ const Navbar: React.FC<NavbarProps> = ({
   onSearchSubmit,
   onClearSearch,
   isListening = false,
+  notificationUnreadCount = 0,
   headerRef,
   menuRef,
   headerActionsRef,
@@ -44,6 +48,8 @@ const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const searchInputRef = useRef<TextInput>(null);
   const formattedSubtitle = subtitle.replace(/^Work\s*-\s*/i, '').trim();
+  const badgeLabel =
+    notificationUnreadCount > 99 ? '99+' : String(notificationUnreadCount);
 
   return (
     <>
@@ -87,10 +93,16 @@ const Navbar: React.FC<NavbarProps> = ({
           <TouchableOpacity
             style={styles.iconButton}
             activeOpacity={0.7}
+            onPress={onNotificationPress}
             accessibilityRole="button"
             accessibilityLabel="Notifications"
           >
             <MaterialCommunityIcons name="bell-outline" size={24} color="#202843" />
+            {notificationUnreadCount > 0 ? (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{badgeLabel}</Text>
+              </View>
+            ) : null}
           </TouchableOpacity>
         </View>
       </View>
@@ -241,6 +253,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderWidth: 1.5,
     borderColor: '#F0C4C4',
+  },
+  badge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 3,
+    backgroundColor: colors.gradientRed,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: colors.white,
+  },
+  badgeText: {
+    color: colors.white,
+    fontSize: 9,
+    fontFamily: fonts.BOLD,
+    lineHeight: 11,
   },
   searchRow: {
     flexDirection: 'row',

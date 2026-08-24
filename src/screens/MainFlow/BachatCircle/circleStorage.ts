@@ -1,13 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { BachatCircleState, CircleCategory } from './types';
 
-const STORAGE_KEY = 'bachat_circle_state_v1';
+const STORAGE_KEY = 'bachat_circle_state_v2';
 
 export const emptyCircleState = (): BachatCircleState => ({
   created: false,
+  circleId: '',
   name: '',
   category: 'Family',
-  memberIds: ['you'],
+  description: '',
+  memberIds: [],
   pendingInviteIds: [],
 });
 
@@ -22,9 +24,9 @@ export const circleStorage = {
       return {
         ...emptyCircleState(),
         ...parsed,
-        memberIds: Array.isArray(parsed.memberIds)
-          ? parsed.memberIds
-          : ['you'],
+        circleId: typeof parsed.circleId === 'string' ? parsed.circleId : '',
+        description: typeof parsed.description === 'string' ? parsed.description : '',
+        memberIds: Array.isArray(parsed.memberIds) ? parsed.memberIds : [],
         pendingInviteIds: Array.isArray(parsed.pendingInviteIds)
           ? parsed.pendingInviteIds
           : [],

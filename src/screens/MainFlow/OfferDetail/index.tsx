@@ -199,6 +199,15 @@ const OfferDetail = () => {
           expectedOfferTitle: offer.title || initialOffer.title,
         })
       }
+      onShareToCircle={() =>
+        navigation.navigate('BachatCircleShareOffer', {
+          offerId: offer.id?.trim() || initialOffer.id?.trim(),
+          offerTitle: offer.title || initialOffer.title,
+          offerSubtitle: offer.subtitle || shop.name,
+          discount: offer.discount,
+          offerImage: offer.image,
+        })
+      }
       onAlreadyClaimedPress={() =>
         showAppAlert('Already Claimed', 'You have already claimed this offer.')
       }

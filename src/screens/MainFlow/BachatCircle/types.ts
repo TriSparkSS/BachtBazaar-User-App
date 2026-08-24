@@ -48,8 +48,10 @@ export type CircleNotification = {
 
 export type BachatCircleState = {
   created: boolean;
+  circleId: string;
   name: string;
   category: CircleCategory;
+  description?: string;
   memberIds: string[];
   pendingInviteIds: string[];
 };

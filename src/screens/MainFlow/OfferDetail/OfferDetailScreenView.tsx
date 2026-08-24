@@ -45,6 +45,7 @@ type OfferDetailScreenViewProps = {
   onBack: () => void;
   onToggleWishlist: () => void;
   onOpenScanner: () => void;
+  onShareToCircle?: () => void;
   onAlreadyClaimedPress?: () => void;
   resolveImageUrl: (path?: string | null) => string | undefined;
 };
@@ -62,6 +63,7 @@ const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
   onBack,
   onToggleWishlist,
   onOpenScanner,
+  onShareToCircle,
   onAlreadyClaimedPress,
   resolveImageUrl,
 }) => {
@@ -135,7 +137,11 @@ const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
           </TouchableOpacity>
 
           <View style={styles.heroActionsRight}>
-            <TouchableOpacity style={styles.heroIconButton} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={styles.heroIconButton}
+              activeOpacity={0.85}
+              onPress={onShareToCircle}
+            >
               <MaterialCommunityIcons name="share-variant-outline" size={19} color="#1A2238" />
             </TouchableOpacity>
             <TouchableOpacity

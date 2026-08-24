@@ -5,6 +5,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { colors } from '../../helpers/styles';
 import { BottomStack } from './BottomStack';
 import StoreDetail from '../../screens/MainFlow/StoreDetail';
+import BannerDetail from '../../screens/MainFlow/BannerDetail';
 import OfferDetail from '../../screens/MainFlow/OfferDetail';
 import ProductDetail from '../../screens/MainFlow/ProductDetail';
 import Cart from '../../screens/MainFlow/Cart';
@@ -31,6 +32,8 @@ import FAQ from '../../screens/MainFlow/FAQ';
 import VideoGuide from '../../screens/MainFlow/VideoGuide';
 import HelpArticles from '../../screens/MainFlow/HelpArticles';
 import Contact from '../../screens/MainFlow/Contact';
+import InviteEarn from '../../screens/MainFlow/InviteEarn';
+import Notifications from '../../screens/MainFlow/Notifications';
 import Language from '../../screens/MainFlow/Language';
 import BachatCircleLanding from '../../screens/MainFlow/BachatCircle/LandingScreen';
 import BachatCircleCreate from '../../screens/MainFlow/BachatCircle/CreateCircleScreen';
@@ -74,6 +77,7 @@ export const MainStack = () => {
                 >
                     <MainStackNav.Screen component={BottomStack} name={'BottomStack'} />
                     <MainStackNav.Screen component={StoreDetail} name={'StoreDetail'} />
+                    <MainStackNav.Screen component={BannerDetail} name={'BannerDetail'} />
                     <MainStackNav.Screen component={OfferDetail} name={'OfferDetail'} />
                     <MainStackNav.Screen component={ProductDetail} name={'ProductDetail'} />
                     <MainStackNav.Screen component={Cart} name={'Cart'} />
@@ -113,6 +117,8 @@ export const MainStack = () => {
                       name={'HelpArticles'}
                     />
                     <MainStackNav.Screen component={Contact} name={'Contact'} />
+                    <MainStackNav.Screen component={InviteEarn} name={'InviteEarn'} />
+                    <MainStackNav.Screen component={Notifications} name={'Notifications'} />
                     <MainStackNav.Screen component={Language} name={'Language'} />
                     <MainStackNav.Screen
                       component={BachatCircleLanding}

@@ -518,26 +518,9 @@ export const shopApi = {
 
     const shops = parseShopsWithOffersResponse(payload);
 
-    return Promise.all(
-      shops.map(async shop => {
-        let enrichedShop = await this.enrichShopListLogo(shop, token);
-
-        if (enrichedShop.offers.length > 0) {
-          return enrichedShop;
-        }
-
-        try {
-          const offers = await this.fetchShopOffers(enrichedShop.id, token);
-          return {
-            ...enrichedShop,
-            offers,
-            offerCount: offers.length || enrichedShop.offerCount || 0,
-          };
-        } catch {
-          return enrichedShop;
-        }
-      }),
-    );
+    // Use offers embedded in the shops list only. Do not prefetch
+    // GET /shop/offers/:shopId on Home — fetch offer detail when the user taps an offer.
+    return Promise.all(shops.map(shop => this.enrichShopListLogo(shop, token)));
   },
 
   /**

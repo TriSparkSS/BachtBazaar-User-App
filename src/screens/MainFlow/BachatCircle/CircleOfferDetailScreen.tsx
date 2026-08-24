@@ -1,21 +1,43 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
+  ActivityIndicator,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useAppContext } from '../../../context/AppContext';
 import { fonts } from '../../../helpers/styles';
 import { MainStackParamList } from '../../../navigation/types';
 import { showAppAlert } from '../../../services/appAlert';
-import MemberAvatar from './components/MemberAvatar';
-import { MOCK_SHARED_OFFERS } from './mockData';
+import {
+  CIRCLE_REACTIONS,
+  CircleReactionKey,
+  SharedCircleOfferDto,
+  bachatCircleApi,
+} from '../../../services/bachatCircleApi';
 import { circleColors, circleShadow } from './theme';
+
+const formatDate = (value?: string) => {
+  if (!value) {
+    return '—';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+};
 
 const CircleOfferDetailScreen = () => {
   const navigation =
@@ -24,509 +46,307 @@ const CircleOfferDetailScreen = () => {
     >();
   const route =
     useRoute<RouteProp<MainStackParamList, 'BachatCircleOfferDetail'>>();
-  const offer = useMemo(
-    () =>
-      MOCK_SHARED_OFFERS.find(o => o.id === route.params.offerId) ||
-      MOCK_SHARED_OFFERS[0],
-    [route.params.offerId],
+  const { authToken } = useAppContext();
+  const { sharedOfferId, circleId } = route.params;
+
+  const [offer, setOffer] = useState<SharedCircleOfferDto | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [reacting, setReacting] = useState(false);
+
+  const load = useCallback(async () => {
+    const token = authToken?.trim();
+    if (!token) {
+      return;
+    }
+    try {
+      const list = await bachatCircleApi.listOffers(token, circleId);
+      const match = list.find(item => item.id === sharedOfferId) || list[0];
+      setOffer(match || null);
+    } catch (error) {
+      showAppAlert(
+        'Could not load offer',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    }
+  }, [authToken, circleId, sharedOfferId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      (async () => {
+        setLoading(true);
+        await load();
+        if (alive) {
+          setLoading(false);
+        }
+      })();
+      return () => {
+        alive = false;
+      };
+    }, [load]),
   );
 
+  const onReact = async (reaction: CircleReactionKey) => {
+    const token = authToken?.trim();
+    if (!token || !offer) {
+      return;
+    }
+    setReacting(true);
+    try {
+      await bachatCircleApi.reactToOffer(token, circleId, offer.id, reaction);
+      setOffer(prev => {
+        if (!prev) {
+          return prev;
+        }
+        const prevCounts = { ...(prev.reactionCounts || {}) };
+        if (prev.myReaction && prevCounts[prev.myReaction]) {
+          prevCounts[prev.myReaction] = Math.max(
+            0,
+            (prevCounts[prev.myReaction] || 0) - 1,
+          );
+        }
+        prevCounts[reaction] = (prevCounts[reaction] || 0) + 1;
+        return {
+          ...prev,
+          myReaction: reaction,
+          reactionCounts: prevCounts,
+          totalReactions: Object.values(prevCounts).reduce(
+            (sum, n) => sum + (n || 0),
+            0,
+          ),
+        };
+      });
+    } catch (error) {
+      showAppAlert(
+        'Reaction failed',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    } finally {
+      setReacting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[styles.safe, styles.center]} edges={['top']}>
+        <ActivityIndicator color={circleColors.green} />
+      </SafeAreaView>
+    );
+  }
+
+  if (!offer) {
+    return (
+      <SafeAreaView style={[styles.safe, styles.center]} edges={['top']}>
+        <Text style={styles.empty}>Offer not found in this circle.</Text>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Text style={styles.link}>Go back</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.iconBtn}
-        >
-          <MaterialCommunityIcons
-            name="arrow-left"
-            size={22}
-            color={circleColors.green}
-          />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconBtn}>
+          <MaterialCommunityIcons name="arrow-left" size={22} color={circleColors.green} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Offer Details</Text>
-        <TouchableOpacity
-          style={styles.iconBtn}
-          onPress={() =>
-            navigation.navigate('BachatCircleShareOffer', { offerId: offer.id })
-          }
-        >
-          <MaterialCommunityIcons
-            name="share-variant"
-            size={20}
-            color={circleColors.green}
-          />
-        </TouchableOpacity>
+        <View style={styles.iconBtn} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.sharedBy}>
-          <MemberAvatar
-            name={offer.sharedByName}
-            initial={offer.sharedByName.charAt(0)}
-            color={circleColors.greenSoft}
-            size={42}
-          />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.sharedText}>
-              Shared by{' '}
-              <Text style={styles.sharedName}>{offer.sharedByName}</Text>
-            </Text>
-            <Text style={styles.sharedMeta}>
-              {offer.timeAgo} in Azmir's Family Circle
-            </Text>
+        {offer.thumbnail ? (
+          <Image source={{ uri: offer.thumbnail }} style={styles.hero} />
+        ) : (
+          <View style={[styles.hero, styles.heroFallback]}>
+            <MaterialCommunityIcons name="storefront" size={40} color={circleColors.green} />
           </View>
-          <View style={styles.fromCircle}>
-            <MaterialCommunityIcons
-              name="shield-check"
-              size={12}
-              color={circleColors.green}
-            />
-            <Text style={styles.fromCircleText}>From your circle</Text>
+        )}
+
+        <Text style={styles.merchant}>{offer.merchantName || 'Merchant'}</Text>
+        <Text style={styles.title}>{offer.title}</Text>
+        {offer.discountLabel ? (
+          <Text style={styles.discount}>{offer.discountLabel}</Text>
+        ) : null}
+        {offer.description ? (
+          <Text style={styles.description}>{offer.description}</Text>
+        ) : null}
+
+        <View style={styles.metaCard}>
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>Valid Till</Text>
+            <Text style={styles.metaValue}>{formatDate(offer.endDate)}</Text>
+          </View>
+          <View style={styles.metaDivider} />
+          <View style={styles.metaItem}>
+            <Text style={styles.metaLabel}>Shared by</Text>
+            <Text style={styles.metaValue}>{offer.sharedByName || 'Member'}</Text>
           </View>
         </View>
 
-        <View style={[styles.mainCard, circleShadow.card]}>
-          <View style={[styles.hero, { backgroundColor: offer.imageColor }]}>
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{offer.badge}</Text>
-            </View>
-            <TouchableOpacity style={styles.heart}>
-              <MaterialCommunityIcons
-                name="heart-outline"
-                size={20}
-                color={circleColors.green}
-              />
-            </TouchableOpacity>
-            <MaterialCommunityIcons
-              name="food"
-              size={72}
-              color={circleColors.orange}
-            />
-          </View>
+        {offer.minimumPurchaseAmount != null ? (
+          <Text style={styles.minPurchase}>
+            Min. purchase: ₹{offer.minimumPurchaseAmount}
+          </Text>
+        ) : null}
 
-          <View style={styles.cardBody}>
-            <View style={styles.brandRow}>
-              <View
-                style={[
-                  styles.brandMark,
-                  { backgroundColor: offer.imageColor },
-                ]}
+        <Text style={styles.sectionTitle}>Reactions</Text>
+        <Text style={styles.sectionHint}>
+          One reaction per member. Tap to update your reaction.
+        </Text>
+        <View style={styles.reactionRow}>
+          {CIRCLE_REACTIONS.map(item => {
+            const count = offer.reactionCounts?.[item.key] || 0;
+            const selected = offer.myReaction === item.key;
+            return (
+              <TouchableOpacity
+                key={item.key}
+                style={[styles.reactionChip, selected && styles.reactionChipActive]}
+                disabled={reacting}
+                onPress={() => {
+                  void onReact(item.key);
+                }}
               >
-                <MaterialCommunityIcons
-                  name="store"
-                  size={18}
-                  color={circleColors.orange}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.brand}>{offer.brand}</Text>
-                <Text style={styles.title}>{offer.title}</Text>
-              </View>
-            </View>
-            <View style={styles.chips}>
-              <View style={styles.chip}>
-                <MaterialCommunityIcons
-                  name="map-marker-outline"
-                  size={14}
-                  color={circleColors.muted}
-                />
-                <Text style={styles.chipText}>{offer.distance} away</Text>
-              </View>
-              <View style={styles.chip}>
-                <MaterialCommunityIcons
-                  name="clock-outline"
-                  size={14}
-                  color={circleColors.muted}
-                />
-                <Text style={styles.chipText}>Valid till {offer.validTill}</Text>
-              </View>
-              <View style={styles.chip}>
-                <MaterialCommunityIcons
-                  name="star"
-                  size={14}
-                  color={circleColors.star}
-                />
-                <Text style={styles.chipText}>
-                  {offer.rating}
-                  {offer.ratingCount ? ` (${offer.ratingCount})` : ''}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.restriction}>
-              <MaterialCommunityIcons
-                name="account-group"
-                size={16}
-                color={circleColors.green}
-              />
-              <Text style={styles.restrictionText}>
-                Only members of Azmir's Family Circle can view this offer.
-              </Text>
-            </View>
-          </View>
+                <Text style={styles.reactionEmoji}>{item.emoji}</Text>
+                <Text style={styles.reactionLabel}>{item.label}</Text>
+                {count > 0 ? (
+                  <Text style={styles.reactionCount}>{count}</Text>
+                ) : null}
+              </TouchableOpacity>
+            );
+          })}
         </View>
-
-        <View style={[styles.quickActions, circleShadow.soft]}>
-          {[
-            { icon: 'phone', color: circleColors.green, label: 'Call Store' },
-            {
-              icon: 'navigation-variant',
-              color: circleColors.orange,
-              label: 'Directions',
-            },
-            {
-              icon: 'bookmark-outline',
-              color: circleColors.green,
-              label: 'Save Offer',
-            },
-          ].map((item, index) => (
-            <TouchableOpacity
-              key={item.label}
-              style={[
-                styles.quickItem,
-                index < 2 && styles.quickItemBorder,
-              ]}
-              onPress={() =>
-                showAppAlert(item.label, 'Action will use live APIs later.')
-              }
-            >
-              <MaterialCommunityIcons
-                name={item.icon}
-                size={20}
-                color={item.color}
-              />
-              <Text style={styles.quickLabel}>{item.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <Text style={styles.sectionTitle}>About this offer</Text>
-        <Text style={styles.about}>{offer.about}</Text>
-
-        <Text style={styles.sectionTitle}>Store Details</Text>
-        <View style={[styles.storeCard, circleShadow.soft]}>
-          <View
-            style={[styles.storeThumb, { backgroundColor: offer.imageColor }]}
-          />
-          <View style={{ flex: 1 }}>
-            <View style={styles.storeTitleRow}>
-              <Text style={styles.storeBrand}>{offer.brand}</Text>
-              {offer.open ? (
-                <View style={styles.openPill}>
-                  <Text style={styles.openText}>Open</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text style={styles.address}>{offer.address}</Text>
-            <Text style={styles.hours}>{offer.hours}</Text>
-          </View>
-          <TouchableOpacity style={styles.phoneBtn}>
-            <MaterialCommunityIcons
-              name="phone"
-              size={18}
-              color={circleColors.white}
-            />
-          </TouchableOpacity>
-        </View>
-
-        <Text style={styles.sectionTitle}>Location</Text>
-        <View style={styles.mapPreview}>
-          <MaterialCommunityIcons
-            name="map"
-            size={40}
-            color={circleColors.green}
-          />
-          <TouchableOpacity style={styles.mapBtn}>
-            <MaterialCommunityIcons
-              name="map-marker"
-              size={14}
-              color={circleColors.green}
-            />
-            <Text style={styles.mapBtnText}>View on Map</Text>
-          </TouchableOpacity>
-        </View>
+        {(offer.totalReactions || 0) > 0 ? (
+          <Text style={styles.total}>
+            {offer.totalReactions} total reaction
+            {(offer.totalReactions || 0) === 1 ? '' : 's'}
+          </Text>
+        ) : null}
       </ScrollView>
-
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.redeemBtn, circleShadow.cta]}
-          onPress={() =>
-            showAppAlert('Redeem Offer', 'Redemption flow coming soon.')
-          }
-        >
-          <MaterialCommunityIcons
-            name="ticket-confirmation-outline"
-            size={18}
-            color={circleColors.white}
-          />
-          <Text style={styles.redeemText}>Redeem Offer</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.shareAgainBtn}
-          onPress={() =>
-            navigation.navigate('BachatCircleShareOffer', {
-              offerId: offer.id,
-            })
-          }
-        >
-          <MaterialCommunityIcons
-            name="upload"
-            size={20}
-            color={circleColors.green}
-          />
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 };
 
+export default CircleOfferDetailScreen;
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: circleColors.page },
+  safe: { flex: 1, backgroundColor: circleColors.cream },
+  center: { alignItems: 'center', justifyContent: 'center' },
+  empty: { color: circleColors.muted, marginBottom: 8 },
+  link: { color: circleColors.green, fontFamily: fonts.BOLD },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  iconBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: circleColors.white,
   },
-  iconBtn: { padding: 8, width: 40 },
   headerTitle: {
     flex: 1,
     textAlign: 'center',
-    fontFamily: fonts.BOLD,
     fontSize: 17,
-    color: circleColors.green,
-  },
-  content: { padding: 16, paddingBottom: 24 },
-  sharedBy: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 14,
-  },
-  sharedText: { color: circleColors.text, fontSize: 13 },
-  sharedName: { color: circleColors.green, fontFamily: fonts.BOLD },
-  sharedMeta: { color: circleColors.muted, fontSize: 11, marginTop: 2 },
-  fromCircle: {
-    backgroundColor: circleColors.greenSoft,
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  fromCircleText: {
-    color: circleColors.green,
-    fontSize: 10,
     fontFamily: fonts.BOLD,
-  },
-  mainCard: {
-    backgroundColor: circleColors.white,
-    borderRadius: 18,
-    overflow: 'hidden',
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: circleColors.borderSoft,
-  },
-  hero: {
-    height: 190,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badge: {
-    position: 'absolute',
-    top: 14,
-    left: 14,
-    backgroundColor: circleColors.badgeRed,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  badgeText: {
-    color: circleColors.white,
-    fontFamily: fonts.BOLD,
-    fontSize: 12,
-  },
-  heart: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: circleColors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cardBody: { padding: 14 },
-  brandRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  brandMark: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: -28,
-    borderWidth: 3,
-    borderColor: circleColors.white,
-  },
-  brand: {
-    fontFamily: fonts.BOLD,
-    fontSize: 18,
     color: circleColors.text,
   },
-  title: { color: circleColors.muted, marginTop: 2, fontSize: 13 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  chip: {
+  content: { padding: 16, paddingBottom: 40 },
+  hero: {
+    width: '100%',
+    height: 180,
+    borderRadius: 16,
+    backgroundColor: circleColors.page,
+    marginBottom: 14,
+  },
+  heroFallback: { alignItems: 'center', justifyContent: 'center' },
+  merchant: {
+    fontSize: 13,
+    color: circleColors.muted,
+    fontFamily: fonts.BOLD,
+  },
+  title: {
+    fontSize: 22,
+    fontFamily: fonts.BOLD,
+    color: circleColors.text,
+    marginTop: 4,
+  },
+  discount: {
+    marginTop: 6,
+    color: circleColors.orange,
+    fontFamily: fonts.BOLD,
+    fontSize: 15,
+  },
+  description: {
+    marginTop: 10,
+    fontSize: 14,
+    lineHeight: 21,
+    color: circleColors.muted,
+  },
+  metaCard: {
+    marginTop: 16,
+    flexDirection: 'row',
+    backgroundColor: circleColors.greenSoft,
+    borderRadius: 14,
+    paddingVertical: 12,
+  },
+  metaItem: { flex: 1, alignItems: 'center' },
+  metaDivider: { width: 1, backgroundColor: circleColors.greenBorder },
+  metaLabel: { fontSize: 11, color: circleColors.muted },
+  metaValue: {
+    marginTop: 4,
+    fontSize: 13,
+    fontFamily: fonts.BOLD,
+    color: circleColors.text,
+  },
+  minPurchase: {
+    marginTop: 12,
+    fontSize: 13,
+    color: circleColors.text,
+  },
+  sectionTitle: {
+    marginTop: 20,
+    fontSize: 16,
+    fontFamily: fonts.BOLD,
+    color: circleColors.text,
+  },
+  sectionHint: {
+    marginTop: 4,
+    marginBottom: 10,
+    fontSize: 12,
+    color: circleColors.muted,
+  },
+  reactionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  reactionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 6,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: circleColors.border,
-    borderRadius: 16,
     paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: circleColors.chipGray,
-  },
-  chipText: { color: circleColors.muted, fontSize: 11 },
-  restriction: {
-    marginTop: 12,
-    backgroundColor: circleColors.greenSoft,
-    borderRadius: 12,
-    padding: 10,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  restrictionText: { flex: 1, color: circleColors.green, fontSize: 12 },
-  quickActions: {
-    flexDirection: 'row',
-    borderWidth: 1,
-    borderColor: circleColors.borderSoft,
-    borderRadius: 16,
-    marginBottom: 16,
+    paddingVertical: 8,
     backgroundColor: circleColors.white,
   },
-  quickItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
-    gap: 4,
-  },
-  quickItemBorder: {
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: circleColors.border,
-  },
-  quickLabel: { fontSize: 11, color: circleColors.text, fontFamily: fonts.BOLD },
-  sectionTitle: {
-    fontFamily: fonts.BOLD,
-    fontSize: 15,
-    color: circleColors.text,
-    marginBottom: 8,
-  },
-  about: {
-    color: circleColors.muted,
-    fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 16,
-  },
-  storeCard: {
-    flexDirection: 'row',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: circleColors.borderSoft,
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 16,
-    alignItems: 'center',
-    backgroundColor: circleColors.white,
-  },
-  storeThumb: { width: 48, height: 48, borderRadius: 12 },
-  storeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  storeBrand: { fontFamily: fonts.BOLD, color: circleColors.text, fontSize: 15 },
-  openPill: {
-    backgroundColor: circleColors.greenSoft,
-    borderRadius: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  openText: {
-    color: circleColors.green,
-    fontSize: 11,
-    fontFamily: fonts.BOLD,
-  },
-  address: { color: circleColors.muted, fontSize: 12, marginTop: 4 },
-  hours: { color: circleColors.muted, fontSize: 12, marginTop: 4 },
-  phoneBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: circleColors.green,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapPreview: {
-    height: 150,
-    borderRadius: 16,
-    backgroundColor: circleColors.greenSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: circleColors.greenBorder,
-  },
-  mapBtn: {
-    position: 'absolute',
-    bottom: 14,
-    backgroundColor: circleColors.white,
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderWidth: 1,
-    borderColor: circleColors.greenBorder,
-  },
-  mapBtnText: {
-    color: circleColors.green,
-    fontFamily: fonts.BOLD,
-    fontSize: 12,
-  },
-  footer: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: circleColors.borderSoft,
-    backgroundColor: circleColors.white,
-  },
-  redeemBtn: {
-    flex: 1,
-    backgroundColor: circleColors.green,
-    borderRadius: 16,
-    minHeight: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  redeemText: {
-    color: circleColors.white,
-    fontFamily: fonts.BOLD,
-    fontSize: 15,
-  },
-  shareAgainBtn: {
-    width: 52,
-    borderRadius: 16,
-    borderWidth: 1.5,
+  reactionChipActive: {
     borderColor: circleColors.green,
-    alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: circleColors.greenSoft,
   },
+  reactionEmoji: { fontSize: 16 },
+  reactionLabel: {
+    fontSize: 12,
+    fontFamily: fonts.BOLD,
+    color: circleColors.text,
+  },
+  reactionCount: {
+    fontSize: 11,
+    color: circleColors.muted,
+    fontFamily: fonts.BOLD,
+  },
+  total: { marginTop: 12, color: circleColors.muted, fontSize: 12 },
 });
-
-export default CircleOfferDetailScreen;

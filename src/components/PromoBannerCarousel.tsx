@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import OfferCountdownText from './OfferCountdownText';
@@ -23,12 +24,14 @@ type PromoBannerCarouselProps = {
   banners: OfferBanner[];
   isLoading?: boolean;
   resolveImageUrl: (path?: string | null) => string | undefined;
+  onBannerPress?: (banner: OfferBanner) => void;
 };
 
 const PromoBannerCarousel: React.FC<PromoBannerCarouselProps> = ({
   banners,
   isLoading = false,
   resolveImageUrl,
+  onBannerPress,
 }) => {
   const scrollRef = useRef<ScrollView>(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -66,39 +69,58 @@ const PromoBannerCarousel: React.FC<PromoBannerCarouselProps> = ({
       return null;
     }
 
-    return (
+    const content = (
       <View style={styles.promoBannerShadow}>
-      <View style={styles.promoBannerShell}>
-        <ImageBackground source={{ uri: imageUri }} style={styles.promoBanner} imageStyle={styles.promoBannerImage}>
-        <View style={styles.promoBannerCopyWrap}>
-          {banner.badgeLabel ? (
-            <View style={styles.promoBannerBadge}>
-              <Text style={styles.promoBannerBadgeText}>{banner.badgeLabel}</Text>
+        <View style={styles.promoBannerShell}>
+          <ImageBackground
+            source={{ uri: imageUri }}
+            style={styles.promoBanner}
+            imageStyle={styles.promoBannerImage}
+          >
+            <View style={styles.promoBannerCopyWrap}>
+              {banner.badgeLabel ? (
+                <View style={styles.promoBannerBadge}>
+                  <Text style={styles.promoBannerBadgeText}>{banner.badgeLabel}</Text>
+                </View>
+              ) : null}
+              <Text style={styles.promoBannerTitle} numberOfLines={1}>
+                {banner.title}
+              </Text>
+              {banner.subtitle ? (
+                <Text style={styles.promoBannerSubtitle} numberOfLines={1}>
+                  {banner.subtitle}
+                </Text>
+              ) : null}
+              <View style={styles.promoBannerCountdown}>
+                {banner.expiresAt ? (
+                  <OfferCountdownText
+                    expiresAt={banner.expiresAt}
+                    suffix=" remaining"
+                    style={styles.promoBannerCountdownText}
+                  />
+                ) : (
+                  <Text style={styles.promoBannerCountdownText}>Limited time offer</Text>
+                )}
+              </View>
             </View>
-          ) : null}
-          <Text style={styles.promoBannerTitle} numberOfLines={1}>
-            {banner.title}
-          </Text>
-          {banner.subtitle ? (
-            <Text style={styles.promoBannerSubtitle} numberOfLines={1}>
-              {banner.subtitle}
-            </Text>
-          ) : null}
-          <View style={styles.promoBannerCountdown}>
-            {banner.expiresAt ? (
-              <OfferCountdownText
-                expiresAt={banner.expiresAt}
-                suffix=" remaining"
-                style={styles.promoBannerCountdownText}
-              />
-            ) : (
-              <Text style={styles.promoBannerCountdownText}>Limited time offer</Text>
-            )}
-          </View>
+          </ImageBackground>
         </View>
-        </ImageBackground>
       </View>
-      </View>
+    );
+
+    if (!onBannerPress) {
+      return content;
+    }
+
+    return (
+      <TouchableOpacity
+        activeOpacity={0.92}
+        onPress={() => onBannerPress(banner)}
+        accessibilityRole="button"
+        accessibilityLabel={`Open banner details for ${banner.title}`}
+      >
+        {content}
+      </TouchableOpacity>
     );
   };
 

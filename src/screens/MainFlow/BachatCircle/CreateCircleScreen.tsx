@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,7 +15,10 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import { useAppContext } from '../../../context/AppContext';
 import { fonts } from '../../../helpers/styles';
 import { MainStackParamList } from '../../../navigation/types';
+import { showAppAlert } from '../../../services/appAlert';
+import { bachatCircleApi } from '../../../services/bachatCircleApi';
 import { CircleCategory } from './types';
+import { circleStorage } from './circleStorage';
 import { circleColors, circleShadow } from './theme';
 
 const CATEGORIES: {
@@ -32,14 +36,58 @@ const CreateCircleScreen = () => {
     useNavigation<
       StackNavigationProp<MainStackParamList, 'BachatCircleCreate'>
     >();
-  const { currentUser } = useAppContext();
+  const { currentUser, authToken } = useAppContext();
   const defaultName = useMemo(() => {
-    const first = (currentUser?.name || 'Azmir').trim().split(/\s+/)[0];
+    const first = (currentUser?.name || 'My').trim().split(/\s+/)[0];
     return `${first}'s Family Circle`;
   }, [currentUser?.name]);
 
   const [name, setName] = useState(defaultName);
   const [category, setCategory] = useState<CircleCategory>('Family');
+  const [creating, setCreating] = useState(false);
+
+  const onCreate = async () => {
+    const trimmed = name.trim();
+    if (!trimmed || creating) {
+      return;
+    }
+    const token = authToken?.trim();
+    if (!token) {
+      showAppAlert('Login required', 'Please log in to create a Bachat Circle.');
+      return;
+    }
+
+    setCreating(true);
+    try {
+      const description = `${category} circle`;
+      const circle = await bachatCircleApi.createCircle(token, {
+        name: trimmed,
+        description,
+      });
+      await circleStorage.save({
+        created: true,
+        circleId: circle.id,
+        name: circle.name,
+        category,
+        description: circle.description || description,
+        memberIds: circle.members.map(m => m.userId),
+        pendingInviteIds: [],
+      });
+      navigation.navigate('BachatCircleAddMembers', {
+        circleName: circle.name,
+        category,
+        circleId: circle.id,
+        description: circle.description || description,
+      });
+    } catch (error) {
+      showAppAlert(
+        'Could not create circle',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    } finally {
+      setCreating(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -206,23 +254,26 @@ const CreateCircleScreen = () => {
           style={[
             styles.nextBtn,
             circleShadow.cta,
-            !name.trim() && styles.nextBtnDisabled,
+            (!name.trim() || creating) && styles.nextBtnDisabled,
           ]}
-          disabled={!name.trim()}
+          disabled={!name.trim() || creating}
           activeOpacity={0.9}
-          onPress={() =>
-            navigation.navigate('BachatCircleAddMembers', {
-              circleName: name.trim(),
-              category,
-            })
-          }
+          onPress={() => {
+            void onCreate();
+          }}
         >
-          <Text style={styles.nextText}>Next: Add Members</Text>
-          <MaterialCommunityIcons
-            name="arrow-right"
-            size={20}
-            color={circleColors.white}
-          />
+          {creating ? (
+            <ActivityIndicator color={circleColors.white} />
+          ) : (
+            <>
+              <Text style={styles.nextText}>Create & Add Members</Text>
+              <MaterialCommunityIcons
+                name="arrow-right"
+                size={20}
+                color={circleColors.white}
+              />
+            </>
+          )}
         </TouchableOpacity>
       </View>
     </SafeAreaView>

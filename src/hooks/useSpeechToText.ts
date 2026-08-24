@@ -80,7 +80,7 @@ export const useSpeechToText = ({
     try {
       await SpeechToText?.stop();
     } catch {
-      // ignore stop errors
+      // ignore
     }
     setIsListening(false);
     startingRef.current = false;
@@ -91,7 +91,7 @@ export const useSpeechToText = ({
     try {
       await SpeechToText?.cancel();
     } catch {
-      // ignore cancel errors
+      // ignore
     }
     setIsListening(false);
     setPartialTranscript('');
@@ -115,17 +115,12 @@ export const useSpeechToText = ({
     });
 
     const endSub = emitter.addListener('onSpeechEnd', () => {
-      if (!activeSessionRef.current) {
-        return;
-      }
       setIsListening(false);
       startingRef.current = false;
+      activeSessionRef.current = false;
     });
 
     const errorSub = emitter.addListener('onSpeechError', (event: SpeechErrorEvent) => {
-      if (!activeSessionRef.current) {
-        return;
-      }
       setIsListening(false);
       startingRef.current = false;
       activeSessionRef.current = false;
@@ -133,7 +128,7 @@ export const useSpeechToText = ({
       const code = String(event?.error?.code ?? '');
       const message = String(event?.error?.message ?? '');
 
-      // 5=client, 6=speech timeout, 7=no match — usually quiet cancel / silence
+      // Cancel / silence / no match — don't alert
       if (
         code === '5' ||
         code === '6' ||
@@ -164,9 +159,6 @@ export const useSpeechToText = ({
     );
 
     const resultsSub = emitter.addListener('onSpeechResults', (event: SpeechResultsEvent) => {
-      if (!activeSessionRef.current) {
-        return;
-      }
       const transcript = event?.value?.[0]?.trim() ?? '';
       setIsListening(false);
       startingRef.current = false;
@@ -183,9 +175,6 @@ export const useSpeechToText = ({
       errorSub.remove();
       partialSub.remove();
       resultsSub.remove();
-      if (activeSessionRef.current) {
-        void SpeechToText.cancel().catch(() => undefined);
-      }
     };
   }, []);
 
@@ -199,8 +188,8 @@ export const useSpeechToText = ({
       return;
     }
 
+    // System dialog is already open
     if (startingRef.current || isListening) {
-      await stopListening();
       return;
     }
 
@@ -227,12 +216,13 @@ export const useSpeechToText = ({
         setIsListening(false);
         showAppAlert(
           'Voice search',
-          'Speech recognition is not available on this device.',
+          'Speech recognition is not available on this device. Install Google speech services.',
           [{ text: 'OK' }],
         );
         return;
       }
 
+      // Opens the Android “Speak now” system dialog
       await SpeechToText.start(locale);
     } catch (error) {
       startingRef.current = false;
@@ -244,15 +234,15 @@ export const useSpeechToText = ({
         [{ text: 'OK' }],
       );
     }
-  }, [isListening, locale, stopListening]);
+  }, [isListening, locale]);
 
   const toggleListening = useCallback(async () => {
     if (isListening || startingRef.current) {
-      await stopListening();
+      // Dialog is open — ignore second tap; user closes dialog themselves
       return;
     }
     await startListening();
-  }, [isListening, startListening, stopListening]);
+  }, [isListening, startListening]);
 
   return {
     isListening,

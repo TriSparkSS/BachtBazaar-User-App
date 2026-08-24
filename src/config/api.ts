@@ -21,6 +21,12 @@ export const FAQ_API_BASE_URL = 'https://bachatbazaar.tech/api';
 /** Help articles live under /api (same root as FAQs/help). */
 export const HELP_ARTICLES_API_BASE_URL = 'https://bachatbazaar.tech/api';
 
+/** Bachat Circle APIs live under /api (same root as help/delivery). */
+export const BACHAT_CIRCLE_API_BASE_URL = 'https://bachatbazaar.tech/api';
+
+/** In-app notifications live under /api. */
+export const NOTIFY_API_BASE_URL = 'https://bachatbazaar.tech/api';
+
 export const API_ENDPOINTS = {
   sendOtp: '/auth/send-otp',
   verifyOtp: '/auth/verify-otp',
@@ -60,6 +66,9 @@ export const API_ENDPOINTS = {
   shopOffers: (shopId: string) => `/shop/offers/${shopId}`,
   dailyRewardsCalendar: (date: string) =>
     `/shop/offers/calender?date=${encodeURIComponent(date.trim())}`,
+  userMilestones: '/milestones',
+  referralsMyCode: '/referrals/my-code',
+  referralsList: '/referrals/list',
   offerById: (offerId: string) => `/shop/offer/${encodeURIComponent(offerId)}`,
   shopLogo: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/logo`,
   shopBanner: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/banner`,
@@ -140,6 +149,30 @@ export const API_ENDPOINTS = {
   helpArticlesUser: '/help-articles/user',
   helpArticleBySlug: (slug: string) =>
     `/help-articles/by-slug/${encodeURIComponent(slug.trim())}`,
+  /** Bachat Circle — under /api (BACHAT_CIRCLE_API_BASE_URL). */
+  bachatCircleCreate: '/bachatcircle',
+  bachatCircleMine: '/bachatcircle',
+  bachatCircleById: (circleId: string) =>
+    `/bachatcircle/${encodeURIComponent(circleId.trim())}`,
+  bachatCircleInvite: (circleId: string) =>
+    `/bachatcircle/${encodeURIComponent(circleId.trim())}/invite`,
+  bachatCircleMyInvitations: '/bachatcircle/invitations/my-invitations',
+  bachatCircleRespondInvitation: (invitationId: string) =>
+    `/bachatcircle/invitations/${encodeURIComponent(invitationId.trim())}/respond`,
+  bachatCircleOffers: (circleId: string) =>
+    `/bachatcircle/${encodeURIComponent(circleId.trim())}/offers`,
+  bachatCircleRegisteredUsers: '/bachatcircle/registered-users',
+  bachatCircleOfferReact: (circleId: string, sharedOfferId: string) =>
+    `/bachatcircle/${encodeURIComponent(circleId.trim())}/offers/${encodeURIComponent(
+      sharedOfferId.trim(),
+    )}/reactions`,
+  /** Notifications — under /api (NOTIFY_API_BASE_URL). */
+  notifications: '/notify',
+  notificationRead: (notificationId: string) =>
+    `/notify/${encodeURIComponent(notificationId.trim())}/read`,
+  notificationsReadAll: '/notify/read-all',
+  notificationDelete: (notificationId: string) =>
+    `/notify/${encodeURIComponent(notificationId.trim())}`,
 } as const;
 
 export const getShopLogoUrl = (shopId: string) =>

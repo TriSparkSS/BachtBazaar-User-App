@@ -43,12 +43,16 @@ import { reverseGeocodeWithGoogle } from '../../../../utils/googleGeocoding';
 import { getCurrentDeviceCoordinates, requestLocationPermission } from '../../../../utils/deviceLocation';
 import OfferCountdownText from '../../../../components/OfferCountdownText';
 import PromoBannerCarousel from '../../../../components/PromoBannerCarousel';
+import RewardProgressSection from '../../../../components/RewardProgressSection';
 import DailyRewardsSheet from '../../../../components/DailyRewardsSheet';
 import FeatureWalkthrough, {
   WalkthroughTargetRect,
 } from '../../../../components/FeatureWalkthrough';
 import { featureWalkthroughStorage } from '../../../../services/featureWalkthroughStorage';
+import { milestonesApi } from '../../../../services/milestonesApi';
+import { notifyApi } from '../../../../services/notifyApi';
 import { DailyCalendarDay, DailyRewardEntry, DailyRewardsCalendar } from '../../../../types/dailyRewards';
+import { Milestone } from '../../../../types/milestone';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min((width - 48) / 3 - 4, 118);
@@ -337,6 +341,9 @@ const HomeScreenView = () => {
   const [dailyRewardsByDate, setDailyRewardsByDate] = useState<Record<string, DailyRewardsCalendar>>({});
   const [isLoadingDailyRewards, setIsLoadingDailyRewards] = useState(false);
   const [dailyRewardsError, setDailyRewardsError] = useState<string | null>(null);
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [isLoadingMilestones, setIsLoadingMilestones] = useState(false);
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [savedShopIds, setSavedShopIds] = useState<Record<string, true>>({});
   const [savedOfferIds, setSavedOfferIds] = useState<Record<string, true>>({});
   const [togglingShopId, setTogglingShopId] = useState<string | null>(null);
@@ -355,7 +362,6 @@ const HomeScreenView = () => {
   const searchRequestIdRef = useRef(0);
   const searchSuggestionRequestIdRef = useRef(0);
   const searchSuggestionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastCreateRequestPromptQueryRef = useRef<string | null>(null);
   const authTokenRef = useRef(authToken);
   const walkthroughCheckedRef = useRef(false);
   const homeScrollRef = useRef<ScrollView>(null);
@@ -1115,6 +1121,30 @@ const HomeScreenView = () => {
     );
   }, [navigation]);
 
+  const openNotifications = useCallback(() => {
+    const parentNavigation =
+      navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('Notifications');
+      return;
+    }
+    (navigation as StackNavigationProp<MainStackParamList>).navigate('Notifications');
+  }, [navigation]);
+
+  const loadNotificationUnread = useCallback(async () => {
+    const token = authTokenRef.current?.trim();
+    if (!token) {
+      setNotificationUnreadCount(0);
+      return;
+    }
+    try {
+      const page = await notifyApi.list(token);
+      setNotificationUnreadCount(page.unreadCount);
+    } catch {
+      // Keep last known count on transient failures.
+    }
+  }, []);
+
   useEffect(() => {
     if (!authToken || !currentUser) {
       return;
@@ -1335,7 +1365,6 @@ const HomeScreenView = () => {
     setActiveSearchQuery('');
     setSearchSuggestions(EMPTY_SEARCH_RESULTS);
     setSearchSuggestionsVisible(false);
-    lastCreateRequestPromptQueryRef.current = '';
   }, []);
 
   const handleVoiceSearchResult = useCallback((transcript: string) => {
@@ -1375,6 +1404,24 @@ const HomeScreenView = () => {
   useEffect(() => {
     void loadCategories();
   }, [loadCategories, authToken]);
+
+  const loadMilestones = useCallback(async () => {
+    const token = authTokenRef.current?.trim();
+    if (!token) {
+      setMilestones([]);
+      return;
+    }
+
+    try {
+      setIsLoadingMilestones(true);
+      const list = await milestonesApi.fetchMilestones(token);
+      setMilestones(list);
+    } catch {
+      setMilestones([]);
+    } finally {
+      setIsLoadingMilestones(false);
+    }
+  }, []);
 
   const loadBanners = useCallback(async () => {
     const requestId = ++bannerRequestIdRef.current;
@@ -1478,6 +1525,8 @@ const HomeScreenView = () => {
         loadBanners(),
         loadShops(),
         loadWishlistIds(),
+        loadMilestones(),
+        loadNotificationUnread(),
       ];
 
       if (dailyRewardsVisible) {
@@ -1494,6 +1543,8 @@ const HomeScreenView = () => {
     loadBanners,
     loadCategories,
     loadDailyRewards,
+    loadMilestones,
+    loadNotificationUnread,
     loadShops,
     loadWishlistIds,
     runSearch,
@@ -1501,49 +1552,18 @@ const HomeScreenView = () => {
   ]);
 
   useEffect(() => {
-    if (!isSearchActive || isSearching || searchError) {
-      return;
-    }
+    void loadMilestones();
+  }, [loadMilestones, authToken]);
 
-    // Live autocomplete must never open the product create-request dialog.
-    if (searchSuggestionsVisible) {
-      return;
-    }
+  useEffect(() => {
+    void loadNotificationUnread();
+  }, [loadNotificationUnread, authToken]);
 
-    const query = activeSearchQuery.trim();
-    // Wait until this query's response is applied — avoid racing an empty previous state.
-    // Dialog is product-gated: empty offers/shops alone must not suppress it when no product
-    // exists, and a product hit must never trigger it just because offers are empty.
-    if (!query || !resultsMatchActiveQuery || hasProductHits) {
-      return;
-    }
-
-    if (lastCreateRequestPromptQueryRef.current === query) {
-      return;
-    }
-
-    lastCreateRequestPromptQueryRef.current = query;
-    showAppAlert(
-      'Product not available',
-      `"${query}" was not found nearby. Would you like to create a request for it?`,
-      [
-        { text: 'No', style: 'cancel' },
-        {
-          text: 'Yes',
-          onPress: () => openCreateRequest(query),
-        },
-      ],
-    );
-  }, [
-    isSearchActive,
-    isSearching,
-    openCreateRequest,
-    searchSuggestionsVisible,
-    searchError,
-    activeSearchQuery,
-    hasProductHits,
-    resultsMatchActiveQuery,
-  ]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadNotificationUnread();
+    }, [loadNotificationUnread]),
+  );
 
   useEffect(() => {
     if (bannerFetchTimerRef.current) {
@@ -1727,6 +1747,19 @@ const HomeScreenView = () => {
 
     (navigation as any).navigate('StoreDetail', { shop });
   };
+
+  const openBannerDetail = useCallback(
+    (banner: OfferBanner) => {
+      const parentNavigation = navigation.getParent<StackNavigationProp<MainStackParamList>>();
+      if (parentNavigation) {
+        parentNavigation.navigate('BannerDetail', { banner });
+        return;
+      }
+
+      (navigation as StackNavigationProp<MainStackParamList>).navigate('BannerDetail', { banner });
+    },
+    [navigation],
+  );
 
   const openSearchProduct = useCallback(
     async (product: ShopProduct) => {
@@ -1983,7 +2016,7 @@ const HomeScreenView = () => {
 
     if (label === 'Notification') {
       setSidebarVisible(false);
-      openBachatCircleNotifications();
+      openNotifications();
       return;
     }
 
@@ -2036,6 +2069,17 @@ const HomeScreenView = () => {
 
     if (actionId === 'saved-offers') {
       openSavedOffers();
+      return;
+    }
+
+    if (actionId === 'invite-earn') {
+      const parentNavigation =
+        navigation.getParent<StackNavigationProp<MainStackParamList>>();
+      if (parentNavigation) {
+        parentNavigation.navigate('InviteEarn');
+      } else {
+        (navigation as StackNavigationProp<MainStackParamList>).navigate('InviteEarn');
+      }
       return;
     }
 
@@ -2230,6 +2274,8 @@ const HomeScreenView = () => {
             onMenuPress={() => setSidebarVisible(true)}
             onScannerPress={openScannerScreen}
             onCartPress={openCart}
+            onNotificationPress={openNotifications}
+            notificationUnreadCount={notificationUnreadCount}
             onVoicePress={() => {
               void toggleListening();
             }}
@@ -2462,6 +2508,7 @@ const HomeScreenView = () => {
               banners={offerBanners}
               isLoading={isLoadingBanners}
               resolveImageUrl={shopApi.resolveImageUrl}
+              onBannerPress={openBannerDetail}
             />
 
             <ScrollView
@@ -2497,6 +2544,11 @@ const HomeScreenView = () => {
                 );
               })}
             </ScrollView>
+
+            <RewardProgressSection
+              milestones={milestones}
+              isLoading={isLoadingMilestones}
+            />
 
             <View style={styles.categoriesSection}>
               <View style={styles.categoriesHeaderRow}>
@@ -2562,22 +2614,6 @@ const HomeScreenView = () => {
                     </Text>
                   ) : null}
                 </View>
-                {!isSearchActive ? (
-                  <View style={styles.localOffersHeaderActions}>
-                  <TouchableOpacity style={styles.filterOfferButton} activeOpacity={0.78}>
-                    <MaterialCommunityIcons
-                      name="filter-variant"
-                      size={16}
-                      color={colors.primary}
-                    />
-                    <Text style={styles.filterOfferText}>Filter offer</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.viewAllHeaderButton} activeOpacity={0.78}>
-                    <Text style={styles.viewAllHeaderText}>View all</Text>
-                    <MaterialCommunityIcons name="chevron-right" size={20} color={colors.primary} />
-                  </TouchableOpacity>
-                  </View>
-                ) : null}
               </View>
               </View>
 
@@ -3585,6 +3621,7 @@ const styles = StyleSheet.create({
     lineHeight: 13,
   },
   categoriesSection: {
+    marginTop: 12,
     marginBottom: 10,
     paddingBottom: 2,
   },
@@ -3709,37 +3746,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   localOffersHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    paddingHorizontal: 16,
     marginBottom: 10,
-    gap: 10,
-  },
-  localOffersHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
   },
   localOffersTitleWrap: {
     flex: 1,
-    flexShrink: 1,
-  },
-  filterOfferButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: colors.white,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
-  },
-  filterOfferText: {
-    fontSize: 11,
-    color: colors.primary,
-    fontFamily: fonts.BOLD,
   },
   localOffersTitle: {
     fontSize: 19,
@@ -3892,22 +3903,6 @@ const styles = StyleSheet.create({
     color: DINEOUT_GREEN_LIGHT,
     fontFamily: fonts.BOLD,
     marginBottom: 2,
-  },
-  viewAllHeaderButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    paddingLeft: 12,
-    paddingRight: 8,
-    paddingVertical: 8,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: colors.primaryBorder,
-  },
-  viewAllHeaderText: {
-    fontSize: 12,
-    color: colors.primary,
-    fontFamily: fonts.BOLD,
   },
   featuredStoreCard: {
     backgroundColor: colors.white,

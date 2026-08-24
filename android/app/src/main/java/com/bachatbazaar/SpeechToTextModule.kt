@@ -1,13 +1,13 @@
 package com.bachatbazaaruser
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import com.facebook.react.bridge.ActivityEventListener
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.BaseActivityEventListener
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -16,13 +16,52 @@ import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 
+/**
+ * Launches the system speech dialog (Speak now) and returns the transcript.
+ */
 class SpeechToTextModule(
   private val reactContext: ReactApplicationContext,
-) : ReactContextBaseJavaModule(reactContext), RecognitionListener {
+) : ReactContextBaseJavaModule(reactContext) {
 
-  private val mainHandler = Handler(Looper.getMainLooper())
-  private var speechRecognizer: SpeechRecognizer? = null
   private var isListening = false
+
+  private val activityEventListener: ActivityEventListener =
+    object : BaseActivityEventListener() {
+      override fun onActivityResult(
+        activity: Activity,
+        requestCode: Int,
+        resultCode: Int,
+        data: Intent?,
+      ) {
+        if (requestCode != REQUEST_CODE) {
+          return
+        }
+
+        isListening = false
+
+        if (resultCode == Activity.RESULT_OK && data != null) {
+          val matches = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+          val map = Arguments.createMap()
+          map.putArray("value", resultsToArray(matches))
+          sendEvent("onSpeechResults", map)
+          sendEvent("onSpeechEnd", Arguments.createMap())
+          return
+        }
+
+        // User cancelled or no result
+        val map = Arguments.createMap()
+        val errorMap = Arguments.createMap()
+        errorMap.putString("code", "6")
+        errorMap.putString("message", "Speech input cancelled")
+        map.putMap("error", errorMap)
+        sendEvent("onSpeechError", map)
+        sendEvent("onSpeechEnd", Arguments.createMap())
+      }
+    }
+
+  init {
+    reactContext.addActivityEventListener(activityEventListener)
+  }
 
   override fun getName(): String = NAME
 
@@ -33,76 +72,69 @@ class SpeechToTextModule(
 
   @ReactMethod
   fun start(locale: String?, promise: Promise) {
-    mainHandler.post {
-      try {
-        if (!SpeechRecognizer.isRecognitionAvailable(reactContext)) {
-          promise.reject("unavailable", "Speech recognition is not available on this device.")
-          return@post
-        }
+    val activity = reactApplicationContext.currentActivity
+    if (activity == null) {
+      promise.reject("no_activity", "No active activity for speech recognition.")
+      return
+    }
 
-        destroyRecognizer()
-        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(reactContext).also {
-          it.setRecognitionListener(this)
-        }
+    if (isListening) {
+      promise.resolve(true)
+      return
+    }
 
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-          putExtra(
-            RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-            RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
-          )
-          putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-          putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
-          val language = locale?.trim().orEmpty()
-          if (language.isNotEmpty()) {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, language)
-          }
+    val intent =
+      Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        putExtra(
+          RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+          RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+        )
+        putExtra(RecognizerIntent.EXTRA_PROMPT, "Speak now…")
+        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+        val language = locale?.trim().orEmpty()
+        if (language.isNotEmpty()) {
+          putExtra(RecognizerIntent.EXTRA_LANGUAGE, language)
+          putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, language)
         }
-
-        isListening = true
-        speechRecognizer?.startListening(intent)
-        promise.resolve(true)
-      } catch (error: Exception) {
-        isListening = false
-        destroyRecognizer()
-        promise.reject("start_failed", error.message, error)
       }
+
+    try {
+      isListening = true
+      sendEvent("onSpeechStart", Arguments.createMap())
+      @Suppress("DEPRECATION")
+      activity.startActivityForResult(intent, REQUEST_CODE)
+      promise.resolve(true)
+    } catch (error: ActivityNotFoundException) {
+      isListening = false
+      promise.reject(
+        "unavailable",
+        "No speech recognition app found. Install Google app / speech services.",
+        error,
+      )
+    } catch (error: Exception) {
+      isListening = false
+      promise.reject("start_failed", error.message, error)
     }
   }
 
   @ReactMethod
   fun stop(promise: Promise) {
-    mainHandler.post {
-      try {
-        speechRecognizer?.stopListening()
-        promise.resolve(true)
-      } catch (error: Exception) {
-        promise.reject("stop_failed", error.message, error)
-      }
-    }
+    // System dialog manages its own lifecycle.
+    isListening = false
+    promise.resolve(true)
   }
 
   @ReactMethod
   fun cancel(promise: Promise) {
-    mainHandler.post {
-      try {
-        speechRecognizer?.cancel()
-        isListening = false
-        destroyRecognizer()
-        promise.resolve(true)
-      } catch (error: Exception) {
-        promise.reject("cancel_failed", error.message, error)
-      }
-    }
+    isListening = false
+    promise.resolve(true)
   }
 
   @ReactMethod
   fun destroy(promise: Promise) {
-    mainHandler.post {
-      isListening = false
-      destroyRecognizer()
-      promise.resolve(true)
-    }
+    isListening = false
+    promise.resolve(true)
   }
 
   @ReactMethod
@@ -115,15 +147,10 @@ class SpeechToTextModule(
     // Required for NativeEventEmitter
   }
 
-  private fun destroyRecognizer() {
-    try {
-      speechRecognizer?.setRecognitionListener(null)
-      speechRecognizer?.destroy()
-    } catch (_: Exception) {
-      // ignore
-    } finally {
-      speechRecognizer = null
-    }
+  private fun resultsToArray(results: ArrayList<String>?): WritableArray {
+    val array = Arguments.createArray()
+    results?.forEach { array.pushString(it) }
+    return array
   }
 
   private fun sendEvent(eventName: String, params: WritableMap?) {
@@ -135,79 +162,8 @@ class SpeechToTextModule(
       .emit(eventName, params)
   }
 
-  private fun resultsToArray(results: ArrayList<String>?): WritableArray {
-    val array = Arguments.createArray()
-    results?.forEach { array.pushString(it) }
-    return array
-  }
-
-  override fun onReadyForSpeech(params: Bundle?) {
-    sendEvent("onSpeechStart", Arguments.createMap())
-  }
-
-  override fun onBeginningOfSpeech() {
-    // no-op
-  }
-
-  override fun onRmsChanged(rmsdB: Float) {
-    // no-op
-  }
-
-  override fun onBufferReceived(buffer: ByteArray?) {
-    // no-op
-  }
-
-  override fun onEndOfSpeech() {
-    isListening = false
-    sendEvent("onSpeechEnd", Arguments.createMap())
-  }
-
-  override fun onError(error: Int) {
-    isListening = false
-    destroyRecognizer()
-    val map = Arguments.createMap()
-    val errorMap = Arguments.createMap()
-    errorMap.putString("code", error.toString())
-    errorMap.putString("message", errorMessage(error))
-    map.putMap("error", errorMap)
-    sendEvent("onSpeechError", map)
-  }
-
-  override fun onResults(results: Bundle?) {
-    isListening = false
-    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-    val map = Arguments.createMap()
-    map.putArray("value", resultsToArray(matches))
-    sendEvent("onSpeechResults", map)
-    destroyRecognizer()
-  }
-
-  override fun onPartialResults(partialResults: Bundle?) {
-    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-    val map = Arguments.createMap()
-    map.putArray("value", resultsToArray(matches))
-    sendEvent("onSpeechPartialResults", map)
-  }
-
-  override fun onEvent(eventType: Int, params: Bundle?) {
-    // no-op
-  }
-
-  private fun errorMessage(error: Int): String =
-    when (error) {
-      SpeechRecognizer.ERROR_AUDIO -> "Audio recording error"
-      SpeechRecognizer.ERROR_CLIENT -> "Speech client error"
-      SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Microphone permission denied"
-      SpeechRecognizer.ERROR_NETWORK -> "Network error"
-      SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"
-      SpeechRecognizer.ERROR_NO_MATCH -> "No speech match"
-      SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> "Recognizer busy"
-      SpeechRecognizer.ERROR_SERVER -> "Speech server error"
-      SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "No speech input"
-      else -> "Speech recognition error ($error)"
-    }
-
   companion object {
     const val NAME = "SpeechToText"
+    private const val REQUEST_CODE = 9911
   }
 }
