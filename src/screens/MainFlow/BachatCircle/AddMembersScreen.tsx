@@ -21,6 +21,7 @@ import {
   CircleInviteableUserDto,
   bachatCircleApi,
 } from '../../../services/bachatCircleApi';
+import { loadDeviceContactsForSync } from '../../../services/deviceContacts';
 import { maskPhoneNumber } from '../../../utils/phone';
 import MemberAvatar from './components/MemberAvatar';
 import { circleStorage } from './circleStorage';
@@ -52,7 +53,9 @@ const AddMembersScreen = () => {
 
   const [query, setQuery] = useState('');
   const [circle, setCircle] = useState<BachatCircleDto | null>(null);
-  const [users, setUsers] = useState<CircleInviteableUserDto[]>([]);
+  const [registeredUsers, setRegisteredUsers] = useState<CircleInviteableUserDto[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
   const [invitingPhone, setInvitingPhone] = useState<string | null>(null);
   const [locallyInvited, setLocallyInvited] = useState<Record<string, true>>({});
@@ -68,20 +71,8 @@ const AddMembersScreen = () => {
 
     try {
       setLoading(true);
-      const [detail, inviteableResult] = await Promise.all([
-        bachatCircleApi.getCircle(token, circleId),
-        bachatCircleApi.listInviteableUsers(token).then(
-          list => ({ ok: true as const, list }),
-          error => ({
-            ok: false as const,
-            list: [] as CircleInviteableUserDto[],
-            error:
-              error instanceof Error ? error.message : 'Could not load users.',
-          }),
-        ),
-      ]);
+      const detail = await bachatCircleApi.getCircle(token, circleId);
       setCircle(detail);
-      setUsers(inviteableResult.list);
       await circleStorage.save({
         created: true,
         circleId: detail.id,
@@ -91,11 +82,19 @@ const AddMembersScreen = () => {
         memberIds: detail.members.map(m => m.userId),
         pendingInviteIds: detail.pendingInvitations.map(i => i.id),
       });
+
+      const deviceContacts = await loadDeviceContactsForSync();
+      const registered = await bachatCircleApi.syncRegisteredContacts(
+        token,
+        deviceContacts,
+      );
+      setRegisteredUsers(registered);
     } catch (error) {
       showAppAlert(
         'Could not load members',
         error instanceof Error ? error.message : 'Please try again.',
       );
+      setRegisteredUsers([]);
     } finally {
       setLoading(false);
     }
@@ -127,8 +126,11 @@ const AddMembersScreen = () => {
 
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return users
+    return registeredUsers
       .filter(user => {
+        if (!user.isRegistered) {
+          return false;
+        }
         if (myPhone && user.phone === myPhone) {
           return false;
         }
@@ -142,7 +144,7 @@ const AddMembersScreen = () => {
         );
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [myPhone, query, users]);
+  }, [myPhone, query, registeredUsers]);
 
   const getStatus = (phone: string): InviteStatus => {
     if (memberPhones.has(phone)) {
@@ -160,22 +162,38 @@ const AddMembersScreen = () => {
       showAppAlert('Login required', 'Please log in to invite members.');
       return;
     }
+    if (!user.isRegistered) {
+      showAppAlert(
+        'Not registered',
+        'Only Bachat Bazaar registered users can be invited to this circle.',
+      );
+      return;
+    }
     if (invitingPhone || getStatus(user.phone) !== 'invite') {
       return;
     }
 
     setInvitingPhone(user.phone);
     try {
-      const result = await bachatCircleApi.inviteByPhone(token, circleId, user.phone);
+      const result = await bachatCircleApi.inviteByPhone(
+        token,
+        circleId,
+        user.phone,
+      );
+      if (!result.isRegistered) {
+        showAppAlert(
+          'Not registered',
+          'Only Bachat Bazaar registered users can be invited to this circle.',
+        );
+        return;
+      }
       setLocallyInvited(prev => ({ ...prev, [user.phone]: true }));
       showAppAlert(
-        result.isRegistered ? 'Invite sent' : 'Invite created',
-        result.message ||
-          (result.isRegistered
-            ? `Invitation sent to ${user.name}.`
-            : `${user.name} will join once they register.`),
+        'Invite sent',
+        result.message || `Invitation sent to ${user.name}.`,
       );
-      await load();
+      const detail = await bachatCircleApi.getCircle(token, circleId);
+      setCircle(detail);
     } catch (error) {
       showAppAlert(
         'Invite failed',
@@ -204,8 +222,8 @@ const AddMembersScreen = () => {
 
       <View style={styles.banner}>
         <Text style={styles.bannerText}>
-          Sirf Bachat Bazaar registered users dikhaye ja rahe hain. Invite par tap
-          karke invitation bhejein.
+          Phone contacts sync hote hain. Sirf Bachat Bazaar registered users dikhte
+          hain — Invite se invitation jayegi.
         </Text>
         <View style={styles.bannerIcon}>
           <MaterialCommunityIcons
@@ -220,21 +238,30 @@ const AddMembersScreen = () => {
         <MaterialCommunityIcons name="magnify" size={20} color={circleColors.muted} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search users..."
+          placeholder="Search registered users..."
           placeholderTextColor={circleColors.muted}
           value={query}
           onChangeText={setQuery}
+          autoCorrect={false}
+          autoCapitalize="none"
         />
+        {query.length > 0 ? (
+          <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
+            <MaterialCommunityIcons name="close-circle" size={18} color={circleColors.muted} />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {loading ? (
         <View style={styles.loading}>
           <ActivityIndicator color={circleColors.green} />
+          <Text style={styles.loadingText}>Syncing contacts…</Text>
         </View>
       ) : (
         <FlatList
           data={[{ key: 'body' }]}
           keyExtractor={item => item.key}
+          keyboardShouldPersistTaps="handled"
           contentContainerStyle={styles.listContent}
           renderItem={() => (
             <View>
@@ -255,7 +282,11 @@ const AddMembersScreen = () => {
               </View>
 
               {filteredUsers.length === 0 ? (
-                <Text style={styles.empty}>No users</Text>
+                <Text style={styles.empty}>
+                  {query.trim()
+                    ? 'No registered user matches this search.'
+                    : 'No registered contacts found in your phone book.'}
+                </Text>
               ) : (
                 filteredUsers.map((user, index) => {
                   const status = getStatus(user.phone);
@@ -270,7 +301,7 @@ const AddMembersScreen = () => {
                         : 'Invite';
 
                   return (
-                    <View key={user.id} style={styles.row}>
+                    <View key={`${user.id}-${user.phone}`} style={styles.row}>
                       <MemberAvatar
                         name={user.name}
                         initial={initial}
@@ -430,7 +461,13 @@ const styles = StyleSheet.create({
     minHeight: 46,
   },
   searchInput: { flex: 1, color: circleColors.text, paddingVertical: 8 },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  loading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  loadingText: { color: circleColors.muted, fontSize: 13 },
   listContent: { paddingBottom: 16 },
   sectionHeader: {
     marginHorizontal: 16,

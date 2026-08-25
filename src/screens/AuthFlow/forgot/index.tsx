@@ -4,6 +4,7 @@ import ForgotPasswordScreenView from './ForgotPasswordScreenView';
 import { userAuthApi } from '../../../services/userAuthApi';
 import { showAppAlert } from '../../../services/appAlert';
 import { useAppContext } from '../../../context/AppContext';
+import { getFcmToken } from '../../../services/fcmToken';
 
 const isPasswordValid = (value: string) =>
   value.length >= 8 && /[A-Z]/.test(value) && /[!@#$%]/.test(value);
@@ -27,7 +28,12 @@ const ForgotPassword = () => {
     navigation.goBack();
   };
 
-  const handleSubmit = async (oldPassword: string, password: string, confirm: string) => {
+  const handleSubmit = async (
+    oldPassword: string,
+    password: string,
+    confirm: string,
+    referralCode?: string,
+  ) => {
     if (password !== confirm) {
       showAppAlert('Error', 'Passwords do not match');
       return;
@@ -66,7 +72,10 @@ const ForgotPassword = () => {
 
       if (flow === 'forgot-password') {
         if (!firebaseToken) {
-          showAppAlert('Unavailable', 'Verification session expired. Please verify your number again.');
+          showAppAlert(
+            'Unavailable',
+            'Verification session expired. Please verify your number again.',
+          );
           return;
         }
 
@@ -90,13 +99,29 @@ const ForgotPassword = () => {
         return;
       }
 
-      await userAuthApi.setPassword(resolvedUserId, password.trim(), resolvedToken);
-
       if (flow === 'signup-password') {
+        const fcmToken = await getFcmToken();
+        await userAuthApi.createAuth(
+          resolvedUserId,
+          password.trim(),
+          resolvedToken,
+          {
+            fcmToken,
+            referralCode: referralCode?.trim() || undefined,
+          },
+        );
+        const { deepLinkStorage } = await import('../../../services/deepLinkStorage');
+        await deepLinkStorage.clearPendingReferralCode();
         // @ts-ignore
         navigation.dispatch(StackActions.replace('Successfull', { isNewUser: true }));
         return;
       }
+
+      await userAuthApi.setPassword(
+        resolvedUserId,
+        password.trim(),
+        resolvedToken,
+      );
 
       showAppAlert('Success', 'Password updated successfully', [
         { text: 'OK', onPress: () => navigation.dispatch(StackActions.replace('Login')) },
@@ -113,11 +138,11 @@ const ForgotPassword = () => {
       onBack={handleBack}
       onSubmit={handleSubmit}
       mode={
-        flow === 'change-password'
-          ? 'change-password'
-          : flow === 'forgot-password'
-            ? 'forgot-password'
-            : 'signup-password'
+        flow === 'signup-password'
+          ? 'signup-password'
+          : flow === 'change-password'
+            ? 'change-password'
+            : 'forgot-password'
       }
       phoneNumber={phoneNumber}
     />

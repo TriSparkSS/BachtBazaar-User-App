@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import LoginScreenView from './LoginScreenView';
 import { useAppContext } from '../../../context/AppContext';
@@ -9,12 +9,18 @@ import {
   validatePhoneInput,
 } from '../../../services/firebasePhoneAuth';
 import { showAppAlert } from '../../../services/appAlert';
+import { getFcmToken } from '../../../services/fcmToken';
 import { signInWithApple, signInWithGoogle } from '../../../services/firebaseSocialAuth';
 
 const Login = () => {
   const navigation = useNavigation();
   const { setPendingAuth, setSession } = useAppContext();
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    // Warm FCM token while user is on the login screen.
+    void getFcmToken();
+  }, []);
 
   const navigateToOtp = async (
     phone: string,
@@ -53,8 +59,13 @@ const Login = () => {
 
     try {
       setIsSubmitting(true);
-      const response = await userAuthApi.loginWithPassword(phone, password);
+      const fcmToken = await getFcmToken();
+      const response = await userAuthApi.loginWithPassword(phone, password, fcmToken);
       await setSession(response.token, response.user);
+      const { consumePendingOfferDeepLink } = await import(
+        '../../../services/deepLinkHandler'
+      );
+      void consumePendingOfferDeepLink();
       const root = navigation.getParent();
       if (root) {
         // @ts-ignore

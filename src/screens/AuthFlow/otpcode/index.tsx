@@ -9,6 +9,8 @@ import {
 } from '../../../services/firebasePhoneAuth';
 import { userAuthApi } from '../../../services/userAuthApi';
 import { showAppAlert } from '../../../services/appAlert';
+import { getFcmToken, cacheFcmTokenFromResponse } from '../../../services/fcmToken';
+import { deepLinkStorage } from '../../../services/deepLinkStorage';
 
 const OTPCode = () => {
   const navigation = useNavigation();
@@ -54,11 +56,19 @@ const OTPCode = () => {
       clearPhoneVerificationState();
 
       if (pendingAuth.mode === 'login') {
+        // OTP login — never show referral / signup-password screen.
+        await deepLinkStorage.clearPendingReferralCode();
+        const fcmToken = await getFcmToken();
         const response = await userAuthApi.loginWithOtp(
           firebaseToken,
           pendingAuth.phone,
+          fcmToken,
         );
         await setSession(response.token, response.user);
+        const { consumePendingOfferDeepLink } = await import(
+          '../../../services/deepLinkHandler'
+        );
+        void consumePendingOfferDeepLink();
         const root = navigation.getParent();
         if (root) {
           // @ts-ignore
@@ -77,7 +87,14 @@ const OTPCode = () => {
         return;
       }
 
-      const response = await userAuthApi.verifyOtp(firebaseToken, pendingAuth.phone);
+      const response = await userAuthApi.verifyOtp(
+        firebaseToken,
+        pendingAuth.phone,
+        await getFcmToken(),
+      );
+      cacheFcmTokenFromResponse(
+        'fcmToken' in response ? response.fcmToken : undefined,
+      );
 
       if ('token' in response && response.user) {
         await setSession(response.token, response.user);

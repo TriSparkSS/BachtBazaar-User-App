@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import { ScreenScaffold } from '../../../components/ScreenScaffold';
 import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
+import { deepLinkStorage } from '../../../services/deepLinkStorage';
 
 const { width, height } = Dimensions.get('window');
 
@@ -29,6 +30,7 @@ interface ForgotPasswordScreenViewProps {
     oldPassword: string,
     password: string,
     confirm: string,
+    referralCode?: string,
   ) => void | Promise<void>;
   mode?: 'signup-password' | 'forgot-password' | 'change-password';
   phoneNumber?: string;
@@ -43,6 +45,7 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
   const [oldPassword, setOldPassword] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [secureOldText, setSecureOldText] = useState(true);
   const [secureText, setSecureText] = useState(true);
   const [secureConfirmText, setSecureConfirmText] = useState(true);
@@ -50,9 +53,25 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
   const oldPasswordRef = useRef<TextInput>(null);
   const passwordRef = useRef<TextInput>(null);
   const confirmPasswordRef = useRef<TextInput>(null);
+  const referralCodeRef = useRef<TextInput>(null);
   const isChangePassword = mode === 'change-password';
   const isForgotPassword = mode === 'forgot-password';
   const isSignupPassword = mode === 'signup-password';
+
+  useEffect(() => {
+    if (!isSignupPassword) {
+      return;
+    }
+    let cancelled = false;
+    void deepLinkStorage.peekPendingReferralCode().then(code => {
+      if (!cancelled && code) {
+        setReferralCode(code.toUpperCase());
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignupPassword]);
 
   const screenCopy = useMemo(() => {
     if (isChangePassword) {
@@ -106,7 +125,12 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
   const handleSubmit = async () => {
     try {
       setIsSubmitting(true);
-      await onSubmit(oldPassword, password, confirmPassword);
+      await onSubmit(
+        oldPassword,
+        password,
+        confirmPassword,
+        isSignupPassword ? referralCode.trim() : undefined,
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -247,8 +271,43 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
                 toggleConfirmPasswordVisibility,
                 confirmPasswordRef,
                 'Confirm password',
-                'done',
+                isSignupPassword ? 'next' : 'done',
+                isSignupPassword
+                  ? () => referralCodeRef.current?.focus()
+                  : undefined,
               )}
+
+              {isSignupPassword ? (
+                <View style={styles.fieldBlock}>
+                  <Text style={styles.fieldLabel}>
+                    Referral code <Text style={styles.optionalHint}>(optional)</Text>
+                  </Text>
+                  <AppTextInput
+                    ref={referralCodeRef}
+                    containerStyle={styles.passwordInputContainer}
+                    focusedContainerStyle={styles.focusedInput}
+                    style={styles.passwordInput}
+                    placeholder="Enter referral code"
+                    value={referralCode}
+                    onChangeText={text => setReferralCode(text.toUpperCase())}
+                    returnKeyType="done"
+                    blurOnSubmit
+                    editable={!isSubmitting}
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                    textContentType="none"
+                    leftAdornment={
+                      <View style={styles.inputLeadingIcon} pointerEvents="none">
+                        <MaterialCommunityIcons
+                          name="ticket-percent-outline"
+                          size={20}
+                          color="#99A4B8"
+                        />
+                      </View>
+                    }
+                  />
+                </View>
+              ) : null}
 
               <View style={styles.requirementsWrap}>
                 {passwordChecks.map(check => (
@@ -462,6 +521,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     marginLeft: 2,
     marginTop: 12,
+  },
+  optionalHint: {
+    fontSize: 12,
+    color: '#99A4B8',
+    fontFamily: fonts.BOLD,
   },
   passwordInputContainer: {
     width: '100%',

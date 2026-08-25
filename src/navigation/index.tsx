@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -10,6 +10,14 @@ import SplashScreenView from '../screens/AuthFlow/splash/SplashScreenView';
 import AuthScreens from '../screens/AuthFlow';
 import { colors } from '../helpers/styles';
 import { navigationRef } from './navigationService';
+import {
+  consumePendingOfferDeepLink,
+  initDeepLinkListeners,
+} from '../services/deepLinkHandler';
+import {
+  consumePendingPushAfterAuth,
+  initPushNotificationListeners,
+} from '../services/pushNotificationHandler';
 
 export {
   goBack,
@@ -43,6 +51,17 @@ const AuthFlowNavigator = () => (
 const RootNavigator = () => {
   const { isAuthenticated, isBootstrapping } = useAppContext();
 
+  useEffect(() => {
+    if (isBootstrapping || !isAuthenticated) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      void consumePendingOfferDeepLink();
+      void consumePendingPushAfterAuth();
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [isAuthenticated, isBootstrapping]);
+
   if (isBootstrapping) {
     return <SplashScreenView />;
   }
@@ -61,6 +80,15 @@ const RootNavigator = () => {
 };
 
 export const AppNavigation = () => {
+  useEffect(() => {
+    const unsubscribeDeepLinks = initDeepLinkListeners();
+    const unsubscribePush = initPushNotificationListeners();
+    return () => {
+      unsubscribeDeepLinks();
+      unsubscribePush();
+    };
+  }, []);
+
   return (
     <SafeAreaProvider>
       <NavigationContainer ref={navigationRef}>

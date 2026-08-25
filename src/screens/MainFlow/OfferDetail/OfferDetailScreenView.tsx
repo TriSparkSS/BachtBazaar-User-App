@@ -45,6 +45,7 @@ type OfferDetailScreenViewProps = {
   onBack: () => void;
   onToggleWishlist: () => void;
   onOpenScanner: () => void;
+  onShareLink?: () => void;
   onShareToCircle?: () => void;
   onAlreadyClaimedPress?: () => void;
   resolveImageUrl: (path?: string | null) => string | undefined;
@@ -63,6 +64,7 @@ const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
   onBack,
   onToggleWishlist,
   onOpenScanner,
+  onShareLink,
   onShareToCircle,
   onAlreadyClaimedPress,
   resolveImageUrl,
@@ -137,13 +139,24 @@ const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
           </TouchableOpacity>
 
           <View style={styles.heroActionsRight}>
-            <TouchableOpacity
-              style={styles.heroIconButton}
-              activeOpacity={0.85}
-              onPress={onShareToCircle}
-            >
-              <MaterialCommunityIcons name="share-variant-outline" size={19} color="#1A2238" />
-            </TouchableOpacity>
+            {onShareLink ? (
+              <TouchableOpacity
+                style={styles.heroIconButton}
+                activeOpacity={0.85}
+                onPress={onShareLink}
+              >
+                <MaterialCommunityIcons name="share-variant-outline" size={19} color="#1A2238" />
+              </TouchableOpacity>
+            ) : null}
+            {onShareToCircle ? (
+              <TouchableOpacity
+                style={styles.heroIconButton}
+                activeOpacity={0.85}
+                onPress={onShareToCircle}
+              >
+                <MaterialCommunityIcons name="account-group-outline" size={19} color="#1A2238" />
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               style={styles.heroIconButton}
               onPress={onToggleWishlist}

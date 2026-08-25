@@ -31,6 +31,8 @@ export const API_ENDPOINTS = {
   sendOtp: '/auth/send-otp',
   verifyOtp: '/auth/verify-otp',
   forgotPassword: '/auth/forgot-password',
+  /** Signup account creation — password + optional fcmToken / referralCode. */
+  createAuth: '/auth/create',
   setPassword: '/auth/set-password',
   changePassword: '/password',
   loginPassword: '/auth/login-password',
@@ -69,6 +71,8 @@ export const API_ENDPOINTS = {
   userMilestones: '/milestones',
   referralsMyCode: '/referrals/my-code',
   referralsList: '/referrals/list',
+  /** POST contacts body → registered Bachat Bazaar users only. Under /api/user. */
+  contactsSync: '/contacts/sync',
   offerById: (offerId: string) => `/shop/offer/${encodeURIComponent(offerId)}`,
   shopLogo: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/logo`,
   shopBanner: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/banner`,
@@ -161,7 +165,6 @@ export const API_ENDPOINTS = {
     `/bachatcircle/invitations/${encodeURIComponent(invitationId.trim())}/respond`,
   bachatCircleOffers: (circleId: string) =>
     `/bachatcircle/${encodeURIComponent(circleId.trim())}/offers`,
-  bachatCircleRegisteredUsers: '/bachatcircle/registered-users',
   bachatCircleOfferReact: (circleId: string, sharedOfferId: string) =>
     `/bachatcircle/${encodeURIComponent(circleId.trim())}/offers/${encodeURIComponent(
       sharedOfferId.trim(),

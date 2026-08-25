@@ -19,8 +19,11 @@ export type MainStackParamList = {
     banner: OfferBanner;
   };
   OfferDetail: {
-    shop: ShopWithOffers;
-    offer: ShopOffer;
+    shop?: ShopWithOffers | { id: string; name?: string };
+    offer?: ShopOffer;
+    /** Deep link / cold open without full shop+offer objects. */
+    offerId?: string;
+    shopId?: string;
   };
   ProductDetail: {
     shop: ShopWithOffers;

@@ -233,12 +233,13 @@ export const parseProfileImagePath = (payload: unknown): string | undefined => {
 };
 
 export type VerifyOtpResult =
-  | AuthResponse
+  | (AuthResponse & { fcmToken?: string })
   | {
       success: boolean;
       sessionToken: string;
       userId: string;
       user?: UserProfile;
+      fcmToken?: string;
     };
 
 const extractIsNewUser = (records: Record<string, unknown>[]): boolean | undefined => {
@@ -315,19 +316,27 @@ export const parseGoogleAuthResponse = (
 export const parseVerifyOtpResponse = (
   payload: unknown,
   fallbackPhone?: string,
-  fallbackFirebaseToken?: string,
 ): VerifyOtpResult => {
   const records = collectRecords(payload);
   const root = records[0] ?? {};
-  const token = extractToken(records) ?? fallbackFirebaseToken;
+  // Only accept an app/session token from the API — never store the Firebase ID token.
+  const token = extractToken(records);
   const user = extractUser(records, fallbackPhone);
   const userId = extractUserId(records, user);
+  const fcmToken = pickString(
+    ...records.map(record => record.fcmToken),
+    ...records.map(record => record.fcm_token),
+    ...(isRecord(root.data)
+      ? [root.data.fcmToken, root.data.fcm_token]
+      : []),
+  );
 
   if (token && user) {
     return {
       success: Boolean(root.success ?? true),
       token,
       user,
+      ...(fcmToken ? { fcmToken } : {}),
     };
   }
 
@@ -337,27 +346,8 @@ export const parseVerifyOtpResponse = (
       sessionToken: token,
       userId,
       user,
+      ...(fcmToken ? { fcmToken } : {}),
     };
-  }
-
-  if (Boolean(root.success ?? records.some(record => record.success)) && fallbackFirebaseToken) {
-    if (userId) {
-      return {
-        success: true,
-        sessionToken: fallbackFirebaseToken,
-        userId,
-        user,
-      };
-    }
-
-    if (user) {
-      return {
-        success: true,
-        sessionToken: fallbackFirebaseToken,
-        userId: user._id,
-        user,
-      };
-    }
   }
 
   throw new Error('Verify OTP response was incomplete. Expected token and user details.');

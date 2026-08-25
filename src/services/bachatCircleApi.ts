@@ -1,4 +1,5 @@
 import {
+  API_BASE_URL,
   API_ENDPOINTS,
   BACHAT_CIRCLE_API_BASE_URL,
   resolveProfileImageUrl,
@@ -76,6 +77,8 @@ export type CircleInviteableUserDto = {
   id: string;
   name: string;
   phone: string;
+  /** Always true for inviteable list entries — unregistered contacts are excluded. */
+  isRegistered: boolean;
 };
 
 export type BachatCircleDto = {
@@ -340,46 +343,85 @@ const unwrapData = (payload: unknown): unknown => {
   return payload;
 };
 
-const asArray = (payload: unknown): unknown[] => {
+const asRegisteredArray = (payload: unknown): unknown[] | null => {
   const data = unwrapData(payload);
-  if (Array.isArray(data)) {
-    return data;
-  }
-  if (isRecord(data)) {
-    for (const key of ['users', 'contacts', 'registeredUsers', 'results', 'items']) {
-      const value = data[key];
+  const sources = [data, payload].filter(isRecord);
+  for (const source of sources) {
+    for (const key of [
+      'registeredUsers',
+      'registered',
+      'registeredContacts',
+    ]) {
+      const value = source[key];
       if (Array.isArray(value)) {
         return value;
       }
     }
   }
-  if (isRecord(payload)) {
-    for (const key of ['users', 'contacts', 'registeredUsers', 'results', 'items']) {
-      const value = payload[key];
-      if (Array.isArray(value)) {
-        return value;
-      }
-    }
-  }
-  return [];
+  return null;
 };
 
 const normalizePhoneDigits = (value: string) =>
   value.replace(/\D/g, '').replace(/^91/, '').slice(-10);
 
-const parseInviteableUser = (value: unknown): CircleInviteableUserDto | undefined => {
+const isRegisteredContact = (value: Record<string, unknown>): boolean => {
+  if (value.isRegistered === true || value.registered === true) {
+    return true;
+  }
+  if (value.isRegistered === false || value.registered === false) {
+    return false;
+  }
+  const status = pickString(
+    value.status,
+    value.registrationStatus,
+    value.userStatus,
+  )?.toLowerCase();
+  if (
+    status === 'registered' ||
+    status === 'active' ||
+    status === 'verified'
+  ) {
+    return true;
+  }
+  if (
+    status === 'unregistered' ||
+    status === 'not_registered' ||
+    status === 'pending' ||
+    status === 'notregistered'
+  ) {
+    return false;
+  }
+  // Registered app users almost always have a real user id.
+  const userId = pickString(value._id, value.id, value.userId);
+  return Boolean(userId && userId.replace(/\D/g, '').length !== 10);
+};
+
+const parseInviteableUser = (
+  value: unknown,
+  options?: { fromRegisteredBucket?: boolean },
+): CircleInviteableUserDto | undefined => {
   if (!isRecord(value)) {
     return undefined;
   }
   const nested = isRecord(value.user) ? value.user : value;
+  const record = isRecord(nested) ? nested : value;
+
+  if (!options?.fromRegisteredBucket) {
+    if (!isRegisteredContact(value) && !isRegisteredContact(record)) {
+      return undefined;
+    }
+  }
+
   const id =
-    pickString(nested._id, nested.id, value._id, value.id, value.userId) || '';
+    pickString(record._id, record.id, value._id, value.id, value.userId) || '';
   const phoneRaw = pickString(
-    nested.phone,
+    record.phone,
     value.phone,
-    nested.mobile,
+    record.formattedPhone,
+    value.formattedPhone,
+    record.mobile,
     value.mobile,
-    nested.phoneNumber,
+    record.phoneNumber,
     value.phoneNumber,
   );
   if (!phoneRaw) {
@@ -389,13 +431,24 @@ const parseInviteableUser = (value: unknown): CircleInviteableUserDto | undefine
   if (phone.length !== 10) {
     return undefined;
   }
+  // Without a registered bucket, require a real user id (not phone-only stub).
+  if (!options?.fromRegisteredBucket && (!id || id === phone)) {
+    return undefined;
+  }
   const name =
-    pickString(nested.name, value.name, nested.fullName, value.fullName) ||
-    `User ${phone.slice(-4)}`;
+    pickString(
+      record.name,
+      value.name,
+      record.contactBookName,
+      value.contactBookName,
+      record.fullName,
+      value.fullName,
+    ) || `User ${phone.slice(-4)}`;
   return {
     id: id || phone,
     name,
     phone,
+    isRegistered: true,
   };
 };
 
@@ -468,40 +521,59 @@ export const bachatCircleApi = {
       body,
     });
     const record = isRecord(payload) ? payload : {};
+    const data = isRecord(record.data) ? record.data : {};
+    const isRegistered = Boolean(
+      record.isRegistered ?? data.isRegistered ?? record.registered ?? data.registered,
+    );
+    const message = pickString(record.message, data.message);
+
+    // Never treat unregistered contacts as successfully invited/added.
+    if (!isRegistered) {
+      throw new Error(
+        message ||
+          'This number is not registered on Bachat Bazaar. Only registered users can be invited.',
+      );
+    }
+
     return {
-      isRegistered: Boolean(record.isRegistered),
-      message: pickString(record.message),
+      isRegistered: true,
+      message,
     };
   },
 
-  async listInviteableUsers(
+  /**
+   * POST /api/user/contacts/sync — returns only registered Bachat Bazaar users.
+   * Unregistered contacts from the response are ignored.
+   */
+  async syncRegisteredContacts(
     token: string,
-    query?: string,
+    contacts: Array<{ name: string; phone: string }>,
   ): Promise<CircleInviteableUserDto[]> {
-    const qs = query?.trim()
-      ? `?q=${encodeURIComponent(query.trim())}`
-      : '';
-    const payload = await apiRequest<unknown>(
-      `${API_ENDPOINTS.bachatCircleRegisteredUsers}${qs}`,
-      {
-        method: 'GET',
-        token,
-        baseUrl: BACHAT_CIRCLE_API_BASE_URL,
-      },
-    );
+    if (!contacts.length) {
+      return [];
+    }
 
-    // API may return { data: null } / empty — treat as no users.
+    const payload = await apiRequest<unknown>(API_ENDPOINTS.contactsSync, {
+      method: 'POST',
+      token,
+      baseUrl: API_BASE_URL,
+      body: {
+        contacts: contacts.map(contact => ({
+          name: contact.name.trim() || 'Contact',
+          phone: contact.phone.trim(),
+        })),
+      },
+    });
+
     if (payload == null) {
       return [];
     }
-    const data = unwrapData(payload);
-    if (data == null) {
-      return [];
-    }
 
-    const users = asArray(payload)
-      .map(parseInviteableUser)
-      .filter((u): u is CircleInviteableUserDto => Boolean(u));
+    // Only use registeredUsers — never nonRegisteredContacts.
+    const registered = asRegisteredArray(payload) ?? [];
+    const users = registered
+      .map(item => parseInviteableUser(item, { fromRegisteredBucket: true }))
+      .filter((u): u is CircleInviteableUserDto => Boolean(u && u.isRegistered));
 
     const byPhone = new Map<string, CircleInviteableUserDto>();
     for (const user of users) {
@@ -510,6 +582,14 @@ export const bachatCircleApi = {
       }
     }
     return Array.from(byPhone.values());
+  },
+
+  /** @deprecated Use syncRegisteredContacts with device contacts body. */
+  async listInviteableUsers(
+    token: string,
+    _query?: string,
+  ): Promise<CircleInviteableUserDto[]> {
+    return this.syncRegisteredContacts(token, []);
   },
 
   async myInvitations(token: string): Promise<CircleInvitationDto[]> {

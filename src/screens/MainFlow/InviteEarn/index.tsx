@@ -22,14 +22,17 @@ import { useAppContext } from '../../../context/AppContext';
 import { colors, fonts } from '../../../helpers/styles';
 import { MainStackParamList } from '../../../navigation/types';
 import { showAppAlert } from '../../../services/appAlert';
+import { buildInviteDeepLink } from '../../../config/deepLinks';
 import { referralsApi } from '../../../services/referralsApi';
 import { ReferralCodeInfo, ReferralListItem } from '../../../types/referral';
 import { maskPhoneNumber } from '../../../utils/phone';
 
 const PAGE_BG = '#F4F6FA';
 
-const buildShareMessage = (code: string) =>
-  `Join me on Bachat Bazaar! Use my referral code ${code} when you sign up and start saving together.\n\nhttps://bachatbazaar.tech`;
+const buildShareMessage = (code: string) => {
+  const link = buildInviteDeepLink(code);
+  return `Join me on Bachat Bazaar! Use my referral code ${code} when you sign up and start saving together.\n\n${link}`;
+};
 
 const InviteEarnScreen = () => {
   const navigation =
@@ -104,6 +107,7 @@ const InviteEarnScreen = () => {
       await Share.share({
         message: buildShareMessage(code),
         title: 'Invite to Bachat Bazaar',
+        url: buildInviteDeepLink(code),
       });
     } catch (error) {
       if (

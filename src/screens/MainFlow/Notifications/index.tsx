@@ -24,6 +24,10 @@ import {
   formatNotificationTime,
   notifyApi,
 } from '../../../services/notifyApi';
+import {
+  parsePushFromAppNotification,
+  routePushNotification,
+} from '../../../services/pushNotificationRouter';
 import { AppNotification } from '../../../types/notification';
 
 const PAGE_BG = '#F4F6FA';
@@ -33,10 +37,19 @@ const iconForType = (type: string): { name: string; color: string; soft: string 
   if (t.includes('CIRCLE')) {
     return { name: 'account-group', color: colors.primary, soft: colors.primarySoft };
   }
-  if (t.includes('OFFER') || t.includes('REWARD')) {
+  if (t.includes('OFFER') || t.includes('REWARD') || t.includes('MILESTONE')) {
     return { name: 'tag-outline', color: colors.darkgreen, soft: colors.pastelGreen };
   }
-  if (t.includes('ORDER') || t.includes('DELIVERY')) {
+  if (t.includes('REFERRAL')) {
+    return { name: 'gift-outline', color: '#E65A24', soft: '#FFF0EB' };
+  }
+  if (t.includes('PRICE')) {
+    return { name: 'trending-down', color: '#E11D48', soft: '#FFE4E6' };
+  }
+  if (t.includes('BIRTHDAY')) {
+    return { name: 'cake-variant', color: '#7C3AED', soft: '#F3E8FF' };
+  }
+  if (t.includes('ORDER') || t.includes('DELIVERY') || t.includes('BID')) {
     return { name: 'truck-delivery-outline', color: '#E65A24', soft: '#FFF0EB' };
   }
   return { name: 'bell-outline', color: colors.primary, soft: colors.primarySoft };
@@ -129,10 +142,9 @@ const NotificationsScreen = () => {
       }
     }
 
-    const type = item.type.toUpperCase();
-    if (type.includes('CIRCLE')) {
-      navigation.navigate('BachatCircle');
-      return;
+    const payload = parsePushFromAppNotification(item);
+    if (payload) {
+      await routePushNotification(payload);
     }
   };
 

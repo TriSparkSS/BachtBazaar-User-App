@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Share } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import OfferDetailScreenView from './OfferDetailScreenView';
@@ -8,7 +9,8 @@ import { shopApi } from '../../../services/shopApi';
 import { offerWishlistApi } from '../../../services/offerWishlistApi';
 import { showAppAlert } from '../../../services/appAlert';
 import { normalizeRedemptionStatusLabel } from '../../../services/dailyRewardsParser';
-import { OfferDetail as OfferDetailType } from '../../../types/shop';
+import { buildOfferDeepLink } from '../../../config/deepLinks';
+import { OfferDetail as OfferDetailType, ShopOffer, ShopWithOffers } from '../../../types/shop';
 import { DailyRewardHistoryItem } from '../../../types/dailyRewards';
 
 const OFFER_PLACEHOLDER =
@@ -22,29 +24,79 @@ const isRedemptionHistoryClaimed = (item: DailyRewardHistoryItem): boolean => {
   return statusLabel === 'Claimed' || statusLabel === 'Redeem';
 };
 
+const stubOffer = (offerId: string, shopId: string): OfferDetailType => ({
+  id: offerId,
+  shopId,
+  title: 'Offer',
+});
+
+const stubShop = (shopId: string, name?: string): ShopWithOffers => ({
+  id: shopId,
+  name: name || 'Store',
+  offers: [],
+  products: [],
+});
+
 const OfferDetail = () => {
   const navigation = useNavigation<StackNavigationProp<MainStackParamList, 'OfferDetail'>>();
   const route = useRoute();
   const { authToken } = useAppContext();
-  const { shop, offer: initialOffer } = route.params as MainStackParamList['OfferDetail'];
-  const [offer, setOffer] = useState<OfferDetailType>(initialOffer);
+  const params = route.params as MainStackParamList['OfferDetail'];
+
+  const resolvedOfferId =
+    params.offer?.id?.trim() || params.offerId?.trim() || '';
+  const resolvedShopId =
+    params.shop?.id?.trim() || params.shopId?.trim() || params.offer?.shopId?.trim() || '';
+
+  const [shop, setShop] = useState<ShopWithOffers | { id: string; name?: string; logo?: string }>(
+    params.shop || stubShop(resolvedShopId),
+  );
+  const [offer, setOffer] = useState<OfferDetailType>(
+    (params.offer as OfferDetailType) || stubOffer(resolvedOfferId, resolvedShopId),
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
   const [isTogglingWishlist, setIsTogglingWishlist] = useState(false);
-  const [isClaimed, setIsClaimed] = useState(Boolean((initialOffer as OfferDetailType).isClaimed));
+  const [isClaimed, setIsClaimed] = useState(
+    Boolean((params.offer as OfferDetailType | undefined)?.isClaimed),
+  );
 
   useEffect(() => {
     let cancelled = false;
 
     const loadOfferDetail = async () => {
+      if (!resolvedOfferId) {
+        setIsLoading(false);
+        return;
+      }
+
       try {
         setIsLoading(true);
-        const detail = await shopApi.fetchOfferById(initialOffer.id, shop.id, authToken ?? undefined);
+        const detail = await shopApi.fetchOfferById(
+          resolvedOfferId,
+          resolvedShopId,
+          authToken ?? undefined,
+        );
 
         if (!cancelled) {
           setOffer(detail);
           if (detail.isClaimed) {
             setIsClaimed(true);
+          }
+        }
+
+        const shopIdForFetch = resolvedShopId || detail.shopId?.trim();
+        if (shopIdForFetch) {
+          try {
+            const shopDetail = await shopApi.fetchShopById(
+              shopIdForFetch,
+              authToken ?? undefined,
+            );
+            if (!cancelled && shopDetail) {
+              setShop(shopDetail);
+            }
+          } catch {
+            // Keep stub shop.
           }
         }
       } catch {
@@ -56,23 +108,22 @@ const OfferDetail = () => {
       }
     };
 
-    loadOfferDetail();
+    void loadOfferDetail();
 
     return () => {
       cancelled = true;
     };
-  }, [authToken, initialOffer.id, shop.id]);
+  }, [authToken, resolvedOfferId, resolvedShopId]);
 
   useEffect(() => {
     let cancelled = false;
     const token = authToken?.trim();
-    const offerId = initialOffer.id?.trim();
+    const offerId = resolvedOfferId;
 
     if (!token || !offerId) {
       return;
     }
 
-    // Same pattern as calendar: merge /offer-redemption/user/history by offerId.
     const loadClaimStatusFromHistory = async () => {
       try {
         const history = await shopApi.fetchOfferRedemptionHistory(token);
@@ -90,21 +141,21 @@ const OfferDetail = () => {
           setOffer(prev => (prev.isClaimed ? prev : { ...prev, isClaimed: true }));
         }
       } catch {
-        // Offer-detail claim flags (if any) remain the source of truth on failure.
+        // Offer-detail claim flags remain the source of truth on failure.
       }
     };
 
-    loadClaimStatusFromHistory();
+    void loadClaimStatusFromHistory();
 
     return () => {
       cancelled = true;
     };
-  }, [authToken, initialOffer.id]);
+  }, [authToken, resolvedOfferId]);
 
   useEffect(() => {
     let cancelled = false;
     const token = authToken?.trim();
-    const offerId = initialOffer.id?.trim();
+    const offerId = resolvedOfferId;
 
     if (!token || !offerId) {
       setIsSaved(false);
@@ -124,12 +175,12 @@ const OfferDetail = () => {
       }
     };
 
-    loadWishlistState();
+    void loadWishlistState();
 
     return () => {
       cancelled = true;
     };
-  }, [authToken, initialOffer.id]);
+  }, [authToken, resolvedOfferId]);
 
   const heroImageUri = useMemo(
     () => shopApi.resolveImageUrl(offer.image) ?? OFFER_PLACEHOLDER,
@@ -139,16 +190,17 @@ const OfferDetail = () => {
   const shopLogoUri = useMemo(
     () =>
       shopApi.resolveImageUrl(offer.merchant?.avatar) ??
-      shopApi.resolveImageUrl(shop.logo) ??
+      shopApi.resolveImageUrl((shop as ShopWithOffers).logo) ??
       SHOP_LOGO_PLACEHOLDER,
-    [offer.merchant?.avatar, shop.logo],
+    [offer.merchant?.avatar, shop],
   );
 
-  const merchantName = offer.merchant?.storeName || shop.name;
+  const merchantName =
+    offer.merchant?.storeName || ('name' in shop ? shop.name : undefined) || 'Store';
 
   const handleToggleWishlist = useCallback(async () => {
     const token = authToken?.trim();
-    const offerId = offer.id?.trim() || initialOffer.id?.trim();
+    const offerId = offer.id?.trim() || resolvedOfferId;
 
     if (!token) {
       showAppAlert('Login required', 'Please log in again to save offers.');
@@ -178,12 +230,38 @@ const OfferDetail = () => {
     } finally {
       setIsTogglingWishlist(false);
     }
-  }, [authToken, initialOffer.id, isSaved, offer.id]);
+  }, [authToken, isSaved, offer.id, resolvedOfferId]);
+
+  const handleShareLink = useCallback(async () => {
+    const offerId = offer.id?.trim() || resolvedOfferId;
+    const shopId =
+      ('id' in shop ? shop.id : undefined)?.trim() ||
+      resolvedShopId ||
+      offer.shopId?.trim();
+    if (!offerId) {
+      return;
+    }
+
+    const link = buildOfferDeepLink(offerId, shopId);
+    const title = offer.title || 'Bachat Bazaar offer';
+    try {
+      await Share.share({
+        message: `Check out this offer on Bachat Bazaar: ${title}\n\n${link}`,
+        title,
+        url: link,
+      });
+    } catch {
+      // User cancelled or share unavailable.
+    }
+  }, [offer.id, offer.shopId, offer.title, resolvedOfferId, resolvedShopId, shop]);
+
+  const viewShop = shop as ShopWithOffers;
+  const viewOffer = offer as ShopOffer & OfferDetailType;
 
   return (
     <OfferDetailScreenView
-      shop={shop}
-      offer={offer}
+      shop={viewShop}
+      offer={viewOffer}
       merchantName={merchantName}
       heroImageUri={heroImageUri}
       shopLogoUri={shopLogoUri}
@@ -195,19 +273,22 @@ const OfferDetail = () => {
       onToggleWishlist={handleToggleWishlist}
       onOpenScanner={() =>
         navigation.navigate('ScannerScreen', {
-          expectedOfferId: offer.id?.trim() || initialOffer.id?.trim(),
-          expectedOfferTitle: offer.title || initialOffer.title,
+          expectedOfferId: offer.id?.trim() || resolvedOfferId,
+          expectedOfferTitle: offer.title,
         })
       }
       onShareToCircle={() =>
         navigation.navigate('BachatCircleShareOffer', {
-          offerId: offer.id?.trim() || initialOffer.id?.trim(),
-          offerTitle: offer.title || initialOffer.title,
-          offerSubtitle: offer.subtitle || shop.name,
+          offerId: offer.id?.trim() || resolvedOfferId,
+          offerTitle: offer.title,
+          offerSubtitle: offer.subtitle || merchantName,
           discount: offer.discount,
           offerImage: offer.image,
         })
       }
+      onShareLink={() => {
+        void handleShareLink();
+      }}
       onAlreadyClaimedPress={() =>
         showAppAlert('Already Claimed', 'You have already claimed this offer.')
       }

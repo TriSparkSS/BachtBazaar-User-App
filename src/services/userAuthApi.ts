@@ -50,11 +50,15 @@ export const userAuthApi = {
     });
   },
 
-  verifyOtp(firebaseToken: string, phone?: string) {
+  verifyOtp(firebaseToken: string, phone?: string, fcmToken?: string) {
     return apiRequest<unknown>(API_ENDPOINTS.verifyOtp, {
       method: 'POST',
-      body: { token: firebaseToken, firebaseToken },
-    }).then(payload => parseVerifyOtpResponse(payload, phone, firebaseToken));
+      body: {
+        token: firebaseToken,
+        firebaseToken,
+        ...(fcmToken?.trim() ? { fcmToken: fcmToken.trim() } : {}),
+      },
+    }).then(payload => parseVerifyOtpResponse(payload, phone));
   },
 
   forgotPassword(token: string, newPassword: string) {
@@ -64,17 +68,25 @@ export const userAuthApi = {
     });
   },
 
-  loginWithOtp(firebaseToken: string, phone?: string) {
+  loginWithOtp(firebaseToken: string, phone?: string, fcmToken?: string) {
     return apiRequest<unknown>(API_ENDPOINTS.loginOtp, {
       method: 'POST',
-      body: { token: firebaseToken, firebaseToken },
+      body: {
+        token: firebaseToken,
+        firebaseToken,
+        ...(fcmToken?.trim() ? { fcmToken: fcmToken.trim() } : {}),
+      },
     }).then(payload => parseAuthResponse(payload, phone));
   },
 
-  loginWithPassword(phone: string, password: string) {
+  loginWithPassword(phone: string, password: string, fcmToken?: string) {
     return apiRequest<unknown>(API_ENDPOINTS.loginPassword, {
       method: 'POST',
-      body: { phone: formatApiPhone(phone), password },
+      body: {
+        phone: formatApiPhone(phone),
+        password,
+        ...(fcmToken?.trim() ? { fcmToken: fcmToken.trim() } : {}),
+      },
     }).then(payload => parseAuthResponse(payload, formatApiPhone(phone)));
   },
 
@@ -149,11 +161,37 @@ export const userAuthApi = {
     }
   },
 
+  /**
+   * Signup: POST /auth/create with password + optional fcmToken / referralCode.
+   */
+  createAuth(
+    userId: string,
+    password: string,
+    token?: string,
+    options?: { fcmToken?: string; referralCode?: string },
+  ) {
+    const trimmedReferral = options?.referralCode?.trim();
+    const trimmedFcm = options?.fcmToken?.trim();
+    return apiRequest<{ success: boolean }>(API_ENDPOINTS.createAuth, {
+      method: 'POST',
+      token,
+      body: {
+        userId,
+        password,
+        ...(trimmedFcm ? { fcmToken: trimmedFcm } : {}),
+        ...(trimmedReferral ? { referralCode: trimmedReferral } : {}),
+      },
+    });
+  },
+
   setPassword(userId: string, password: string, token?: string) {
     return apiRequest<{ success: boolean }>(API_ENDPOINTS.setPassword, {
       method: 'POST',
       token,
-      body: { userId, password },
+      body: {
+        userId,
+        password,
+      },
     });
   },
 
