@@ -27,7 +27,8 @@ import { userAuthApi } from '../../../../services/userAuthApi';
 import { showAppAlert } from '../../../../services/appAlert';
 import { useSpeechToText } from '../../../../hooks/useSpeechToText';
 import { logApiEvent } from '../../../../services/apiClient';
-import { ShopOffer, ShopProduct, ShopWithOffers } from '../../../../types/shop';
+import { ShopOffer, ShopProduct, ShopService, ShopWithOffers } from '../../../../types/shop';
+import { isShopCurrentlyOpen } from '../../../../utils/shop';
 import { SearchResults } from '../../../../types/search';
 import { MainStackParamList } from '../../../../navigation/types';
 import { resetToAuthLogin } from '../../../../navigation/navigationService';
@@ -38,21 +39,17 @@ import { shopWishlistApi } from '../../../../services/shopWishlistApi';
 import { categoryApi } from '../../../../services/categoryApi';
 import { Category } from '../../../../types/category';
 import { OfferBanner } from '../../../../types/offerBanner';
-import { geocodeAddress, GeoCoordinates, resolveShopCity } from '../../../../utils/location';
 import { reverseGeocodeWithGoogle } from '../../../../utils/googleGeocoding';
 import { getCurrentDeviceCoordinates, requestLocationPermission } from '../../../../utils/deviceLocation';
 import OfferCountdownText from '../../../../components/OfferCountdownText';
 import PromoBannerCarousel from '../../../../components/PromoBannerCarousel';
-import RewardProgressSection from '../../../../components/RewardProgressSection';
 import DailyRewardsSheet from '../../../../components/DailyRewardsSheet';
 import FeatureWalkthrough, {
   WalkthroughTargetRect,
 } from '../../../../components/FeatureWalkthrough';
 import { featureWalkthroughStorage } from '../../../../services/featureWalkthroughStorage';
-import { milestonesApi } from '../../../../services/milestonesApi';
 import { notifyApi } from '../../../../services/notifyApi';
 import { DailyCalendarDay, DailyRewardEntry, DailyRewardsCalendar } from '../../../../types/dailyRewards';
-import { Milestone } from '../../../../types/milestone';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min((width - 48) / 3 - 4, 118);
@@ -74,6 +71,7 @@ type SidebarGroup = {
 
 type QuickActionId =
   | 'daily-rewards'
+  | 'my-rewards'
   | 'nearby-coupons'
   | 'scan-save'
   | 'invite-earn'
@@ -141,6 +139,7 @@ const HOME_OFFER_SEARCH_TYPE_ID: string | undefined = undefined;
 
 const sidebarIconPalette: Record<string, string> = {
   Overview: '#F7DCA8',
+  Rewards: '#FFF4E5',
   Shop: '#D9E8FF',
   Delivery: '#D8F1E4',
   'Discover Product': '#E8E0FF',
@@ -171,6 +170,7 @@ const sidebarIconPalette: Record<string, string> = {
 
 const sidebarIconTint: Record<string, string> = {
   Overview: '#8E5C00',
+  Rewards: '#F2994A',
   Shop: '#366FE0',
   Delivery: '#2E8B57',
   'Discover Product': '#6C4CCF',
@@ -254,6 +254,7 @@ const sidebarGroups: SidebarGroup[] = [
     title: 'Home',
     items: [
       { icon: 'overview', label: 'Overview' },
+      { icon: 'reward', label: 'Rewards' },
       { icon: 'create-request', label: 'Create request' },
       { icon: 'shop', label: 'Shop' },
       { icon: 'delivery', label: 'Delivery' },
@@ -273,6 +274,7 @@ const sidebarGroups: SidebarGroup[] = [
     title: 'Utility & Features',
     items: [
       { icon: 'bachat-circle', label: 'Bachat Circle' },
+      { icon: 'reward', label: 'Rewards' },
       { icon: 'tips', label: 'Tips & Tricks' },
       { icon: 'coupons', label: 'My coupons' },
       { icon: 'qr', label: 'My QR' },
@@ -341,8 +343,6 @@ const HomeScreenView = () => {
   const [dailyRewardsByDate, setDailyRewardsByDate] = useState<Record<string, DailyRewardsCalendar>>({});
   const [isLoadingDailyRewards, setIsLoadingDailyRewards] = useState(false);
   const [dailyRewardsError, setDailyRewardsError] = useState<string | null>(null);
-  const [milestones, setMilestones] = useState<Milestone[]>([]);
-  const [isLoadingMilestones, setIsLoadingMilestones] = useState(false);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [savedShopIds, setSavedShopIds] = useState<Record<string, true>>({});
   const [savedOfferIds, setSavedOfferIds] = useState<Record<string, true>>({});
@@ -351,7 +351,6 @@ const HomeScreenView = () => {
   const [headerAddress, setHeaderAddress] = useState(
     currentUser?.address?.trim() ? `Work - ${currentUser.address.trim()}` : 'Work - Fetching location...',
   );
-  const [deviceCoordinates, setDeviceCoordinates] = useState<GeoCoordinates | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [featureWalkthroughVisible, setFeatureWalkthroughVisible] = useState(false);
   const [walkthroughTargets, setWalkthroughTargets] = useState<
@@ -760,6 +759,13 @@ const HomeScreenView = () => {
       color: '#F2994A',
     },
     {
+      id: 'my-rewards' as const,
+      icon: 'trophy-outline',
+      label: 'Rewards',
+      bgColor: '#EEF4FF',
+      color: colors.primary,
+    },
+    {
       id: 'nearby-coupons' as const,
       icon: 'map-marker-radius-outline',
       label: 'Nearby\nCoupons',
@@ -1108,6 +1114,17 @@ const HomeScreenView = () => {
     );
   }, [navigation]);
 
+  const openRewards = useCallback(() => {
+    const parentNavigation =
+      navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('Rewards');
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate('Rewards');
+  }, [navigation]);
+
   const openBachatCircleNotifications = useCallback(() => {
     const parentNavigation =
       navigation.getParent<StackNavigationProp<MainStackParamList>>();
@@ -1173,19 +1190,12 @@ const HomeScreenView = () => {
   }, [authToken, currentUser?._id]);
 
   const loadShops = useCallback(async () => {
-    const isAllCategory = selectedCategory === 'all';
-
-    if (isAllCategory && !deviceCoordinates) {
-      return;
-    }
-
     try {
       setIsLoadingShops(true);
       setShopsError(null);
       const result = await shopApi.fetchHomeShops(
         selectedCategory,
         authTokenRef.current ?? undefined,
-        deviceCoordinates,
       );
       setShops(result);
     } catch (error) {
@@ -1196,7 +1206,7 @@ const HomeScreenView = () => {
     } finally {
       setIsLoadingShops(false);
     }
-  }, [deviceCoordinates, selectedCategory]);
+  }, [selectedCategory]);
 
   useEffect(() => {
     void loadShops();
@@ -1405,24 +1415,6 @@ const HomeScreenView = () => {
     void loadCategories();
   }, [loadCategories, authToken]);
 
-  const loadMilestones = useCallback(async () => {
-    const token = authTokenRef.current?.trim();
-    if (!token) {
-      setMilestones([]);
-      return;
-    }
-
-    try {
-      setIsLoadingMilestones(true);
-      const list = await milestonesApi.fetchMilestones(token);
-      setMilestones(list);
-    } catch {
-      setMilestones([]);
-    } finally {
-      setIsLoadingMilestones(false);
-    }
-  }, []);
-
   const loadBanners = useCallback(async () => {
     const requestId = ++bannerRequestIdRef.current;
 
@@ -1525,7 +1517,6 @@ const HomeScreenView = () => {
         loadBanners(),
         loadShops(),
         loadWishlistIds(),
-        loadMilestones(),
         loadNotificationUnread(),
       ];
 
@@ -1543,17 +1534,12 @@ const HomeScreenView = () => {
     loadBanners,
     loadCategories,
     loadDailyRewards,
-    loadMilestones,
     loadNotificationUnread,
     loadShops,
     loadWishlistIds,
     runSearch,
     selectedDailyRewardDate,
   ]);
-
-  useEffect(() => {
-    void loadMilestones();
-  }, [loadMilestones, authToken]);
 
   useEffect(() => {
     void loadNotificationUnread();
@@ -1594,7 +1580,6 @@ const HomeScreenView = () => {
     const fallbackAddress = currentUser?.address?.trim()
       ? `Work - ${currentUser.address.trim()}`
       : 'Work - New Delhi, India';
-    const profileCity = resolveShopCity(undefined, currentUser?.address);
 
     const formatAddress = (address?: string, city?: string) => {
       if (city?.trim()) {
@@ -1608,13 +1593,8 @@ const HomeScreenView = () => {
       return fallbackAddress;
     };
 
-    const applyFallbackLocation = async () => {
+    const applyFallbackLocation = () => {
       setHeaderAddress(fallbackAddress);
-
-      const geocoded = await geocodeAddress(profileCity);
-      if (geocoded) {
-        setDeviceCoordinates(geocoded);
-      }
     };
 
     const loadCurrentLocation = async () => {
@@ -1623,7 +1603,6 @@ const HomeScreenView = () => {
         const coordinates = await getCurrentDeviceCoordinates();
 
         if (coordinates) {
-          setDeviceCoordinates(coordinates);
           console.log('[Location] Current coordinates', coordinates);
 
           try {
@@ -1658,13 +1637,13 @@ const HomeScreenView = () => {
         }
 
         if (!permitted) {
-          await applyFallbackLocation();
+          applyFallbackLocation();
           return;
         }
 
-        await applyFallbackLocation();
+        applyFallbackLocation();
       } catch {
-        await applyFallbackLocation();
+        applyFallbackLocation();
       }
     };
 
@@ -1856,6 +1835,56 @@ const HomeScreenView = () => {
     [authToken, navigation, searchResults.shops, searchSuggestions.shops, shops],
   );
 
+  const openSearchService = useCallback(
+    async (item: ShopProduct) => {
+      setSearchSuggestionsVisible(false);
+      const service: ShopService = {
+        id: item.id,
+        shopId: item.shopId,
+        title: item.title,
+        image: item.image,
+        price: item.price,
+        originalPrice: item.originalPrice,
+        rating: item.rating,
+        isFeatured: item.isFeatured,
+        description: item.description,
+      };
+
+      const parentNavigation = navigation.getParent<StackNavigationProp<MainStackParamList>>();
+      const go = (shop: ShopWithOffers) => {
+        const matched = shop.services?.find(entry => entry.id === item.id) ?? service;
+        if (parentNavigation) {
+          parentNavigation.navigate('ServiceDetail', { shop, service: matched });
+          return;
+        }
+        (navigation as StackNavigationProp<MainStackParamList>).navigate('ServiceDetail', {
+          shop,
+          service: matched,
+        });
+      };
+
+      let shop: ShopWithOffers = {
+        id: item.shopId || 'unknown-shop',
+        name: item.shopName || 'Partner store',
+        offers: [],
+        services: [service],
+      };
+
+      const token = authToken?.trim();
+      const shopId = item.shopId?.trim();
+      if (shopId) {
+        try {
+          shop = await shopApi.fetchShopByIdWithOffers(shopId, token);
+        } catch {
+          // Keep stub shop.
+        }
+      }
+
+      go(shop);
+    },
+    [authToken, navigation],
+  );
+
   const handleLogout = () => {
     showAppAlert('Logout', 'Do you want to logout from this account?', [
       { text: 'No', style: 'cancel' },
@@ -2014,6 +2043,12 @@ const HomeScreenView = () => {
       return;
     }
 
+    if (label === 'Rewards') {
+      setSidebarVisible(false);
+      openRewards();
+      return;
+    }
+
     if (label === 'Notification') {
       setSidebarVisible(false);
       openNotifications();
@@ -2059,6 +2094,11 @@ const HomeScreenView = () => {
       setDailyRewards(dailyRewardsByDate[today] ?? null);
       setDailyRewardsError(null);
       setDailyRewardsVisible(true);
+      return;
+    }
+
+    if (actionId === 'my-rewards') {
+      openRewards();
       return;
     }
 
@@ -2188,7 +2228,9 @@ const HomeScreenView = () => {
         onPress={() => {
           if (type === 'product') {
             void openSearchProduct(item);
+            return;
           }
+          void openSearchService(item);
         }}>
         <View style={styles.searchResultImageWrap}>
           <Image source={{ uri: imageUri }} style={styles.searchResultImage} resizeMode="cover" />
@@ -2538,17 +2580,14 @@ const HomeScreenView = () => {
                           color={action.color}
                         />
                       </View>
-                      <Text style={styles.quickActionLabel}>{action.label}</Text>
+                      <Text style={styles.quickActionLabel} numberOfLines={2}>
+                        {action.label}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 );
               })}
             </ScrollView>
-
-            <RewardProgressSection
-              milestones={milestones}
-              isLoading={isLoadingMilestones}
-            />
 
             <View style={styles.categoriesSection}>
               <View style={styles.categoriesHeaderRow}>
@@ -2839,7 +2878,7 @@ const HomeScreenView = () => {
                                 <Text style={styles.distanceText}>{shop.distance}</Text>
                               </>
                             ) : null}
-                            {shop.isOpen ? (
+                            {isShopCurrentlyOpen(shop) ? (
                               <View style={styles.openTag}>
                                 <Text style={styles.openTagText}>Open</Text>
                               </View>
@@ -3619,6 +3658,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
     marginTop: 4,
     lineHeight: 13,
+    minHeight: 26,
   },
   categoriesSection: {
     marginTop: 12,

@@ -4,6 +4,7 @@ import {
   ShopOpeningDay,
   ShopOpeningHours,
   ShopProduct,
+  ShopService,
   ShopWithOffers,
 } from '../types/shop';
 import { shouldShowInOffersList } from '../utils/offerDisplayType';
@@ -186,7 +187,7 @@ const normalizeOpeningDay = (value: unknown): ShopOpeningDay | undefined => {
   return {
     open: pickString(value.open),
     close: pickString(value.close),
-    isClosed: Boolean(value.isClosed ?? value.is_closed),
+    isClosed: value.isClosed === true || value.is_closed === true,
   };
 };
 
@@ -420,6 +421,100 @@ const normalizeProduct = (value: unknown, shopId: string): ShopProduct | undefin
   };
 };
 
+const formatDurationLabel = (value: Record<string, unknown>): string | undefined => {
+  const labeled = pickString(
+    value.duration,
+    value.durationLabel,
+    value.duration_label,
+    value.time,
+    value.timeLabel,
+  );
+  if (labeled && /[a-zA-Z]/.test(labeled)) {
+    return labeled;
+  }
+
+  const minutes = pickNumber(
+    value.durationMinutes,
+    value.duration_minutes,
+    value.duration_min,
+    /^\d+$/.test(labeled || '') ? labeled : undefined,
+  );
+  if (minutes == null) {
+    return labeled;
+  }
+  return minutes === 1 ? '1 Min' : `${minutes} Min`;
+};
+
+const normalizeGender = (value: unknown): string | undefined => {
+  const raw = pickString(
+    isRecord(value) ? value.gender : undefined,
+    isRecord(value) ? value.forGender : undefined,
+    isRecord(value) ? value.for_gender : undefined,
+    isRecord(value) ? value.audience : undefined,
+    isRecord(value) ? value.category : undefined,
+  );
+  if (!raw) {
+    return undefined;
+  }
+  const lower = raw.toLowerCase();
+  if (lower.includes('uni')) {
+    return 'Unisex';
+  }
+  if (lower.includes('women') || lower.includes('female') || lower.includes('ladies')) {
+    return 'Women';
+  }
+  if (lower.includes('men') || lower.includes('male')) {
+    return 'Men';
+  }
+  return undefined;
+};
+
+const normalizeService = (value: unknown, shopId: string): ShopService | undefined => {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const id = pickString(value._id, value.id, value.serviceId, value.service_id);
+  const title = pickString(value.name, value.title, value.serviceName, value.service_name);
+  if (!id || !title) {
+    return undefined;
+  }
+
+  const price = pickNumber(value.price);
+  const discountedPrice = pickNumber(value.discounted_price, value.discountedPrice);
+
+  return {
+    id,
+    shopId,
+    title,
+    image: resolveImagePath(
+      pickString(value.thumbnail, value.image, value.imageUrl, value.image_url, value.photo),
+    ),
+    price:
+      discountedPrice != null
+        ? `₹${discountedPrice.toLocaleString('en-IN')}`
+        : price != null
+          ? `₹${price.toLocaleString('en-IN')}`
+          : undefined,
+    originalPrice:
+      discountedPrice != null && price != null && discountedPrice !== price
+        ? `₹${price.toLocaleString('en-IN')}`
+        : undefined,
+    pricingType: pickString(value.pricing_type, value.pricingType),
+    duration: formatDurationLabel(value),
+    rating: pickNumberString(value.rating, value.avgRating, value.avg_rating),
+    gender: normalizeGender(value),
+    description: pickString(
+      value.description,
+      value.details,
+      value.about,
+      value.serviceDescription,
+      value.service_description,
+    ),
+    isFeatured: Boolean(value.is_featured ?? value.isFeatured),
+  };
+};
+
 const unwrapList = (payload: unknown): unknown[] => {
   if (Array.isArray(payload)) {
     return payload;
@@ -519,6 +614,11 @@ const extractInventory = (data: Record<string, unknown>) => {
           .map(item => normalizeOffer(item, ''))
           .filter((offer): offer is ShopOffer => Boolean(offer))
       : [],
+    services: Array.isArray(inventory?.services)
+      ? inventory.services
+          .map(item => normalizeService(item, ''))
+          .filter((service): service is ShopService => Boolean(service))
+      : [],
   };
 };
 
@@ -567,6 +667,7 @@ export const parseShopDetailResponse = (payload: unknown, fallbackShopId?: strin
   const inventory = extractInventory(data);
   let offers = inventory.offers.map(offer => ({ ...offer, shopId }));
   let products = inventory.products.map(product => ({ ...product, shopId }));
+  const services = inventory.services.map(service => ({ ...service, shopId }));
 
   // Shop-detail payloads may put the delivery flag on data / inventory roots.
   const providesDelivery =
@@ -607,9 +708,10 @@ export const parseShopDetailResponse = (payload: unknown, fallbackShopId?: strin
     providesDelivery,
     offers,
     products,
+    services,
     productCount: inventory.productCount ?? products.length,
     // Use filtered length so banner/calendar offers are not counted on store detail.
     offerCount: offers.length,
-    serviceCount: inventory.serviceCount ?? 0,
+    serviceCount: inventory.serviceCount ?? services.length,
   };
 };

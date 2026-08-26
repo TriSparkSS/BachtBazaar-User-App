@@ -38,9 +38,16 @@ const accentForAction = (actionType: string, index: number): Accent => {
 type Props = {
   milestones: Milestone[];
   isLoading?: boolean;
+  onPressViewAll?: () => void;
+  onPressMilestone?: (milestone: Milestone) => void;
 };
 
-const RewardProgressSection = ({ milestones, isLoading }: Props) => {
+const RewardProgressSection = ({
+  milestones,
+  isLoading,
+  onPressViewAll,
+  onPressMilestone,
+}: Props) => {
   const [expanded, setExpanded] = useState(false);
 
   const completedCount = useMemo(
@@ -58,18 +65,64 @@ const RewardProgressSection = ({ milestones, isLoading }: Props) => {
   const canToggle = milestones.length > COLLAPSED_COUNT;
 
   if (!isLoading && milestones.length === 0) {
-    return null;
+    return (
+      <View style={styles.wrap}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerText}>
+            <Text style={styles.title}>Rewards</Text>
+            <Text style={styles.subtitle}>Milestone tasks from merchants</Text>
+          </View>
+          {onPressViewAll ? (
+            <TouchableOpacity activeOpacity={0.8} onPress={onPressViewAll}>
+              <Text style={styles.viewAll}>View all</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        <TouchableOpacity
+          style={styles.card}
+          activeOpacity={onPressViewAll ? 0.85 : 1}
+          disabled={!onPressViewAll}
+          onPress={onPressViewAll}
+        >
+          <View style={styles.row}>
+            <View style={[styles.iconBox, { backgroundColor: colors.primarySoft }]}>
+              <MaterialCommunityIcons
+                name="trophy-outline"
+                size={22}
+                color={colors.primary}
+              />
+            </View>
+            <View style={styles.body}>
+              <Text style={styles.goalTitle}>Open Rewards</Text>
+              <Text style={styles.meta} numberOfLines={2}>
+                See goals assigned by merchants and track your progress
+              </Text>
+            </View>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={22}
+              color={colors.mutedText}
+            />
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   return (
     <View style={styles.wrap}>
       <View style={styles.headerRow}>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Reward Progress</Text>
+          <Text style={styles.title}>Rewards</Text>
           <Text style={styles.subtitle}>
             {completedCount}/{milestones.length} completed
           </Text>
         </View>
+        {onPressViewAll ? (
+          <TouchableOpacity activeOpacity={0.8} onPress={onPressViewAll}>
+            <Text style={styles.viewAll}>View all</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.card}>
@@ -88,12 +141,15 @@ const RewardProgressSection = ({ milestones, isLoading }: Props) => {
             ].filter(Boolean);
 
             return (
-              <View
+              <TouchableOpacity
                 key={item.id}
                 style={[
                   styles.row,
                   index < visible.length - 1 && styles.rowBorder,
                 ]}
+                activeOpacity={onPressMilestone ? 0.82 : 1}
+                disabled={!onPressMilestone}
+                onPress={() => onPressMilestone?.(item)}
               >
                 <View style={[styles.iconBox, { backgroundColor: accent.soft }]}>
                   <MaterialCommunityIcons
@@ -126,7 +182,7 @@ const RewardProgressSection = ({ milestones, isLoading }: Props) => {
                 <Text style={[styles.percent, { color: accent.color }]}>
                   {item.progressPercentage}%
                 </Text>
-              </View>
+              </TouchableOpacity>
             );
           })
         )}
@@ -167,6 +223,12 @@ const styles = StyleSheet.create({
   },
   headerText: {
     flex: 1,
+  },
+  viewAll: {
+    fontSize: 13,
+    color: colors.primary,
+    fontFamily: fonts.BOLD,
+    marginTop: 4,
   },
   title: {
     fontSize: 18,

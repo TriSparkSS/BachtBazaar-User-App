@@ -32,12 +32,21 @@ import { AppNotification } from '../../../types/notification';
 
 const PAGE_BG = '#F4F6FA';
 
-const iconForType = (type: string): { name: string; color: string; soft: string } => {
-  const t = type.toUpperCase();
+const iconForType = (
+  type: string,
+  subType?: string,
+): { name: string; color: string; soft: string } => {
+  const t = `${type} ${subType || ''}`.toUpperCase();
   if (t.includes('CIRCLE')) {
     return { name: 'account-group', color: colors.primary, soft: colors.primarySoft };
   }
-  if (t.includes('OFFER') || t.includes('REWARD') || t.includes('MILESTONE')) {
+  if (t.includes('MILESTONE') || t.includes('REWARD') || t.includes('GOAL')) {
+    return { name: 'trophy-outline', color: colors.darkgreen, soft: colors.pastelGreen };
+  }
+  if (t.includes('REDEEM')) {
+    return { name: 'ticket-confirmation-outline', color: colors.darkgreen, soft: colors.pastelGreen };
+  }
+  if (t.includes('NEARBY') || t.includes('NEW_OFFER') || t.includes('OFFER')) {
     return { name: 'tag-outline', color: colors.darkgreen, soft: colors.pastelGreen };
   }
   if (t.includes('REFERRAL')) {
@@ -48,6 +57,9 @@ const iconForType = (type: string): { name: string; color: string; soft: string 
   }
   if (t.includes('BIRTHDAY')) {
     return { name: 'cake-variant', color: '#7C3AED', soft: '#F3E8FF' };
+  }
+  if (t.includes('DISPATCH')) {
+    return { name: 'truck-fast-outline', color: '#E65A24', soft: '#FFF0EB' };
   }
   if (t.includes('ORDER') || t.includes('DELIVERY') || t.includes('BID')) {
     return { name: 'truck-delivery-outline', color: '#E65A24', soft: '#FFF0EB' };
@@ -254,7 +266,7 @@ const NotificationsScreen = () => {
               </View>
             }
             renderItem={({ item }) => {
-              const icon = iconForType(item.type);
+              const icon = iconForType(item.type, item.data?.subType);
               const busy = busyId === item.id;
               return (
                 <TouchableOpacity

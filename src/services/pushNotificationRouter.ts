@@ -4,6 +4,7 @@ import { navigationRef } from '../navigation/navigationService';
 import { authStorage } from './authStorage';
 import { bestRequestApi } from './bestRequestApi';
 import { shopApi } from './shopApi';
+import { milestonesApi } from './milestonesApi';
 import { logApiEvent } from './apiClient';
 import { showAppAlert } from './appAlert';
 
@@ -73,16 +74,39 @@ export const parsePushFromAppNotification = (item: {
   body?: string;
   data?: Record<string, string | undefined>;
 }): PushNotificationPayload | null => {
-  const type = item.type?.trim();
+  const data = { ...(item.data ?? {}) };
+  const type =
+    item.type?.trim() ||
+    pickDataString(data, 'type', 'notificationType', 'event') ||
+    '';
   if (!type) {
     return null;
+  }
+  if (!data.type) {
+    data.type = type;
   }
   return {
     type: type.toUpperCase(),
     title: item.title,
     body: item.body,
-    data: item.data ?? {},
+    data,
   };
+};
+
+const resolveRouteType = (payload: PushNotificationPayload): string => {
+  const type = payload.type.toUpperCase();
+  if (type === 'GENERAL') {
+    const subType = pickDataString(
+      payload.data,
+      'subType',
+      'sub_type',
+      'subtype',
+    )?.toUpperCase();
+    if (subType) {
+      return subType;
+    }
+  }
+  return type;
 };
 
 const navigateMain = (screen: string, params?: object) => {
@@ -178,6 +202,99 @@ const openProductById = async (productId: string, token?: string) => {
   navigateMain('SavedOffers', { initialTab: 'products' });
 };
 
+const openOfferById = (payload: PushNotificationPayload) => {
+  const offerId = pickDataString(payload.data, 'offerId', 'offer_id');
+  const shopId = pickDataString(payload.data, 'shopId', 'shop_id');
+  if (offerId) {
+    navigateMain('OfferDetail', {
+      offerId,
+      ...(shopId ? { shopId } : {}),
+    });
+    return;
+  }
+  navigateHome();
+};
+
+const openDeliveryOrder = (payload: PushNotificationPayload) => {
+  const orderId = pickDataString(payload.data, 'orderId', 'order_id');
+  if (orderId) {
+    navigateMain('DeliveryOrderDetail', { orderId });
+    return;
+  }
+  navigateMain('DeliveryOrders');
+};
+
+const openMilestoneNotification = async (
+  payload: PushNotificationPayload,
+  token?: string,
+) => {
+  const milestoneId = pickDataString(
+    payload.data,
+    'milestoneId',
+    'milestone_id',
+    'goalId',
+    'goal_id',
+  );
+  if (milestoneId) {
+    navigateMain('RewardDetail', { milestoneId });
+    return;
+  }
+
+  const merchantId = pickDataString(
+    payload.data,
+    'merchantId',
+    'merchant_id',
+  );
+  const actionType = pickDataString(
+    payload.data,
+    'actionType',
+    'action_type',
+  )?.toUpperCase();
+  const targetCount = pickDataString(
+    payload.data,
+    'targetCount',
+    'target_count',
+  );
+
+  if (token && (merchantId || actionType)) {
+    try {
+      const list = await milestonesApi.fetchMilestones(token);
+      const match = list.find(item => {
+        const merchantOk =
+          !merchantId ||
+          item.merchantId === merchantId ||
+          item.shopId === merchantId;
+        const actionOk =
+          !actionType || item.actionType.trim().toUpperCase() === actionType;
+        const countOk =
+          !targetCount || String(item.targetCount) === String(targetCount);
+        return merchantOk && actionOk && countOk;
+      });
+      if (match) {
+        navigateMain('RewardDetail', {
+          milestoneId: match.id,
+          milestone: match,
+        });
+        return;
+      }
+    } catch {
+      // Fall through to Rewards list.
+    }
+  }
+
+  navigateMain('Rewards');
+};
+
+const openCircleInviteResponse = (payload: PushNotificationPayload) => {
+  const circleId = pickDataString(payload.data, 'circleId', 'circle_id');
+  const action = pickDataString(payload.data, 'action')?.toUpperCase();
+  if (circleId && action !== 'REJECTED' && action !== 'DECLINED') {
+    navigateMain('BachatCircleFeed', { circleId });
+    return;
+  }
+  navigateMain('BachatCircle');
+};
+
 export const routePushNotification = async (
   payload: PushNotificationPayload,
   options?: { requireAuth?: boolean },
@@ -212,7 +329,7 @@ export const routePushNotification = async (
 
   logApiEvent('Push nav', { type: payload.type, data: payload.data });
 
-  switch (payload.type) {
+  switch (resolveRouteType(payload)) {
     case 'BEST_PRICE_NEW_BID':
       await openBestPriceBid(payload, token);
       return true;
@@ -225,12 +342,23 @@ export const routePushNotification = async (
       navigateMain('BachatCircle');
       return true;
 
+    case 'CIRCLE_INVITE_RESPONSE':
+      openCircleInviteResponse(payload);
+      return true;
+
     case 'REFERRAL_JOINED':
       navigateMain('InviteEarn');
       return true;
 
     case 'MILESTONE_UNLOCKED':
-      navigateHome();
+    case 'MILESTONE_CREATED':
+      await openMilestoneNotification(payload, token);
+      return true;
+
+    case 'NEW_OFFER_NEARBY':
+    case 'OFFER_REDEEMED_USER':
+    case 'OFFER_REDEEMED_MERCHANT':
+      openOfferById(payload);
       return true;
 
     case 'PRICE_DROP': {
@@ -259,6 +387,12 @@ export const routePushNotification = async (
       }
       return true;
     }
+
+    case 'DELIVERY_ORDER_NEW':
+    case 'DELIVERY_ORDER_ACCEPTED':
+    case 'DELIVERY_ORDER_DISPATCHED':
+      openDeliveryOrder(payload);
+      return true;
 
     default:
       navigateMain('Notifications');

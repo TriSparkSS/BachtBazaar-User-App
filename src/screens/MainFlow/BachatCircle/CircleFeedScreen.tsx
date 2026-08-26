@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
+  BackHandler,
   Image,
   RefreshControl,
   ScrollView,
@@ -27,6 +28,7 @@ import {
 import MemberAvatar from './components/MemberAvatar';
 import { circleStorage } from './circleStorage';
 import { circleColors, circleShadow } from './theme';
+import { openBachatCircleList } from './circleNav';
 
 const formatDate = (value?: string) => {
   if (!value) {
@@ -59,14 +61,14 @@ const CircleFeedScreen = () => {
     const token = authToken?.trim();
     if (!token) {
       showAppAlert('Login required', 'Please log in to open Bachat Circle.');
-      navigation.replace('BachatCircle');
+      openBachatCircleList(navigation);
       return;
     }
 
     const stored = await circleStorage.load();
     const circleId = route.params?.circleId || stored.circleId;
     if (!circleId) {
-      navigation.replace('BachatCircle');
+      openBachatCircleList(navigation);
       return;
     }
 
@@ -91,7 +93,7 @@ const CircleFeedScreen = () => {
         'Could not load circle',
         error instanceof Error ? error.message : 'Please try again.',
       );
-      navigation.replace('BachatCircle');
+      openBachatCircleList(navigation);
     }
   }, [authToken, navigation, route.params?.circleId]);
 
@@ -109,6 +111,17 @@ const CircleFeedScreen = () => {
         alive = false;
       };
     }, [load]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      const onBack = () => {
+        openBachatCircleList(navigation);
+        return true;
+      };
+      const sub = BackHandler.addEventListener('hardwareBackPress', onBack);
+      return () => sub.remove();
+    }, [navigation]),
   );
 
   const onRefresh = async () => {
@@ -174,7 +187,7 @@ const CircleFeedScreen = () => {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity
-          onPress={() => navigation.navigate('BottomStack')}
+          onPress={() => openBachatCircleList(navigation)}
           style={styles.iconBtn}
         >
           <MaterialCommunityIcons name="arrow-left" size={22} color={circleColors.green} />

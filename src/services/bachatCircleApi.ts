@@ -217,29 +217,91 @@ const parseCircle = (value: unknown): BachatCircleDto | undefined => {
   };
 };
 
+const isPendingInviteStatus = (status?: string): boolean => {
+  if (!status) {
+    return true;
+  }
+  const normalized = status.trim().toUpperCase().replace(/[\s-]+/g, '_');
+  return ![
+    'ACCEPTED',
+    'REJECTED',
+    'DECLINED',
+    'EXPIRED',
+    'CANCELLED',
+    'CANCELED',
+  ].includes(normalized);
+};
+
 const parseInvitation = (value: unknown): CircleInvitationDto | undefined => {
   if (!isRecord(value)) {
     return undefined;
   }
-  const id = pickString(value._id, value.id);
-  const circle = isRecord(value.circle) ? value.circle : undefined;
-  const circleId = pickString(circle?._id, circle?.id, value.circleId);
-  const circleName = pickString(circle?.name, value.circleName);
-  if (!id || !circleId || !circleName) {
+  const record = isRecord(value.invitation) ? value.invitation : value;
+  const nestedCircle = isRecord(record.circle)
+    ? record.circle
+    : isRecord(record.bachatCircle)
+      ? record.bachatCircle
+      : isRecord(record.group)
+        ? record.group
+        : undefined;
+  const status = pickString(
+    record.status,
+    record.invitationStatus,
+    record.inviteStatus,
+    value.status,
+  );
+  if (!isPendingInviteStatus(status)) {
     return undefined;
   }
-  const invitedBy = parseUserRef(value.invitedBy);
+  const id = pickString(record._id, record.id, value._id, value.id);
+  const circleId = pickString(
+    nestedCircle?._id,
+    nestedCircle?.id,
+    record.circleId,
+    record.circle_id,
+    record.bachatCircleId,
+    record.bachatCircle_id,
+    value.circleId,
+    value.circle_id,
+    typeof record.circle === 'string' ? record.circle : undefined,
+    typeof value.circle === 'string' ? value.circle : undefined,
+  );
+  const circleName =
+    pickString(
+      nestedCircle?.name,
+      record.circleName,
+      record.circle_name,
+      record.name,
+      value.circleName,
+      value.circle_name,
+    ) || 'Bachat Circle';
+  if (!id || !circleId) {
+    return undefined;
+  }
+  const invitedBy = parseUserRef(
+    record.invitedBy ??
+      record.invitedByUser ??
+      record.from ??
+      record.sender ??
+      value.invitedBy,
+  );
+  const memberCountRaw =
+    nestedCircle?.memberCount ?? record.memberCount ?? value.memberCount;
   return {
     id,
     circleId,
     circleName,
-    circleDescription: pickString(circle?.description),
+    circleDescription: pickString(
+      nestedCircle?.description,
+      record.circleDescription,
+      record.description,
+    ),
     memberCount:
-      typeof circle?.memberCount === 'number' ? circle.memberCount : undefined,
+      typeof memberCountRaw === 'number' ? memberCountRaw : undefined,
     invitedByName: invitedBy.name,
     invitedByPhone: invitedBy.phone,
-    roleAssigned: pickString(value.roleAssigned),
-    expiresAt: pickString(value.expiresAt),
+    roleAssigned: pickString(record.roleAssigned, record.role_assigned),
+    expiresAt: pickString(record.expiresAt, record.expires_at),
   };
 };
 
@@ -341,6 +403,30 @@ const unwrapData = (payload: unknown): unknown => {
     return payload.data;
   }
   return payload;
+};
+
+/** Pull a list from common API wrappers: data[], data.items, data.circles, etc. */
+const extractArray = (
+  payload: unknown,
+  keys: string[],
+): unknown[] | null => {
+  const data = unwrapData(payload);
+  if (Array.isArray(data)) {
+    return data;
+  }
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+  const sources = [data, payload].filter(isRecord);
+  for (const source of sources) {
+    for (const key of keys) {
+      const value = source[key];
+      if (Array.isArray(value)) {
+        return value;
+      }
+    }
+  }
+  return null;
 };
 
 const asRegisteredArray = (payload: unknown): unknown[] | null => {
@@ -482,11 +568,18 @@ export const bachatCircleApi = {
         token,
         baseUrl: BACHAT_CIRCLE_API_BASE_URL,
       });
-      const data = unwrapData(payload);
-      if (Array.isArray(data)) {
-        return data.map(parseCircle).filter((c): c is BachatCircleDto => Boolean(c));
+      const list = extractArray(payload, [
+        'circles',
+        'bachatCircles',
+        'myCircles',
+        'items',
+      ]);
+      if (list) {
+        return list
+          .map(parseCircle)
+          .filter((c): c is BachatCircleDto => Boolean(c));
       }
-      const one = parseCircle(data);
+      const one = parseCircle(unwrapData(payload));
       return one ? [one] : [];
     } catch {
       return [];
@@ -593,20 +686,28 @@ export const bachatCircleApi = {
   },
 
   async myInvitations(token: string): Promise<CircleInvitationDto[]> {
-    const payload = await apiRequest<unknown>(API_ENDPOINTS.bachatCircleMyInvitations, {
-      method: 'GET',
-      token,
-      baseUrl: BACHAT_CIRCLE_API_BASE_URL,
-    });
-    const data = unwrapData(payload);
-    const list = Array.isArray(data)
-      ? data
-      : isRecord(payload) && Array.isArray(payload.data)
-        ? payload.data
-        : [];
-    return list
-      .map(parseInvitation)
-      .filter((i): i is CircleInvitationDto => Boolean(i));
+    try {
+      const payload = await apiRequest<unknown>(
+        API_ENDPOINTS.bachatCircleMyInvitations,
+        {
+          method: 'GET',
+          token,
+          baseUrl: BACHAT_CIRCLE_API_BASE_URL,
+        },
+      );
+      const list =
+        extractArray(payload, [
+          'invitations',
+          'myInvitations',
+          'pendingInvitations',
+          'items',
+        ]) || [];
+      return list
+        .map(parseInvitation)
+        .filter((i): i is CircleInvitationDto => Boolean(i));
+    } catch {
+      return [];
+    }
   },
 
   async respondInvitation(

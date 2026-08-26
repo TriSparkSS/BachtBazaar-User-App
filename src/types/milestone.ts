@@ -1,4 +1,4 @@
-export type MilestoneStatus = 'IN_PROGRESS' | 'COMPLETED' | 'EXPIRED' | string;
+export type MilestoneStatus = 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'EXPIRED' | string;
 
 export type Milestone = {
   id: string;
@@ -12,5 +12,10 @@ export type Milestone = {
   isCompleted: boolean;
   status: MilestoneStatus;
   expiresAt?: string;
+  createdAt?: string;
   shopId?: string | null;
+  shopName?: string | null;
+  merchantId?: string | null;
+  merchantName?: string | null;
+  merchantPhone?: string | null;
 };

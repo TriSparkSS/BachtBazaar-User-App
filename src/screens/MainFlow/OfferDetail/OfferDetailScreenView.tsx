@@ -27,7 +27,7 @@ import {
   buildRedeemSteps,
   formatOfferExpiryDate,
 } from '../../../utils/offer';
-import { formatShopAddress, isShopOpenNow } from '../../../utils/shop';
+import { formatShopAddress, isShopCurrentlyOpen } from '../../../utils/shop';
 
 const { width } = Dimensions.get('window');
 const BOTTOM_HORIZONTAL_PADDING = 20;
@@ -78,7 +78,7 @@ const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
   const badgeText = useMemo(() => buildOfferBadgeText(offer), [offer]);
   const ruleLabels = useMemo(() => buildOperationalRuleLabels(offer), [offer]);
   const shopAddress = formatShopAddress(shop);
-  const openNow = isShopOpenNow(shop.openingHours) ?? shop.isOpen;
+  const openNow = isShopCurrentlyOpen(shop);
   const showScanAction = offer.operationalRules?.qrRequired !== false;
   const showHeroImage = Boolean(heroImageUri) && !heroError;
 

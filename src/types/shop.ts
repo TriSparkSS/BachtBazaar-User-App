@@ -130,9 +130,25 @@ export interface OfferDetail extends ShopOffer {
   createdAt?: string;
 }
 
+export interface ShopService {
+  id: string;
+  shopId: string;
+  title: string;
+  image?: string;
+  price?: string;
+  originalPrice?: string;
+  pricingType?: string;
+  duration?: string;
+  rating?: string;
+  gender?: string;
+  description?: string;
+  isFeatured?: boolean;
+}
+
 export interface ShopWithOffers extends Shop {
   offers: ShopOffer[];
   products?: ShopProduct[];
+  services?: ShopService[];
   productCount?: number;
   offerCount?: number;
   serviceCount?: number;

@@ -8,6 +8,7 @@ import StoreDetail from '../../screens/MainFlow/StoreDetail';
 import BannerDetail from '../../screens/MainFlow/BannerDetail';
 import OfferDetail from '../../screens/MainFlow/OfferDetail';
 import ProductDetail from '../../screens/MainFlow/ProductDetail';
+import ServiceDetail from '../../screens/MainFlow/ServiceDetail';
 import Cart from '../../screens/MainFlow/Cart';
 import DeliveryOrders from '../../screens/MainFlow/DeliveryOrders';
 import DeliveryOrderDetail from '../../screens/MainFlow/DeliveryOrders/DeliveryOrderDetail';
@@ -43,6 +44,8 @@ import BachatCircleMembers from '../../screens/MainFlow/BachatCircle/MembersScre
 import BachatCircleShareOffer from '../../screens/MainFlow/BachatCircle/ShareOfferScreen';
 import BachatCircleOfferDetail from '../../screens/MainFlow/BachatCircle/CircleOfferDetailScreen';
 import BachatCircleNotifications from '../../screens/MainFlow/BachatCircle/CircleNotificationsScreen';
+import Rewards from '../../screens/MainFlow/Rewards';
+import RewardDetail from '../../screens/MainFlow/Rewards/RewardDetail';
 import WaitingForRequestBanner from '../../components/WaitingForRequestBanner';
 import {
   PendingDeliveryRequestProvider,
@@ -80,6 +83,7 @@ export const MainStack = () => {
                     <MainStackNav.Screen component={BannerDetail} name={'BannerDetail'} />
                     <MainStackNav.Screen component={OfferDetail} name={'OfferDetail'} />
                     <MainStackNav.Screen component={ProductDetail} name={'ProductDetail'} />
+                    <MainStackNav.Screen component={ServiceDetail} name={'ServiceDetail'} />
                     <MainStackNav.Screen component={Cart} name={'Cart'} />
                     <MainStackNav.Screen component={DeliveryOrders} name={'DeliveryOrders'} />
                     <MainStackNav.Screen
@@ -152,6 +156,8 @@ export const MainStack = () => {
                       component={BachatCircleNotifications}
                       name={'BachatCircleNotifications'}
                     />
+                    <MainStackNav.Screen component={Rewards} name={'Rewards'} />
+                    <MainStackNav.Screen component={RewardDetail} name={'RewardDetail'} />
                 </MainStackNav.Navigator>
                 <WaitingForRequestBanner />
             </View>

@@ -23,7 +23,7 @@ import { shopApi } from '../../../services/shopApi';
 import { wishlistApi } from '../../../services/offerWishlistApi';
 import { cartApi, hasDifferentMerchantInCart } from '../../../services/cartApi';
 import { colors, fonts } from '../../../helpers/styles';
-import { formatShopAddress, isShopOpenNow } from '../../../utils/shop';
+import { formatShopAddress, isShopCurrentlyOpen } from '../../../utils/shop';
 import { openChatWithNumber, openPhoneDialer } from '../../../helpers/contactActions';
 import { showAppAlert } from '../../../services/appAlert';
 import { ShopWithOffers } from '../../../types/shop';
@@ -61,7 +61,7 @@ const ProductDetail = () => {
     [shop.logo],
   );
   const shopAddress = formatShopAddress(shop);
-  const openNow = isShopOpenNow(shop.openingHours) ?? shop.isOpen;
+  const openNow = isShopCurrentlyOpen(shop);
   const showHeroImage = Boolean(heroImageUri) && !heroError;
 
   useEffect(() => {

@@ -11,7 +11,7 @@ import { shopApi } from '../../../services/shopApi';
 import { shopWishlistApi } from '../../../services/shopWishlistApi';
 import { showAppAlert } from '../../../services/appAlert';
 import { colors, fonts } from '../../../helpers/styles';
-import { ShopOffer, ShopProduct, ShopWithOffers } from '../../../types/shop';
+import { ShopOffer, ShopProduct, ShopService, ShopWithOffers } from '../../../types/shop';
 
 const GROCERY_HERO_PLACEHOLDER =
   'https://images.pexels.com/photos/264636/pexels-photo-264636.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=800';
@@ -170,6 +170,13 @@ const StoreDetail = () => {
     navigation.navigate('ProductDetail', { shop, product });
   };
 
+  const openServiceDetail = (service: ShopService) => {
+    if (!shop) {
+      return;
+    }
+    navigation.navigate('ServiceDetail', { shop, service });
+  };
+
   const handleToggleWishlist = useCallback(async () => {
     const token = authToken?.trim();
     const resolvedShopId = shop?.id?.trim() || shopId;
@@ -280,6 +287,7 @@ const StoreDetail = () => {
       onToggleWishlist={handleToggleWishlist}
       onOfferPress={openOfferDetail}
       onProductPress={openProductDetail}
+      onServicePress={openServiceDetail}
       resolveImageUrl={shopApi.resolveImageUrl}
     />
   );

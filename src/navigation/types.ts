@@ -1,4 +1,4 @@
-import { ShopOffer, ShopProduct, ShopWithOffers } from '../types/shop';
+import { ShopOffer, ShopProduct, ShopService, ShopWithOffers } from '../types/shop';
 import {
   CreateRequestFormParams,
   CreateRequestShopOffer,
@@ -6,6 +6,7 @@ import {
 import { MerchantBidData } from '../services/bestRequestApi';
 
 import { OfferBanner } from '../types/offerBanner';
+import { Milestone } from '../types/milestone';
 
 export type MainStackParamList = {
   BottomStack: undefined;
@@ -28,6 +29,10 @@ export type MainStackParamList = {
   ProductDetail: {
     shop: ShopWithOffers;
     product: ShopProduct;
+  };
+  ServiceDetail: {
+    shop: ShopWithOffers;
+    service: ShopService;
   };
   Cart: undefined;
   DeliveryOrders: undefined;
@@ -151,4 +156,9 @@ export type MainStackParamList = {
     circleId: string;
   };
   BachatCircleNotifications: undefined;
+  Rewards: undefined;
+  RewardDetail: {
+    milestoneId: string;
+    milestone?: Milestone;
+  };
 };

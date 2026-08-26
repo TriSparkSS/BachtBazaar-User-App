@@ -15,12 +15,14 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import AnimatedScreen from '../../../components/AnimatedScreen';
 import OfferCountdownText from '../../../components/OfferCountdownText';
 import { colors, fonts } from '../../../helpers/styles';
-import { ShopOffer, ShopProduct, ShopWithOffers } from '../../../types/shop';
+import { openPhoneDialer } from '../../../helpers/contactActions';
+import { showAppAlert } from '../../../services/appAlert';
+import { ShopOffer, ShopProduct, ShopService, ShopWithOffers } from '../../../types/shop';
 import {
   formatShopAddress,
   formatTodayOpeningHours,
   getFeaturedProducts,
-  isShopOpenNow,
+  isShopCurrentlyOpen,
   STORE_TABS,
   StoreTab,
 } from '../../../utils/shop';
@@ -35,7 +37,8 @@ const getShopInitial = (name: string) => name.trim().charAt(0).toUpperCase() || 
 
 type GalleryItem =
   | { key: string; type: 'product'; imageUri: string; product: ShopProduct }
-  | { key: string; type: 'offer'; imageUri: string; offer: ShopOffer };
+  | { key: string; type: 'offer'; imageUri: string; offer: ShopOffer }
+  | { key: string; type: 'service'; imageUri: string; service: ShopService };
 
 type StoreDetailScreenViewProps = {
   shop: ShopWithOffers;
@@ -48,6 +51,7 @@ type StoreDetailScreenViewProps = {
   onToggleWishlist: () => void;
   onOfferPress: (offer: ShopOffer) => void;
   onProductPress: (product: ShopProduct) => void;
+  onServicePress: (service: ShopService) => void;
   resolveImageUrl: (path?: string | null) => string | undefined;
 };
 
@@ -64,17 +68,32 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
   onToggleWishlist,
   onOfferPress,
   onProductPress,
+  onServicePress,
   resolveImageUrl,
 }) => {
   const [activeTab, setActiveTab] = useState<StoreTab>('Overview');
   const [heroError, setHeroError] = useState(false);
   const [logoError, setLogoError] = useState(false);
+  const [serviceFilter, setServiceFilter] = useState('All');
 
   const shopAddress = formatShopAddress(shop);
   const shopLogoUri = resolveImageUrl(shop.logo);
-  const openNow = isShopOpenNow(shop.openingHours) ?? shop.isOpen;
+  const openNow = isShopCurrentlyOpen(shop);
   const todayHours = formatTodayOpeningHours(shop.openingHours);
   const featuredProducts = useMemo(() => getFeaturedProducts(products), [products]);
+  const services = shop.services ?? [];
+  const serviceGenders = useMemo(() => {
+    const values = new Set(
+      services.map(item => item.gender).filter((value): value is string => Boolean(value)),
+    );
+    return ['All', ...['Men', 'Women', 'Unisex'].filter(label => values.has(label))];
+  }, [services]);
+  const filteredServices = useMemo(() => {
+    if (serviceFilter === 'All') {
+      return services;
+    }
+    return services.filter(item => item.gender === serviceFilter);
+  }, [serviceFilter, services]);
   const showHeroImage = Boolean(heroImageUri) && !heroError;
 
   useEffect(() => {
@@ -112,15 +131,106 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
       }
     });
 
+    services.forEach(service => {
+      const imageUri = resolveImageUrl(service.image);
+      if (imageUri && !imageUri.startsWith('file:')) {
+        items.push({
+          key: `service-${service.id}`,
+          type: 'service',
+          imageUri,
+          service,
+        });
+      }
+    });
+
     return items;
-  }, [products, resolveImageUrl, shop.offers]);
+  }, [products, resolveImageUrl, services, shop.offers]);
 
   const handleGalleryPress = (item: GalleryItem) => {
     if (item.type === 'product') {
       onProductPress(item.product);
       return;
     }
+    if (item.type === 'service') {
+      onServicePress(item.service);
+      return;
+    }
     onOfferPress(item.offer);
+  };
+
+  const handleCallShop = async () => {
+    try {
+      await openPhoneDialer(shop.phone);
+    } catch (error) {
+      showAppAlert(
+        'Could not call',
+        error instanceof Error ? error.message : 'Phone number is not available.',
+      );
+    }
+  };
+
+  const renderServiceCard = (service: ShopService) => {
+    const imageUri = resolveImageUrl(service.image);
+    const usableImage = imageUri && !imageUri.startsWith('file:') ? imageUri : undefined;
+    const metaParts = [service.duration, service.gender, service.pricingType]
+      .filter(Boolean)
+      .map(value =>
+        value === 'fixed' ? 'Fixed price' : value === 'hourly' ? 'Hourly' : value,
+      );
+
+    return (
+      <TouchableOpacity
+        key={service.id}
+        style={styles.serviceCard}
+        activeOpacity={0.88}
+        onPress={() => onServicePress(service)}
+      >
+        <View style={styles.serviceImageWrap}>
+          {usableImage ? (
+            <Image source={{ uri: usableImage }} style={styles.serviceImage} />
+          ) : (
+            <View style={styles.serviceImageFallback}>
+              <MaterialCommunityIcons name="hand-heart-outline" size={22} color={colors.primary} />
+            </View>
+          )}
+        </View>
+        <View style={styles.serviceBody}>
+          <Text style={styles.serviceTitle} numberOfLines={1}>
+            {service.title}
+          </Text>
+          {metaParts.length ? (
+            <Text style={styles.serviceMeta} numberOfLines={1}>
+              {metaParts.join(' · ')}
+            </Text>
+          ) : null}
+          {service.rating ? (
+            <View style={styles.serviceRatingRow}>
+              <MaterialCommunityIcons name="star" size={13} color="#F5A524" />
+              <Text style={styles.serviceRating}>{service.rating}</Text>
+            </View>
+          ) : null}
+          <View style={styles.servicePriceRow}>
+            {service.price ? <Text style={styles.servicePrice}>{service.price}</Text> : null}
+            {service.originalPrice ? (
+              <Text style={styles.serviceOriginal}>{service.originalPrice}</Text>
+            ) : null}
+          </View>
+        </View>
+        {shop.phone ? (
+          <TouchableOpacity
+            style={styles.serviceCallBtn}
+            activeOpacity={0.85}
+            onPress={event => {
+              event.stopPropagation();
+              void handleCallShop();
+            }}
+          >
+            <Text style={styles.serviceCallText}>Call</Text>
+            <MaterialCommunityIcons name="chevron-right" size={16} color={colors.white} />
+          </TouchableOpacity>
+        ) : null}
+      </TouchableOpacity>
+    );
   };
 
   const renderOfferCard = (offer: ShopOffer, compact = false) => {
@@ -381,7 +491,7 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
               <Image source={{ uri: item.imageUri }} style={styles.galleryImage} />
               <View style={styles.galleryBadge}>
                 <Text style={styles.galleryBadgeText}>
-                  {item.type === 'product' ? 'Product' : 'Offer'}
+                  {item.type === 'product' ? 'Product' : item.type === 'offer' ? 'Offer' : 'Service'}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -416,6 +526,53 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
       }
 
       return <View style={styles.productGrid}>{products.map(renderProductCard)}</View>;
+    }
+
+    if (activeTab === 'Services') {
+      if (!services.length) {
+        return (
+          <View style={styles.emptyStateCard}>
+            <MaterialCommunityIcons name="hand-heart-outline" size={28} color="#B8C2D3" />
+            <Text style={styles.emptyStateTitle}>No services listed</Text>
+            <Text style={styles.emptyStateText}>This store has not added services yet.</Text>
+          </View>
+        );
+      }
+
+      return (
+        <View>
+          {serviceGenders.length > 1 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.serviceFilters}
+            >
+              {serviceGenders.map(label => {
+                const selected = serviceFilter === label;
+                return (
+                  <TouchableOpacity
+                    key={label}
+                    style={[styles.serviceChip, selected && styles.serviceChipActive]}
+                    onPress={() => setServiceFilter(label)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.serviceChipText, selected && styles.serviceChipTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          ) : null}
+          {filteredServices.length ? (
+            filteredServices.map(renderServiceCard)
+          ) : (
+            <View style={styles.emptyStateCard}>
+              <Text style={styles.emptyStateText}>No services in this filter.</Text>
+            </View>
+          )}
+        </View>
+      );
     }
 
     return renderOverview();
@@ -538,13 +695,22 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
               {shop.offerCount
                 ? renderStatPill('tag-multiple-outline', `${shop.offerCount} Offer${shop.offerCount === 1 ? '' : 's'}`)
                 : null}
-              {shop.serviceCount
-                ? renderStatPill('hand-heart-outline', `${shop.serviceCount} Service${shop.serviceCount === 1 ? '' : 's'}`)
+              {(shop.serviceCount || services.length)
+                ? renderStatPill(
+                    'hand-heart-outline',
+                    `${shop.serviceCount || services.length} Service${
+                      (shop.serviceCount || services.length) === 1 ? '' : 's'
+                    }`,
+                  )
                 : null}
             </View>
           </View>
 
-          <View style={styles.tabSwitcher}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.tabSwitcher}
+          >
             {STORE_TABS.map(tab => {
               const isActive = activeTab === tab;
 
@@ -559,7 +725,7 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
                 </TouchableOpacity>
               );
             })}
-          </View>
+          </ScrollView>
 
           <View style={styles.tabContent}>{renderTabContent()}</View>
         </AnimatedScreen>
@@ -780,12 +946,13 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 4,
     marginBottom: 20,
+    gap: 4,
   },
   tabPill: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 10,
+    paddingHorizontal: 14,
     borderRadius: 10,
   },
   tabPillActive: {
@@ -1146,6 +1313,112 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     textAlign: 'center',
     lineHeight: 18,
+  },
+  serviceFilters: {
+    gap: 8,
+    paddingBottom: 14,
+  },
+  serviceChip: {
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+  },
+  serviceChipActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  serviceChipText: {
+    fontSize: 13,
+    fontFamily: fonts.BOLD,
+    color: colors.primary,
+  },
+  serviceChipTextActive: {
+    color: colors.white,
+  },
+  serviceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#EEF2F8',
+    gap: 12,
+  },
+  serviceImageWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: colors.primarySoft,
+  },
+  serviceImage: {
+    width: '100%',
+    height: '100%',
+  },
+  serviceImageFallback: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  serviceBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  serviceTitle: {
+    fontSize: 15,
+    fontFamily: fonts.BOLD,
+    color: colors.text,
+  },
+  serviceMeta: {
+    marginTop: 3,
+    fontSize: 12,
+    color: colors.mutedText,
+  },
+  serviceRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  serviceRating: {
+    fontSize: 12,
+    fontFamily: fonts.BOLD,
+    color: colors.text,
+  },
+  servicePriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 6,
+  },
+  servicePrice: {
+    fontSize: 15,
+    fontFamily: fonts.BOLD,
+    color: colors.primary,
+  },
+  serviceOriginal: {
+    fontSize: 12,
+    color: colors.mutedText,
+    textDecorationLine: 'line-through',
+  },
+  serviceCallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.primary,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  serviceCallText: {
+    fontSize: 13,
+    fontFamily: fonts.BOLD,
+    color: colors.white,
   },
   loadingBlock: {
     alignItems: 'center',

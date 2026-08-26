@@ -49,12 +49,8 @@ export const API_ENDPOINTS = {
         ? `&category_id=${encodeURIComponent(categoryId.trim())}`
         : ''
     }`,
-  shopsByLocation: (lat: number, lng: number, categoryId?: string) =>
-    `/shop?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}${
-      categoryId && categoryId.trim() && categoryId !== 'all'
-        ? `&category_id=${encodeURIComponent(categoryId.trim())}`
-        : ''
-    }`,
+  shops: '/shop',
+  shopsAll: '/shop/all',
   shopsAllByCategory: (categoryId: string) =>
     `/shop/all?category=${encodeURIComponent(categoryId.trim())}`,
   shopSearch: (query: string, offerTypeId?: string) => {
@@ -69,6 +65,7 @@ export const API_ENDPOINTS = {
   dailyRewardsCalendar: (date: string) =>
     `/shop/offers/calender?date=${encodeURIComponent(date.trim())}`,
   userMilestones: '/milestones',
+  userMilestoneById: (id: string) => `/milestones/${encodeURIComponent(id.trim())}`,
   referralsMyCode: '/referrals/my-code',
   referralsList: '/referrals/list',
   /** POST contacts body → registered Bachat Bazaar users only. Under /api/user. */
@@ -155,7 +152,7 @@ export const API_ENDPOINTS = {
     `/help-articles/by-slug/${encodeURIComponent(slug.trim())}`,
   /** Bachat Circle — under /api (BACHAT_CIRCLE_API_BASE_URL). */
   bachatCircleCreate: '/bachatcircle',
-  bachatCircleMine: '/bachatcircle',
+  bachatCircleMine: '/bachatcircle/my-circles',
   bachatCircleById: (circleId: string) =>
     `/bachatcircle/${encodeURIComponent(circleId.trim())}`,
   bachatCircleInvite: (circleId: string) =>

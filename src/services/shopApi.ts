@@ -31,14 +31,6 @@ const findShopIdByMerchantId = (shops: Shop[], merchantId: string): string | nul
 };
 
 export const shopApi = {
-  fetchShopsByLocation(latitude: number, longitude: number, categoryId?: string, token?: string) {
-    return apiRequest<unknown>(API_ENDPOINTS.shopsByLocation(latitude, longitude, categoryId), {
-      method: 'GET',
-      token,
-      baseUrl: SHOPS_API_BASE_URL,
-    }).then(parseShopsResponse);
-  },
-
   fetchShopsByCity(city: string, categoryId?: string, token?: string) {
     const normalizedCity = city.trim();
     if (!normalizedCity) {
@@ -473,42 +465,15 @@ export const shopApi = {
     return this.fetchOfferBanners(normalizedCategoryId, token);
   },
 
-  async enrichShopListLogo(shop: ShopWithOffers, token?: string): Promise<ShopWithOffers> {
-    if (shop.logo) {
-      return shop;
-    }
-
-    try {
-      const detail = await this.fetchShopById(shop.id, token);
-      if (!detail.logo) {
-        return shop;
-      }
-
-      return {
-        ...shop,
-        logo: detail.logo,
-      };
-    } catch {
-      return shop;
-    }
-  },
-
   async fetchHomeShops(
     categoryId: string,
     token?: string,
-    coordinates?: { latitude: number; longitude: number } | null,
   ): Promise<ShopWithOffers[]> {
     const normalizedCategoryId = categoryId.trim();
     const endpoint =
       normalizedCategoryId && normalizedCategoryId !== 'all'
         ? API_ENDPOINTS.shopsAllByCategory(normalizedCategoryId)
-        : coordinates
-          ? API_ENDPOINTS.shopsByLocation(coordinates.latitude, coordinates.longitude)
-          : null;
-
-    if (!endpoint) {
-      return [];
-    }
+        : API_ENDPOINTS.shopsAll;
 
     const payload = await apiRequest<unknown>(endpoint, {
       method: 'GET',
@@ -516,11 +481,8 @@ export const shopApi = {
       baseUrl: SHOPS_API_BASE_URL,
     });
 
-    const shops = parseShopsWithOffersResponse(payload);
-
-    // Use offers embedded in the shops list only. Do not prefetch
-    // GET /shop/offers/:shopId on Home — fetch offer detail when the user taps an offer.
-    return Promise.all(shops.map(shop => this.enrichShopListLogo(shop, token)));
+    // List payload only — never GET /shop/:id (store detail) from Home or refresh.
+    return parseShopsWithOffersResponse(payload);
   },
 
   /**
