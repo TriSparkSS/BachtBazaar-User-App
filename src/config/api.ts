@@ -68,8 +68,11 @@ export const API_ENDPOINTS = {
   userMilestoneById: (id: string) => `/milestones/${encodeURIComponent(id.trim())}`,
   referralsMyCode: '/referrals/my-code',
   referralsList: '/referrals/list',
-  /** POST contacts body → registered Bachat Bazaar users only. Under /api/user. */
-  contactsSync: '/contacts/sync',
+  /** GET /contacts/search?q=&page=&limit= — registered users. Under /api/user. */
+  contactsSearch: (query: string, page = 1, limit = 10) =>
+    `/contacts/search?q=${encodeURIComponent(query.trim())}&page=${encodeURIComponent(
+      String(page),
+    )}&limit=${encodeURIComponent(String(limit))}`,
   offerById: (offerId: string) => `/shop/offer/${encodeURIComponent(offerId)}`,
   shopLogo: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/logo`,
   shopBanner: (shopId: string) => `/shop/${encodeURIComponent(shopId)}/banner`,

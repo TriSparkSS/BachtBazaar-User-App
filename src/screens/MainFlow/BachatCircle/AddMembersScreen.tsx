@@ -1,7 +1,8 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Keyboard,
   StyleSheet,
   Text,
   TextInput,
@@ -21,7 +22,6 @@ import {
   CircleInviteableUserDto,
   bachatCircleApi,
 } from '../../../services/bachatCircleApi';
-import { loadDeviceContactsForSync } from '../../../services/deviceContacts';
 import { maskPhoneNumber } from '../../../utils/phone';
 import MemberAvatar from './components/MemberAvatar';
 import { circleStorage } from './circleStorage';
@@ -35,6 +35,9 @@ const AVATAR_COLORS = [
   colors.pastelYellow,
   colors.primarySoft,
 ];
+
+const SEARCH_MIN_CHARS = 2;
+const SEARCH_DEBOUNCE_MS = 300;
 
 const normalizePhone = (value: string) =>
   value.replace(/\D/g, '').replace(/^91/, '').slice(-10);
@@ -53,24 +56,34 @@ const AddMembersScreen = () => {
 
   const [query, setQuery] = useState('');
   const [circle, setCircle] = useState<BachatCircleDto | null>(null);
-  const [registeredUsers, setRegisteredUsers] = useState<CircleInviteableUserDto[]>(
-    [],
-  );
-  const [loading, setLoading] = useState(true);
+  const [searchUsers, setSearchUsers] = useState<CircleInviteableUserDto[]>([]);
+  const [loadingCircle, setLoadingCircle] = useState(true);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [invitingPhone, setInvitingPhone] = useState<string | null>(null);
   const [locallyInvited, setLocallyInvited] = useState<Record<string, true>>({});
+  const [invitedUserByPhone, setInvitedUserByPhone] = useState<
+    Record<string, CircleInviteableUserDto>
+  >({});
 
+  const searchRequestIdRef = useRef(0);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const authTokenRef = useRef(authToken);
   const myPhone = normalizePhone(currentUser?.phone || '');
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    authTokenRef.current = authToken;
+  }, [authToken]);
+
+  const loadCircle = useCallback(async () => {
     const token = authToken?.trim();
     if (!token || !circleId) {
-      setLoading(false);
+      setLoadingCircle(false);
       return;
     }
 
     try {
-      setLoading(true);
+      setLoadingCircle(true);
       const detail = await bachatCircleApi.getCircle(token, circleId);
       setCircle(detail);
       await circleStorage.save({
@@ -82,29 +95,113 @@ const AddMembersScreen = () => {
         memberIds: detail.members.map(m => m.userId),
         pendingInviteIds: detail.pendingInvitations.map(i => i.id),
       });
-
-      const deviceContacts = await loadDeviceContactsForSync();
-      const registered = await bachatCircleApi.syncRegisteredContacts(
-        token,
-        deviceContacts,
-      );
-      setRegisteredUsers(registered);
     } catch (error) {
       showAppAlert(
         'Could not load members',
         error instanceof Error ? error.message : 'Please try again.',
       );
-      setRegisteredUsers([]);
     } finally {
-      setLoading(false);
+      setLoadingCircle(false);
     }
   }, [authToken, category, circleId, circleName, description]);
 
   useFocusEffect(
     useCallback(() => {
-      void load();
-    }, [load]),
+      void loadCircle();
+    }, [loadCircle]),
   );
+
+  const runSearch = useCallback(async (value: string) => {
+    const trimmed = value.trim();
+    const requestId = ++searchRequestIdRef.current;
+    const token = authTokenRef.current?.trim();
+
+    if (trimmed.length < SEARCH_MIN_CHARS) {
+      setSearchUsers([]);
+      setSearchError(null);
+      setSearching(false);
+      return;
+    }
+
+    if (!token) {
+      setSearchUsers([]);
+      setSearchError('Please log in to search users.');
+      setSearching(false);
+      return;
+    }
+
+    setSearching(true);
+    setSearchError(null);
+
+    try {
+      const users = await bachatCircleApi.searchContacts(token, trimmed, 1, 10);
+      if (searchRequestIdRef.current !== requestId) {
+        return;
+      }
+      setSearchUsers(
+        users.filter(user => !myPhone || user.phone !== myPhone),
+      );
+    } catch (error) {
+      if (searchRequestIdRef.current !== requestId) {
+        return;
+      }
+      setSearchUsers([]);
+      setSearchError(
+        error instanceof Error ? error.message : 'Search failed. Please try again.',
+      );
+    } finally {
+      if (searchRequestIdRef.current === requestId) {
+        setSearching(false);
+      }
+    }
+  }, [myPhone]);
+
+  useEffect(() => {
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = null;
+    }
+
+    const trimmed = query.trim();
+    if (trimmed.length < SEARCH_MIN_CHARS) {
+      searchRequestIdRef.current += 1;
+      setSearchUsers([]);
+      setSearchError(null);
+      setSearching(false);
+      return;
+    }
+
+    searchTimerRef.current = setTimeout(() => {
+      void runSearch(trimmed);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      if (searchTimerRef.current) {
+        clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = null;
+      }
+    };
+  }, [query, runSearch]);
+
+  const handleSearchChange = useCallback((value: string) => {
+    setQuery(value);
+    if (!value.trim()) {
+      searchRequestIdRef.current += 1;
+      setSearchUsers([]);
+      setSearchError(null);
+      setSearching(false);
+    }
+  }, []);
+
+  const handleSearchSubmit = useCallback(() => {
+    const trimmed = query.trim();
+    Keyboard.dismiss();
+    if (!trimmed) {
+      return;
+    }
+    setQuery(trimmed);
+    void runSearch(trimmed);
+  }, [query, runSearch]);
 
   const memberPhones = useMemo(() => {
     const set = new Set<string>();
@@ -124,28 +221,6 @@ const AddMembersScreen = () => {
     return set;
   }, [circle?.pendingInvitations]);
 
-  const filteredUsers = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return registeredUsers
-      .filter(user => {
-        if (!user.isRegistered) {
-          return false;
-        }
-        if (myPhone && user.phone === myPhone) {
-          return false;
-        }
-        if (!q) {
-          return true;
-        }
-        return (
-          user.name.toLowerCase().includes(q) ||
-          user.phone.includes(q) ||
-          maskPhoneNumber(user.phone).toLowerCase().includes(q)
-        );
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [myPhone, query, registeredUsers]);
-
   const getStatus = (phone: string): InviteStatus => {
     if (memberPhones.has(phone)) {
       return 'member';
@@ -162,13 +237,6 @@ const AddMembersScreen = () => {
       showAppAlert('Login required', 'Please log in to invite members.');
       return;
     }
-    if (!user.isRegistered) {
-      showAppAlert(
-        'Not registered',
-        'Only Bachat Bazaar registered users can be invited to this circle.',
-      );
-      return;
-    }
     if (invitingPhone || getStatus(user.phone) !== 'invite') {
       return;
     }
@@ -180,14 +248,8 @@ const AddMembersScreen = () => {
         circleId,
         user.phone,
       );
-      if (!result.isRegistered) {
-        showAppAlert(
-          'Not registered',
-          'Only Bachat Bazaar registered users can be invited to this circle.',
-        );
-        return;
-      }
       setLocallyInvited(prev => ({ ...prev, [user.phone]: true }));
+      setInvitedUserByPhone(prev => ({ ...prev, [user.phone]: user }));
       showAppAlert(
         'Invite sent',
         result.message || `Invitation sent to ${user.name}.`,
@@ -209,6 +271,8 @@ const AddMembersScreen = () => {
   };
 
   const pending = circle?.pendingInvitations || [];
+  const trimmedQuery = query.trim();
+  const showSearchHint = trimmedQuery.length > 0 && trimmedQuery.length < SEARCH_MIN_CHARS;
 
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
@@ -222,12 +286,12 @@ const AddMembersScreen = () => {
 
       <View style={styles.banner}>
         <Text style={styles.bannerText}>
-          Phone contacts sync hote hain. Sirf Bachat Bazaar registered users dikhte
-          hain — Invite se invitation jayegi.
+          Search Bachat Bazaar users by name, then Invite. Pending invitations
+          dikhengi neeche.
         </Text>
         <View style={styles.bannerIcon}>
           <MaterialCommunityIcons
-            name="shield-account"
+            name="account-search"
             size={28}
             color={circleColors.green}
           />
@@ -238,24 +302,28 @@ const AddMembersScreen = () => {
         <MaterialCommunityIcons name="magnify" size={20} color={circleColors.muted} />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search registered users..."
+          placeholder="Search users..."
           placeholderTextColor={circleColors.muted}
           value={query}
-          onChangeText={setQuery}
+          onChangeText={handleSearchChange}
+          onSubmitEditing={handleSearchSubmit}
+          returnKeyType="search"
           autoCorrect={false}
           autoCapitalize="none"
         />
         {query.length > 0 ? (
-          <TouchableOpacity onPress={() => setQuery('')} hitSlop={8}>
+          <TouchableOpacity
+            onPress={() => handleSearchChange('')}
+            hitSlop={8}
+          >
             <MaterialCommunityIcons name="close-circle" size={18} color={circleColors.muted} />
           </TouchableOpacity>
         ) : null}
       </View>
 
-      {loading ? (
+      {loadingCircle ? (
         <View style={styles.loading}>
           <ActivityIndicator color={circleColors.green} />
-          <Text style={styles.loadingText}>Syncing contacts…</Text>
         </View>
       ) : (
         <FlatList
@@ -267,28 +335,41 @@ const AddMembersScreen = () => {
             <View>
               <View style={[styles.sectionHeader, styles.sectionGreen]}>
                 <MaterialCommunityIcons
-                  name="account-group"
+                  name="account-search"
                   size={18}
                   color={circleColors.green}
                 />
                 <Text style={[styles.sectionTitle, { color: circleColors.green }]}>
-                  Registered Users
+                  Search results
                 </Text>
                 <View style={[styles.countBadge, styles.countGreen]}>
                   <Text style={[styles.countText, { color: circleColors.green }]}>
-                    {filteredUsers.length}
+                    {searchUsers.length}
                   </Text>
                 </View>
               </View>
 
-              {filteredUsers.length === 0 ? (
+              {searching ? (
+                <View style={styles.searchingRow}>
+                  <ActivityIndicator color={circleColors.green} size="small" />
+                  <Text style={styles.empty}>Searching…</Text>
+                </View>
+              ) : searchError ? (
+                <Text style={styles.empty}>{searchError}</Text>
+              ) : showSearchHint ? (
                 <Text style={styles.empty}>
-                  {query.trim()
-                    ? 'No registered user matches this search.'
-                    : 'No registered contacts found in your phone book.'}
+                  Type at least {SEARCH_MIN_CHARS} characters to search.
+                </Text>
+              ) : trimmedQuery.length < SEARCH_MIN_CHARS ? (
+                <Text style={styles.empty}>
+                  Type a name to find registered Bachat Bazaar users.
+                </Text>
+              ) : searchUsers.length === 0 ? (
+                <Text style={styles.empty}>
+                  No registered user matches “{trimmedQuery}”.
                 </Text>
               ) : (
-                filteredUsers.map((user, index) => {
+                searchUsers.map((user, index) => {
                   const status = getStatus(user.phone);
                   const busy = invitingPhone === user.phone;
                   const initial = user.name.trim().slice(0, 1).toUpperCase() || 'U';
@@ -310,7 +391,10 @@ const AddMembersScreen = () => {
                       />
                       <View style={styles.rowText}>
                         <Text style={styles.name}>{user.name}</Text>
-                        <Text style={styles.phone}>{maskPhoneNumber(user.phone)}</Text>
+                        <Text style={styles.phone}>
+                          {maskPhoneNumber(user.phone)}
+                          {user.city ? ` · ${user.city}` : ''}
+                        </Text>
                       </View>
                       <TouchableOpacity
                         style={[
@@ -347,7 +431,7 @@ const AddMembersScreen = () => {
                   color={circleColors.orange}
                 />
                 <Text style={[styles.sectionTitle, { color: circleColors.orange }]}>
-                  Pending Invites
+                  Invitations sent
                 </Text>
                 <View style={[styles.countBadge, styles.countOrange]}>
                   <Text style={[styles.countText, { color: circleColors.orange }]}>
@@ -357,28 +441,37 @@ const AddMembersScreen = () => {
               </View>
 
               {pending.length === 0 ? (
-                <Text style={styles.empty}>No pending invites yet.</Text>
+                <Text style={styles.empty}>No invitations sent yet.</Text>
               ) : (
-                pending.map(invite => (
-                  <View key={invite.id} style={styles.row}>
-                    <View style={styles.pendingAvatar}>
-                      <MaterialCommunityIcons
-                        name="clock-outline"
-                        size={22}
-                        color={circleColors.orange}
-                      />
+                pending.map(invite => {
+                  const phone = normalizePhone(invite.phone);
+                  const invitedUser = invitedUserByPhone[phone];
+                  const title =
+                    invitedUser?.name || maskPhoneNumber(invite.phone);
+                  const subtitle = invitedUser
+                    ? `${maskPhoneNumber(invite.phone)} · ${invite.status}`
+                    : invite.status;
+                  return (
+                    <View key={invite.id} style={styles.row}>
+                      <View style={styles.pendingAvatar}>
+                        <MaterialCommunityIcons
+                          name="clock-outline"
+                          size={22}
+                          color={circleColors.orange}
+                        />
+                      </View>
+                      <View style={styles.rowText}>
+                        <Text style={styles.name}>{title}</Text>
+                        <Text style={styles.phone}>{subtitle}</Text>
+                      </View>
+                      <View style={[styles.inviteBtn, styles.inviteBtnDone]}>
+                        <Text style={[styles.inviteText, styles.inviteTextDone]}>
+                          Invited
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.rowText}>
-                      <Text style={styles.name}>{maskPhoneNumber(invite.phone)}</Text>
-                      <Text style={styles.phone}>{invite.status}</Text>
-                    </View>
-                    <View style={[styles.inviteBtn, styles.inviteBtnDone]}>
-                      <Text style={[styles.inviteText, styles.inviteTextDone]}>
-                        Invited
-                      </Text>
-                    </View>
-                  </View>
-                ))
+                  );
+                })
               )}
             </View>
           )}
@@ -467,7 +560,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
   },
-  loadingText: { color: circleColors.muted, fontSize: 13 },
+  searchingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginVertical: 10,
+  },
   listContent: { paddingBottom: 16 },
   sectionHeader: {
     marginHorizontal: 16,

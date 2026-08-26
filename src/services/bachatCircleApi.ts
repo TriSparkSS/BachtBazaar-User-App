@@ -79,6 +79,8 @@ export type CircleInviteableUserDto = {
   phone: string;
   /** Always true for inviteable list entries — unregistered contacts are excluded. */
   isRegistered: boolean;
+  city?: string;
+  profileImage?: string;
 };
 
 export type BachatCircleDto = {
@@ -535,6 +537,13 @@ const parseInviteableUser = (
     name,
     phone,
     isRegistered: true,
+    city: pickString(record.city, value.city),
+    profileImage: pickString(
+      record.profileImage,
+      value.profileImage,
+      record.avatar,
+      value.avatar,
+    ),
   };
 };
 
@@ -635,36 +644,32 @@ export const bachatCircleApi = {
   },
 
   /**
-   * POST /api/user/contacts/sync — returns only registered Bachat Bazaar users.
-   * Unregistered contacts from the response are ignored.
+   * GET /api/user/contacts/search?q=&page=&limit=
+   * Search registered Bachat Bazaar users by name or phone.
    */
-  async syncRegisteredContacts(
+  async searchContacts(
     token: string,
-    contacts: Array<{ name: string; phone: string }>,
+    query: string,
+    page = 1,
+    limit = 10,
   ): Promise<CircleInviteableUserDto[]> {
-    if (!contacts.length) {
+    const trimmed = query.trim();
+    if (!trimmed) {
       return [];
     }
 
-    const payload = await apiRequest<unknown>(API_ENDPOINTS.contactsSync, {
-      method: 'POST',
-      token,
-      baseUrl: API_BASE_URL,
-      body: {
-        contacts: contacts.map(contact => ({
-          name: contact.name.trim() || 'Contact',
-          phone: contact.phone.trim(),
-        })),
+    const payload = await apiRequest<unknown>(
+      API_ENDPOINTS.contactsSearch(trimmed, page, limit),
+      {
+        method: 'GET',
+        token,
+        baseUrl: API_BASE_URL,
       },
-    });
+    );
 
-    if (payload == null) {
-      return [];
-    }
-
-    // Only use registeredUsers — never nonRegisteredContacts.
-    const registered = asRegisteredArray(payload) ?? [];
-    const users = registered
+    const list =
+      extractArray(payload, ['users', 'registeredUsers', 'items']) || [];
+    const users = list
       .map(item => parseInviteableUser(item, { fromRegisteredBucket: true }))
       .filter((u): u is CircleInviteableUserDto => Boolean(u && u.isRegistered));
 
@@ -675,14 +680,6 @@ export const bachatCircleApi = {
       }
     }
     return Array.from(byPhone.values());
-  },
-
-  /** @deprecated Use syncRegisteredContacts with device contacts body. */
-  async listInviteableUsers(
-    token: string,
-    _query?: string,
-  ): Promise<CircleInviteableUserDto[]> {
-    return this.syncRegisteredContacts(token, []);
   },
 
   async myInvitations(token: string): Promise<CircleInvitationDto[]> {
