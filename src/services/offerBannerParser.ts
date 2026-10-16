@@ -226,6 +226,7 @@ const normalizeOfferBanner = (value: unknown): OfferBanner | undefined => {
         shop?.verified,
       ) ?? false,
     terms: pickTerms(value),
+    isTextShown: pickBoolean(value.is_text_shown, value.isTextShown) ?? true,
   };
 };
 
@@ -277,18 +278,20 @@ const normalizeAdminBanner = (value: unknown): OfferBanner | undefined => {
 
   return {
     id,
-    title: discount || title,
-    subtitle:
-      pickString(
-        value.subtitle,
-        value.description,
-        value.caption,
-        value.shortDescription,
-        value.short_description,
-      ) || 'Bacht Bazaar',
-    badgeLabel:
-      pickString(value.badgeLabel, value.badge_label, value.badgeText, value.badge_text, value.tag) ||
-      'LIMITED TIME',
+    title,
+    subtitle: pickString(
+      value.subtitle,
+      value.caption,
+      value.shortDescription,
+      value.short_description,
+    ),
+    badgeLabel: pickString(
+      value.badgeLabel,
+      value.badge_label,
+      value.badgeText,
+      value.badge_text,
+      value.tag,
+    ),
     discount,
     image: pickString(
       value.bannerImage,
@@ -331,6 +334,7 @@ const normalizeAdminBanner = (value: unknown): OfferBanner | undefined => {
       pickBoolean(value.isVerified, value.is_verified, shop?.isVerified, shop?.verified) ?? false,
     terms: pickTerms(value),
     isAdminBanner: true,
+    isTextShown: pickBoolean(value.is_text_shown, value.isTextShown) ?? false,
   };
 };
 

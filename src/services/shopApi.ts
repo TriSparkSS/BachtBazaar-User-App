@@ -16,10 +16,12 @@ import { parseAdminBannersResponse, parseOfferBannersResponse } from './offerBan
 import { parseOfferDetailResponse } from './offerResponseParser';
 import { parseSearchResponse } from './searchResponseParser';
 import {
+  encodeBytesAsDataUri,
   parseShopDetailResponse,
   parseShopOffersResponse,
   parseShopsResponse,
   parseShopsWithOffersResponse,
+  resolveShopMediaFromApiValue,
 } from './shopResponseParser';
 
 const shopMatchesMerchantId = (shop: Shop | undefined, merchantId: string): boolean =>
@@ -185,7 +187,11 @@ export const shopApi = {
     }).then(payload => parseShopOffersResponse(payload, shopId));
   },
 
-  fetchDailyRewardsCalendar(date: string, token?: string): Promise<DailyRewardsCalendar> {
+  fetchDailyRewardsCalendar(
+    date: string,
+    token?: string,
+    userId?: string,
+  ): Promise<DailyRewardsCalendar> {
     const normalizedDate = date.trim();
     if (!normalizedDate) {
       return Promise.reject(new Error('Date is required.'));
@@ -195,7 +201,9 @@ export const shopApi = {
       method: 'GET',
       token,
       baseUrl: SHOPS_API_BASE_URL,
-    }).then(payload => parseDailyRewardsCalendarResponse(payload, normalizedDate));
+    }).then(payload =>
+      parseDailyRewardsCalendarResponse(payload, normalizedDate, userId?.trim() || ''),
+    );
   },
 
   searchShopsProductsAndOffers(
@@ -228,13 +236,16 @@ export const shopApi = {
       method: 'GET',
       token,
       baseUrl: SHOPS_API_BASE_URL,
-    }).then(payload => {
+    }).then(async payload => {
       const shop = parseShopDetailResponse(payload, normalizedId);
       if (!shop) {
         throw new Error('Shop not found.');
       }
-
-      return shop;
+      if (shop.logo || !shop.hasLogoAsset) {
+        return shop;
+      }
+      const logo = await this.fetchShopLogoDataUri(normalizedId, token);
+      return logo ? { ...shop, logo } : shop;
     });
   },
 
@@ -256,6 +267,29 @@ export const shopApi = {
 
       return offer;
     });
+  },
+
+  async resolveShopIdForOffer(
+    offerId: string,
+    token: string,
+    fallbackShopId?: string,
+  ): Promise<string> {
+    const known = fallbackShopId?.trim() || '';
+    if (known && known !== offerId) {
+      return known;
+    }
+
+    try {
+      const offer = await this.fetchOfferById(offerId, '', token);
+      const shopId = offer.shopId?.trim() || '';
+      if (shopId && shopId !== offerId) {
+        return shopId;
+      }
+    } catch {
+      // Keep redeem tracking optional if shop lookup fails.
+    }
+
+    return '';
   },
 
   async fetchShopByIdWithOffers(shopId: string, token?: string): Promise<ShopWithOffers> {
@@ -311,33 +345,55 @@ export const shopApi = {
     );
   },
 
-  claimDirectUserOffer(offerId: string, userId: string, token: string) {
+  claimDirectUserOffer(
+    offerId: string,
+    userId: string,
+    token: string,
+    coordinates?: { latitude?: number; longitude?: number } | null,
+  ) {
     const normalizedOfferId = offerId.trim();
     const normalizedUserId = userId.trim();
+    const latitude = Number(coordinates?.latitude);
+    const longitude = Number(coordinates?.longitude);
     if (!normalizedOfferId) {
       return Promise.reject(new Error('Offer id is required.'));
     }
     if (!normalizedUserId) {
       return Promise.reject(new Error('User id is required.'));
     }
-
-    const body = new URLSearchParams();
-    body.append('offerId', normalizedOfferId);
-    body.append('userId', normalizedUserId);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      return Promise.reject(
+        new Error('Your current location is required to redeem this offer.'),
+      );
+    }
 
     return apiRequest<{
       success?: boolean;
       message?: string;
       data?: {
         offerTitle?: string;
+        redemptionCode?: string;
         claimedAt?: string;
         status?: string;
+        distanceMeters?: number;
       };
     }>(API_ENDPOINTS.claimDirectUserOffer(normalizedOfferId), {
       method: 'POST',
       token,
-      body,
       baseUrl: ADMIN_API_BASE_URL,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: {
+        offerId: normalizedOfferId,
+        userId: normalizedUserId,
+        latitude,
+        longitude,
+        lat: latitude,
+        lng: longitude,
+        location: { latitude, longitude },
+        coordinates: { latitude, longitude },
+      },
     });
   },
 
@@ -468,12 +524,13 @@ export const shopApi = {
   async fetchHomeShops(
     categoryId: string,
     token?: string,
+    radiusKm?: number,
   ): Promise<ShopWithOffers[]> {
     const normalizedCategoryId = categoryId.trim();
     const endpoint =
       normalizedCategoryId && normalizedCategoryId !== 'all'
-        ? API_ENDPOINTS.shopsAllByCategory(normalizedCategoryId)
-        : API_ENDPOINTS.shopsAll;
+        ? API_ENDPOINTS.shopsAllByCategory(normalizedCategoryId, radiusKm)
+        : API_ENDPOINTS.shopsAll(radiusKm);
 
     const payload = await apiRequest<unknown>(endpoint, {
       method: 'GET',
@@ -482,7 +539,80 @@ export const shopApi = {
     });
 
     // List payload only — never GET /shop/:id (store detail) from Home or refresh.
-    return parseShopsWithOffersResponse(payload);
+    const shops = parseShopsWithOffersResponse(payload);
+    return this.hydrateShopLogos(shops, token);
+  },
+
+  async fetchShopLogoDataUri(shopId: string, token?: string): Promise<string | undefined> {
+    const normalizedId = shopId.trim();
+    if (!normalizedId) {
+      return undefined;
+    }
+
+    try {
+      const response = await fetch(
+        `${SHOPS_API_BASE_URL}${API_ENDPOINTS.shopLogo(normalizedId)}`,
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'image/*,application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        },
+      );
+      if (!response.ok) {
+        return undefined;
+      }
+
+      const contentType = response.headers.get('content-type') ?? '';
+      if (contentType.includes('application/json')) {
+        const payload = (await response.json()) as Record<string, unknown>;
+        return (
+          resolveShopMediaFromApiValue(payload.logo) ??
+          resolveShopMediaFromApiValue(payload.data) ??
+          resolveShopMediaFromApiValue(payload)
+        );
+      }
+      if (contentType.includes('text/html')) {
+        return undefined;
+      }
+
+      const buffer = await response.arrayBuffer();
+      if (!buffer.byteLength) {
+        return undefined;
+      }
+      return encodeBytesAsDataUri(
+        buffer,
+        contentType.split(';')[0]?.trim() || 'image/jpeg',
+      );
+    } catch {
+      return undefined;
+    }
+  },
+
+  async hydrateShopLogos<T extends Shop>(shops: T[], token?: string): Promise<T[]> {
+    const missing = shops.filter(shop => !shop.logo && shop.hasLogoAsset && shop.id);
+    if (!missing.length) {
+      return shops;
+    }
+
+    const logos = await Promise.all(
+      missing.map(async shop => ({
+        id: shop.id,
+        logo: await this.fetchShopLogoDataUri(shop.id, token),
+      })),
+    );
+    const logoById = new Map(
+      logos.filter(item => item.logo).map(item => [item.id, item.logo as string]),
+    );
+    if (!logoById.size) {
+      return shops;
+    }
+
+    return shops.map(shop => {
+      const logo = logoById.get(shop.id);
+      return logo ? { ...shop, logo } : shop;
+    });
   },
 
   /**

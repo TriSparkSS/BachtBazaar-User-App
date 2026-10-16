@@ -14,10 +14,43 @@ export interface ShopOpeningHours {
   sunday?: ShopOpeningDay;
 }
 
+export interface ShopManualOverride {
+  status?: string;
+  reason?: string;
+  closedUntil?: string | null;
+  updatedAt?: string;
+}
+
+export interface ShopDeliveryPricingWindow {
+  isEnabled?: boolean;
+  ratePerKm?: number;
+  flatSurcharge?: number;
+  startTime?: string;
+  endTime?: string;
+}
+
+export interface ShopDeliveryPricing {
+  baseFee?: number;
+  ratePerKm?: number;
+  minimumDeliveryFee?: number;
+  nightConfig?: ShopDeliveryPricingWindow;
+  peakConfig?: ShopDeliveryPricingWindow;
+}
+
+export interface ShopDeliveryQuote {
+  isAvailable?: boolean;
+  distanceKm?: number;
+  /** Merchant delivery fee only — never includes platform fee. */
+  deliveryFee?: number;
+  tierApplied?: string;
+}
+
 export interface Shop {
   id: string;
   name: string;
   logo?: string;
+  /** True when the API sent a logo field (even if bytes were omitted from the list payload). */
+  hasLogoAsset?: boolean;
   coverImage?: string;
   tagline?: string;
   address?: string;
@@ -27,11 +60,17 @@ export interface Shop {
   rating?: string;
   ratingCount?: string;
   distance?: string;
+  latitude?: number;
+  longitude?: number;
   isOpen?: boolean;
+  /** Blue tick on Home / Store Detail — only from API `isBlueTickEnabled`. */
   isVerified?: boolean;
+  isBlueTickEnabled?: boolean;
   categories?: string[];
   categoryIds?: string[];
   openingHours?: ShopOpeningHours;
+  /** Merchant-set override, e.g. FORCE_CLOSED after weekly hours. */
+  manualOverride?: ShopManualOverride;
   merchantId?: string;
   merchantName?: string;
   city?: string;
@@ -41,6 +80,9 @@ export interface Shop {
    * Undefined when the API omits recognized fields — Product Detail hides cart/delivery.
    */
   providesDelivery?: boolean;
+  /** Live quote from shop detail `delivery` (peak/night already applied by API). */
+  delivery?: ShopDeliveryQuote;
+  deliveryPricing?: ShopDeliveryPricing;
 }
 
 export interface ShopProduct {
@@ -54,6 +96,10 @@ export interface ShopProduct {
   image?: string;
   price?: string;
   originalPrice?: string;
+  /** Payable / discounted amount. */
+  priceAmount?: number;
+  /** MRP / original amount when a discount exists. */
+  originalPriceAmount?: number;
   rating?: string;
   stock?: number;
   isFeatured?: boolean;
@@ -130,6 +176,15 @@ export interface OfferDetail extends ShopOffer {
   createdAt?: string;
 }
 
+export interface ShopServiceProvider {
+  name: string;
+  profileImage?: string;
+  experienceYears?: number;
+  designation?: string;
+  gender?: string;
+  specialisation?: string[];
+}
+
 export interface ShopService {
   id: string;
   shopId: string;
@@ -143,6 +198,7 @@ export interface ShopService {
   gender?: string;
   description?: string;
   isFeatured?: boolean;
+  provider?: ShopServiceProvider;
 }
 
 export interface ShopWithOffers extends Shop {

@@ -49,6 +49,7 @@ export type AppIconName =
   | 'help-articles'
   | 'contact'
   | 'language'
+  | 'area-radius'
   | 'bachat-circle';
 
 const iconMap: Record<AppIconName, string> = {
@@ -98,6 +99,7 @@ const iconMap: Record<AppIconName, string> = {
   'help-articles': 'book-open-page-variant-outline',
   contact: 'email-outline',
   language: 'translate',
+  'area-radius': 'map-marker-radius-outline',
   'bachat-circle': 'account-group-outline',
 };
 

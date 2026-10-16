@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Dimensions,
   Image,
-  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,8 +21,10 @@ import { useAppContext } from '../../../context/AppContext';
 import { shopApi } from '../../../services/shopApi';
 import { wishlistApi } from '../../../services/offerWishlistApi';
 import { cartApi, hasDifferentMerchantInCart } from '../../../services/cartApi';
+import { cartProductCache } from '../../../services/cartProductCache';
 import { colors, fonts } from '../../../helpers/styles';
 import { formatShopAddress, isShopCurrentlyOpen } from '../../../utils/shop';
+import { openStoreDirections } from '../../../utils/openStoreDirections';
 import { openChatWithNumber, openPhoneDialer } from '../../../helpers/contactActions';
 import { showAppAlert } from '../../../services/appAlert';
 import { ShopWithOffers } from '../../../types/shop';
@@ -124,6 +125,12 @@ const ProductDetail = () => {
             merchantId: detail.merchantId?.trim() || prev.merchantId,
             // delivery-status effect owns this flag — don't let shop GET clobber it.
             providesDelivery: prev.providesDelivery,
+            latitude: detail.latitude ?? prev.latitude,
+            longitude: detail.longitude ?? prev.longitude,
+            delivery: detail.delivery ?? prev.delivery,
+            deliveryPricing: detail.deliveryPricing ?? prev.deliveryPricing,
+            openingHours: detail.openingHours ?? prev.openingHours,
+            manualOverride: detail.manualOverride ?? prev.manualOverride,
           }));
         }
       })
@@ -236,8 +243,12 @@ const ProductDetail = () => {
   ];
 
   const handleGetDirections = () => {
-    const query = encodeURIComponent(shopAddress || shop.name);
-    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
+    void openStoreDirections({
+      latitude: shop.latitude,
+      longitude: shop.longitude,
+      label: shop.name,
+      addressFallback: shopAddress || shop.name,
+    });
   };
 
   const handleCall = async () => {
@@ -306,6 +317,7 @@ const ProductDetail = () => {
       }
 
       await cartApi.addToCart([{ productId, merchantId, quantity: 1 }], token);
+      void cartProductCache.rememberFromShop(product, shop);
       showAppAlert(
         'Added to cart',
         `"${product.title}" from ${shop.name} was added to your cart.`,
@@ -517,6 +529,8 @@ const ProductDetail = () => {
               address={shopAddress}
               city={shop.city}
               label={shop.name}
+              latitude={shop.latitude}
+              longitude={shop.longitude}
               onGetDirections={handleGetDirections}
             />
           </View>

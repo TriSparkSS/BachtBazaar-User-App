@@ -1,4 +1,5 @@
 import { API_ENDPOINTS, CART_API_BASE_URL } from '../config/api';
+import { parseMoneyAmount, resolveProductPriceQuote } from '../utils/productPrice';
 import { apiRequest } from './apiClient';
 
 export type AddToCartItem = {
@@ -18,14 +19,18 @@ export type CartItem = {
   productId?: string;
   productName: string;
   quantity: number;
-  /** Formatted unit price, e.g. ₹499 */
+  /** Formatted payable unit price, e.g. ₹499 */
   price?: string;
+  /** Payable / discounted unit price. */
   unitPrice?: number;
+  /** MRP / original unit price when a discount exists. */
+  originalUnitPrice?: number;
   itemTotal?: number;
   itemDiscount?: number;
   variantInfo?: string;
   merchantId?: string;
   merchantName?: string;
+  shopId?: string;
   shopName?: string;
   /** Relative or absolute thumbnail path from API */
   image?: string;
@@ -39,8 +44,6 @@ export type CartSummary = {
   totalUniqueProducts: number;
   /** Present when cart API returns a delivery fee; otherwise UI uses Request Delivery demo fee. */
   deliveryFee?: number;
-  /** Present when cart API returns a platform fee; otherwise UI uses Request Delivery demo fee. */
-  platformFee?: number;
   couponCode?: string;
   couponDiscount?: number;
 };
@@ -75,6 +78,42 @@ const pickString = (...candidates: unknown[]): string | undefined => {
     }
     if (typeof candidate === 'number' && Number.isFinite(candidate)) {
       return String(candidate);
+    }
+  }
+  return undefined;
+};
+
+const pickId = (...candidates: unknown[]): string | undefined => {
+  for (const candidate of candidates) {
+    const direct = pickString(candidate);
+    if (direct) {
+      return direct;
+    }
+    const record = asRecord(candidate);
+    if (!record) {
+      continue;
+    }
+    const nested = pickString(
+      record.$oid,
+      record._id,
+      record.id,
+      record.productId,
+      record.product_id,
+      record.merchantId,
+      record.merchant_id,
+      record.shopId,
+      record.shop_id,
+    );
+    if (nested) {
+      return nested;
+    }
+    const deeper =
+      pickId(record._id) ||
+      pickId(record.id) ||
+      pickId(record.merchantId) ||
+      pickId(record.shop);
+    if (deeper) {
+      return deeper;
     }
   }
   return undefined;
@@ -182,11 +221,13 @@ const parseCartItem = (raw: unknown, index: number): CartItem | null => {
     asRecord(item.shop) ??
     null;
 
-  const productId = pickString(
-    typeof item.product_id === 'string' ? item.product_id : undefined,
-    typeof item.productId === 'string' ? item.productId : undefined,
+  const productId = pickId(
+    item.product_id,
+    item.productId,
     product?._id,
     product?.id,
+    product?.productId,
+    product?.product_id,
   );
   const id =
     pickString(item._id, item.id, item.cartItemId, productId) ?? `cart-item-${index}`;
@@ -205,34 +246,61 @@ const parseCartItem = (raw: unknown, index: number): CartItem | null => {
 
   const quantity = pickNumber(item.quantity, item.qty, item.count) ?? 1;
 
-  const unitPrice = pickNumber(
-    item.unit_price,
-    item.unitPrice,
-    item.price,
-    item.itemPrice,
-    product?.price,
-    product?.salePrice,
-    product?.mrp,
-  );
-
-  const itemTotal = pickNumber(
-    item.item_total,
-    item.itemTotal,
-    item.lineTotal,
-    item.line_total,
-    unitPrice != null ? unitPrice * quantity : undefined,
-  );
-
-  const itemDiscount = pickNumber(item.item_discount, item.itemDiscount) ?? 0;
-
+  // Shop/cart convention: `price` is MRP/base, `discounted_price` is payable.
+  const quote = resolveProductPriceQuote({
+    discountedPrice: parseMoneyAmount(
+      product?.discounted_price,
+      product?.discountedPrice,
+      product?.discount_price,
+      product?.selling_price,
+      product?.sellingPrice,
+      item.discounted_price,
+      item.discountedPrice,
+      item.discount_price,
+      item.salePrice,
+      item.sale_price,
+      item.selling_price,
+    ),
+    saleAmount: parseMoneyAmount(
+      item.salePrice,
+      item.sale_price,
+      product?.salePrice,
+      item.unit_price,
+      item.unitPrice,
+      item.price,
+      item.itemPrice,
+    ),
+    originalAmount: parseMoneyAmount(
+      product?.price,
+      item.mrp,
+      item.original_price,
+      item.originalPrice,
+      item.original_unit_price,
+      item.originalUnitPrice,
+    ),
+    price: item.price ?? item.itemPrice,
+    originalPrice: item.original_price ?? item.originalPrice,
+  });
+  const unitPrice = quote.saleAmount;
+  const originalUnitPrice = quote.originalAmount;
+  const itemTotal = unitPrice * quantity;
+  const itemDiscount =
+    pickNumber(item.item_discount, item.itemDiscount) ?? quote.discountAmount * quantity;
   const price = formatCartPrice(unitPrice);
 
-  const merchantId = pickString(
-    typeof item.merchant_id === 'string' ? item.merchant_id : undefined,
-    typeof item.merchantId === 'string' ? item.merchantId : undefined,
+  const merchantId = pickId(
+    item.merchant_id,
+    item.merchantId,
+    item.seller_id,
+    item.sellerId,
+    item.vendor_id,
+    item.store_id,
+    merchant,
     merchant?._id,
     merchant?.id,
     merchant?.merchantId,
+    product?.merchant_id,
+    product?.merchantId,
   );
 
   const merchantName = pickString(
@@ -243,12 +311,26 @@ const parseCartItem = (raw: unknown, index: number): CartItem | null => {
     merchant?.merchantName,
   );
 
+  const shop = asRecord(item.shop);
+  const shopId = pickId(
+    item.shop_id,
+    item.shopId,
+    shop,
+    shop?._id,
+    shop?.id,
+    shop?.shopId,
+    product?.shop_id,
+    product?.shopId,
+    product?.shop,
+  );
+
   const shopName = pickString(
     item.shopName,
     item.shop_name,
     item.storeName,
-    asRecord(item.shop)?.name,
-    asRecord(item.shop)?.storeName,
+    shop?.name,
+    shop?.shopName,
+    shop?.storeName,
     merchantName,
   );
 
@@ -272,11 +354,13 @@ const parseCartItem = (raw: unknown, index: number): CartItem | null => {
     quantity,
     price,
     unitPrice,
+    originalUnitPrice,
     itemTotal,
     itemDiscount,
     variantInfo,
     merchantId,
     merchantName,
+    shopId,
     shopName,
     image,
   };
@@ -288,9 +372,10 @@ const parseCartSummary = (
 ): CartSummary => {
   const coupon = asRecord(data?.applied_coupon) ?? asRecord(data?.appliedCoupon);
 
-  const subtotal =
-    pickNumber(data?.subtotal, data?.sub_total) ??
-    items.reduce((sum, item) => sum + (item.itemTotal ?? (item.unitPrice ?? 0) * item.quantity), 0);
+  const subtotal = items.reduce(
+    (sum, item) => sum + (item.itemTotal ?? (item.unitPrice ?? 0) * item.quantity),
+    0,
+  );
 
   const couponDiscount = pickNumber(coupon?.discount_amount, coupon?.discountAmount) ?? 0;
   const totalDiscount =
@@ -313,12 +398,6 @@ const parseCartSummary = (
     data?.delivery_charge,
     data?.deliveryCharge,
   );
-  const platformFee = pickNumber(
-    data?.platform_fee,
-    data?.platformFee,
-    data?.service_fee,
-    data?.serviceFee,
-  );
 
   return {
     subtotal,
@@ -327,7 +406,6 @@ const parseCartSummary = (
     totalItemsCount,
     totalUniqueProducts,
     deliveryFee,
-    platformFee,
     couponCode: pickString(coupon?.coupon_code, coupon?.couponCode),
     couponDiscount,
   };

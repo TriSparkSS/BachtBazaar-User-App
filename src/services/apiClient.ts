@@ -18,13 +18,10 @@ type NativeLoggingGlobal = typeof globalThis & {
 };
 
 const SENSITIVE_KEYS = new Set([
-  'authorization',
-  'firebasetoken',
   'newpassword',
   'oldpassword',
   'otp',
   'password',
-  'token',
 ]);
 
 const isSensitiveKey = (key?: string) =>
@@ -125,7 +122,7 @@ const redactForLogs = (value: unknown, key?: string): unknown => {
 
 const formatLogValue = (value: unknown) => {
   try {
-    return JSON.stringify(value);
+    return JSON.stringify(value, null, 2);
   } catch {
     return String(value);
   }
@@ -133,10 +130,12 @@ const formatLogValue = (value: unknown) => {
 
 const writeNativeApiLog = (message: string) => {
   const nativeLoggingHook = (globalThis as NativeLoggingGlobal).nativeLoggingHook;
+  const lines = message.split('\n');
 
   if (typeof nativeLoggingHook === 'function') {
-    nativeLoggingHook(message, 2);
-    return;
+    lines.forEach(line => {
+      nativeLoggingHook(line.length > 0 ? line : ' ', 2);
+    });
   }
 
   console.log(message);
@@ -182,7 +181,16 @@ export const logApiEvent = (label: string, payload?: ApiLogPayload) => {
     return;
   }
 
-  writeNativeApiLog(`[API] ${label} ${formatLogValue(redactForLogs(payload))}`);
+  const safePayload = redactForLogs(payload) as ApiLogPayload;
+  const status = safePayload.status != null ? ` status=${safePayload.status}` : '';
+  const duration = safePayload.durationMs != null ? ` ${safePayload.durationMs}ms` : '';
+  const url = typeof safePayload.url === 'string' ? `\n[API] ${safePayload.url}` : '';
+  const body = formatLogValue(safePayload)
+    .split('\n')
+    .map(line => `[API] ${line}`)
+    .join('\n');
+
+  writeNativeApiLog(`[API] ---------- ${label}${status}${duration} ----------${url}\n${body}`);
 };
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -197,8 +205,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const baseUrl = options.baseUrl ?? API_BASE_URL;
   const url = `${baseUrl}${path}`;
   const startedAt = Date.now();
-  const headers = buildHeaders(options);
-  const requestBody = options.body ?? null;
+  const serializedBody =
+    typeof URLSearchParams !== 'undefined' && options.body instanceof URLSearchParams
+      ? options.body.toString()
+      : options.body;
+  const requestOptions = { ...options, body: serializedBody };
+  const headers = buildHeaders(requestOptions);
+  const requestBody = serializedBody ?? null;
 
   logApiEvent(`${method} request`, {
     url,
@@ -213,14 +226,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       method,
       headers,
       body:
-        options.body == null
+        serializedBody == null
           ? undefined
-          : options.body instanceof FormData ||
-              (typeof URLSearchParams !== 'undefined' &&
-                options.body instanceof URLSearchParams) ||
-              typeof options.body === 'string'
-            ? (options.body as BodyInit)
-            : JSON.stringify(options.body),
+          : serializedBody instanceof FormData || typeof serializedBody === 'string'
+            ? (serializedBody as BodyInit)
+            : JSON.stringify(serializedBody),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : '';

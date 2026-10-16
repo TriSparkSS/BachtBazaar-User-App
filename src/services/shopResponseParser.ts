@@ -1,14 +1,22 @@
 import {
   Shop,
+  ShopManualOverride,
   ShopOffer,
   ShopOpeningDay,
   ShopOpeningHours,
   ShopProduct,
   ShopService,
+  ShopServiceProvider,
   ShopWithOffers,
 } from '../types/shop';
 import { shouldShowInOffersList } from '../utils/offerDisplayType';
 import { pickProvidesDeliveryFlag } from '../utils/shopDelivery';
+import { parseMoneyAmount } from '../utils/productPrice';
+import {
+  parseShopCoordinates,
+  parseShopDeliveryPricing,
+  parseShopDeliveryQuote,
+} from '../utils/shopDeliveryQuote';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -19,6 +27,7 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
  * so list/detail images load without freezing the JS thread on multi-MB banners.
  */
 const MAX_SHOP_MEDIA_BYTES = 250_000;
+const MAX_SHOP_LOGO_BYTES = 800_000;
 
 const pickString = (...values: unknown[]): string | undefined => {
   for (const value of values) {
@@ -45,6 +54,24 @@ const pickNumberString = (...values: unknown[]): string | undefined => {
     }
   }
 
+  return undefined;
+};
+
+const pickBlueTickEnabled = (...sources: unknown[]): boolean | undefined => {
+  for (const source of sources) {
+    if (!isRecord(source)) {
+      continue;
+    }
+    if (source.isBlueTickEnabled !== undefined) {
+      return Boolean(source.isBlueTickEnabled);
+    }
+    if (source.is_blue_tick_enabled !== undefined) {
+      return Boolean(source.is_blue_tick_enabled);
+    }
+    if (source.blueTickEnabled !== undefined) {
+      return Boolean(source.blueTickEnabled);
+    }
+  }
   return undefined;
 };
 
@@ -91,24 +118,63 @@ const bytesToBase64 = (bytes: number[]): string => {
   return output;
 };
 
-const extractBufferBytes = (
+const extractNumberBytes = (
   data: unknown,
   maxBytes: number,
 ): number[] | undefined => {
-  if (!isRecord(data) || data.type !== 'Buffer' || !Array.isArray(data.data)) {
+  if (!Array.isArray(data) || data.length === 0 || data.length > maxBytes) {
     return undefined;
   }
 
-  // Bail before filtering/encoding — huge arrays freeze RN.
-  if (data.data.length > maxBytes) {
-    return undefined;
-  }
-
-  const bytes = data.data.filter(
+  const bytes = data.filter(
     (byte): byte is number => typeof byte === 'number' && byte >= 0 && byte <= 255,
   );
 
   return bytes.length ? bytes : undefined;
+};
+
+const extractBufferBytes = (
+  data: unknown,
+  maxBytes: number,
+): number[] | undefined => {
+  const direct = extractNumberBytes(data, maxBytes);
+  if (direct) {
+    return direct;
+  }
+
+  if (!isRecord(data) || !Array.isArray(data.data)) {
+    return undefined;
+  }
+
+  return extractNumberBytes(data.data, maxBytes);
+};
+
+export const shopHasLogoAsset = (value: unknown): boolean => {
+  if (typeof value === 'string' && value.trim()) {
+    return true;
+  }
+  if (!isRecord(value)) {
+    return false;
+  }
+  return Boolean(
+    value.contentType ||
+      value.content_type ||
+      value.data ||
+      value.url ||
+      value.uri ||
+      value.path ||
+      value.secure_url,
+  );
+};
+
+export const encodeBytesAsDataUri = (
+  bytes: ArrayBuffer | Uint8Array | number[],
+  contentType = 'image/jpeg',
+) => {
+  const list = Array.isArray(bytes)
+    ? bytes
+    : Array.from(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
+  return `data:${contentType};base64,${bytesToBase64(list)}`;
 };
 
 const resolveBase64ImageData = (
@@ -207,6 +273,35 @@ const normalizeOpeningHours = (value: unknown): ShopOpeningHours | undefined => 
   };
 };
 
+const normalizeManualOverride = (value: unknown): ShopManualOverride | undefined => {
+  const source = isRecord(value)
+    ? isRecord(value.manualOverride)
+      ? value.manualOverride
+      : isRecord(value.manual_override)
+        ? value.manual_override
+        : undefined
+    : undefined;
+  if (!source) {
+    return undefined;
+  }
+
+  const status = pickString(source.status);
+  const reason = pickString(source.reason);
+  const closedUntil = pickString(source.closedUntil, source.closed_until) ?? null;
+  const updatedAt = pickString(source.updatedAt, source.updated_at);
+
+  if (!status && !reason && !closedUntil && !updatedAt) {
+    return undefined;
+  }
+
+  return {
+    status,
+    reason,
+    closedUntil,
+    updatedAt,
+  };
+};
+
 const buildOfferDiscount = (value: Record<string, unknown>): string | undefined => {
   const offerType = isRecord(value.offer_type_id)
     ? pickString(value.offer_type_id.value, value.offer_type_id.label)?.toLowerCase()
@@ -259,20 +354,33 @@ const normalizeShop = (value: unknown): Shop | undefined => {
     value.merchant_id,
   );
   const openingHours = normalizeOpeningHours(value.openingHours ?? value.opening_hours);
+  const manualOverride = normalizeManualOverride(value);
   const address = pickString(value.address);
   const address1 = pickString(value.address1, value.address_1);
   const city = pickString(value.city);
+  const { latitude, longitude } = parseShopCoordinates(value);
+  const delivery = parseShopDeliveryQuote(value);
+  const deliveryPricing =
+    parseShopDeliveryPricing(merchant) ?? parseShopDeliveryPricing(value);
+  const isBlueTickEnabled = pickBlueTickEnabled(value, merchant) ?? false;
 
-  const logoPath = resolveShopMediaField(value.logo);
+  const storeFrontPath = resolveShopMediaField(
+    value.storeFront ?? value.store_front ?? value.storefront,
+  );
+  const logoPath = resolveShopMediaField(value.logo, MAX_SHOP_LOGO_BYTES);
   const coverPath = resolveShopMediaField(
     value.banner ?? value.coverImage ?? value.cover_image,
+  );
+  const merchantImage = resolveShopMediaField(
+    merchant?.profileImage ?? merchant?.profile_image,
   );
 
   return {
     id,
     name: name || pickString(merchant?.name) || 'Store',
-    logo: logoPath,
-    coverImage: coverPath,
+    logo: logoPath ?? merchantImage,
+    hasLogoAsset: shopHasLogoAsset(value.logo) || Boolean(logoPath || merchantImage),
+    coverImage: coverPath ?? storeFrontPath,
     tagline: pickString(value.tagline, value.description, value.about, merchant?.name),
     address,
     address1,
@@ -289,18 +397,16 @@ const normalizeShop = (value: unknown): Shop | undefined => {
       value.total_reviews,
     ),
     distance: pickString(value.distance, value.distanceKm, value.distance_km, value.km),
+    latitude,
+    longitude,
     isOpen:
       value.isOpen !== undefined
         ? Boolean(value.isOpen)
         : value.is_open !== undefined
           ? Boolean(value.is_open)
           : undefined,
-    isVerified: Boolean(
-      value.isVerified ??
-        value.is_verified ??
-        value.verified ??
-        (merchant?.status === 'verified'),
-    ),
+    isVerified: isBlueTickEnabled,
+    isBlueTickEnabled,
     categories: Array.isArray(value.categories)
       ? value.categories.map(item => String(item).trim()).filter(Boolean)
       : isRecord(value.categoryId)
@@ -316,9 +422,16 @@ const normalizeShop = (value: unknown): Shop | undefined => {
         ? value.categoryIds.map(item => String(item).trim()).filter(Boolean)
         : undefined,
     openingHours,
+    manualOverride,
     merchantId,
     merchantName: pickString(merchant?.name),
-    providesDelivery: pickProvidesDeliveryFlag(value, merchant),
+    providesDelivery: pickProvidesDeliveryFlag(
+      value,
+      merchant,
+      isRecord(value.delivery) ? value.delivery : undefined,
+    ),
+    delivery,
+    deliveryPricing,
   };
 };
 
@@ -391,8 +504,8 @@ const normalizeProduct = (value: unknown, shopId: string): ShopProduct | undefin
     return undefined;
   }
 
-  const price = pickNumber(value.price);
-  const discountedPrice = pickNumber(value.discounted_price, value.discountedPrice);
+  const price = parseMoneyAmount(value.price);
+  const discountedPrice = parseMoneyAmount(value.discounted_price, value.discountedPrice);
 
   return {
     id,
@@ -411,9 +524,19 @@ const normalizeProduct = (value: unknown, shopId: string): ShopProduct | undefin
     image: resolveImagePath(
       pickString(value.thumbnail, value.image, value.imageUrl, value.image_url, value.photo),
     ),
-    price: discountedPrice != null ? `₹${discountedPrice.toLocaleString('en-IN')}` : price != null ? `₹${price.toLocaleString('en-IN')}` : undefined,
+    price:
+      discountedPrice != null
+        ? `₹${discountedPrice.toLocaleString('en-IN')}`
+        : price != null
+          ? `₹${price.toLocaleString('en-IN')}`
+          : undefined,
     originalPrice:
-      discountedPrice != null && price != null ? `₹${price.toLocaleString('en-IN')}` : undefined,
+      discountedPrice != null && price != null && price > discountedPrice
+        ? `₹${price.toLocaleString('en-IN')}`
+        : undefined,
+    priceAmount: discountedPrice ?? price,
+    originalPriceAmount:
+      discountedPrice != null && price != null && price > discountedPrice ? price : undefined,
     rating: pickNumberString(value.rating, value.avgRating, value.avg_rating),
     stock: pickNumber(value.stock),
     isFeatured: Boolean(value.is_featured ?? value.isFeatured),
@@ -469,6 +592,49 @@ const normalizeGender = (value: unknown): string | undefined => {
   return undefined;
 };
 
+const normalizeServiceProvider = (value: unknown): ShopServiceProvider | undefined => {
+  const raw = isRecord(value) ? value : null;
+  if (!raw) {
+    return undefined;
+  }
+
+  const name = pickString(raw.name, raw.fullName, raw.full_name);
+  if (!name) {
+    return undefined;
+  }
+
+  const specialisation = [
+    raw.specialisation,
+    raw.specialization,
+    raw.specialities,
+    raw.specializations,
+  ]
+    .flatMap(entry => (Array.isArray(entry) ? entry : []))
+    .map(item => (typeof item === 'string' ? item.trim() : ''))
+    .filter(Boolean);
+
+  const experienceYears = pickNumber(
+    raw.experience,
+    raw.experienceYears,
+    raw.experience_years,
+    raw.yearsOfExperience,
+  );
+
+  const gender = pickString(raw.gender);
+  const designation = pickString(raw.designation, raw.role, raw.title);
+
+  return {
+    name,
+    profileImage: resolveImagePath(
+      pickString(raw.profile_image, raw.profileImage, raw.image, raw.photo, raw.avatar),
+    ),
+    experienceYears,
+    designation,
+    gender: gender ? gender.charAt(0).toUpperCase() + gender.slice(1) : undefined,
+    specialisation: specialisation.length ? specialisation : undefined,
+  };
+};
+
 const normalizeService = (value: unknown, shopId: string): ShopService | undefined => {
   if (!isRecord(value)) {
     return undefined;
@@ -512,6 +678,9 @@ const normalizeService = (value: unknown, shopId: string): ShopService | undefin
       value.service_description,
     ),
     isFeatured: Boolean(value.is_featured ?? value.isFeatured),
+    provider: normalizeServiceProvider(
+      value.service_provider ?? value.serviceProvider ?? value.provider,
+    ),
   };
 };
 
@@ -575,15 +744,23 @@ export const parseShopsWithOffersResponse = (payload: unknown): ShopWithOffers[]
 
       const shopId = shop.id;
       const offers = extractShopOffers(item, shopId);
+      const inventory = extractInventory(item);
+      const products = inventory.products.map(product => ({ ...product, shopId }));
       const offerImage = offers.find(offer => offer.image)?.image;
-      // Keep normalizeShop logo (Buffer→data-URI / path). Do not wipe with undefined.
-      const listLogo = resolveShopMediaField(item.logo) ?? shop.logo;
+      const listStoreFront = resolveShopMediaField(
+        item.storeFront ?? item.store_front ?? item.storefront,
+      );
+      const listLogo =
+        resolveShopMediaField(item.logo, MAX_SHOP_LOGO_BYTES) ?? shop.logo;
 
       const normalizedShop: ShopWithOffers = {
         ...shop,
         logo: listLogo,
-        coverImage: shop.coverImage || offerImage,
+        hasLogoAsset: shop.hasLogoAsset || shopHasLogoAsset(item.logo) || Boolean(listLogo),
+        coverImage: shop.coverImage || listStoreFront || offerImage,
         offers,
+        products,
+        productCount: inventory.productCount ?? products.length,
         // Use filtered length so banner/calendar offers are not counted in Local Offers.
         offerCount: offers.length,
       };
@@ -599,16 +776,29 @@ export const parseShopOffersResponse = (payload: unknown, shopId: string): ShopO
 
 const extractInventory = (data: Record<string, unknown>) => {
   const inventory = isRecord(data.inventory) ? data.inventory : undefined;
+  const shopRecord = isRecord(data.shop) ? data.shop : undefined;
+  const rawProducts = [
+    ...(Array.isArray(inventory?.products) ? inventory.products : []),
+    ...(Array.isArray(data.products) ? data.products : []),
+    ...(Array.isArray(shopRecord?.products) ? shopRecord.products : []),
+  ];
 
   return {
     productCount: pickNumber(inventory?.productCount, inventory?.product_count),
     offerCount: pickNumber(inventory?.offerCount, inventory?.offer_count),
     serviceCount: pickNumber(inventory?.serviceCount, inventory?.service_count),
-    products: Array.isArray(inventory?.products)
-      ? inventory.products
-          .map(item => normalizeProduct(item, ''))
-          .filter((product): product is ShopProduct => Boolean(product))
-      : [],
+    products: (() => {
+      const seen = new Set<string>();
+      return rawProducts
+        .map(item => normalizeProduct(item, ''))
+        .filter((product): product is ShopProduct => {
+          if (!product || seen.has(product.id)) {
+            return false;
+          }
+          seen.add(product.id);
+          return true;
+        });
+    })(),
     offers: Array.isArray(inventory?.offers)
       ? inventory.offers
           .map(item => normalizeOffer(item, ''))
@@ -652,6 +842,12 @@ export const parseShopDetailResponse = (payload: unknown, fallbackShopId?: strin
 
   const logoFromField = resolveShopMediaField(
     isRecord(shopRecord) ? shopRecord.logo : undefined,
+    MAX_SHOP_LOGO_BYTES,
+  );
+  const storeFrontFromField = resolveShopMediaField(
+    isRecord(shopRecord)
+      ? shopRecord.storeFront ?? shopRecord.store_front ?? shopRecord.storefront
+      : undefined,
   );
   const coverFromField = resolveShopMediaField(
     isRecord(shopRecord)
@@ -662,7 +858,8 @@ export const parseShopDetailResponse = (payload: unknown, fallbackShopId?: strin
   // Prefer string paths or size-capped data-URIs from Buffer fields.
   // Do not use /shop/:id/logo|/banner — those return SPA HTML, not images.
   const logo = logoFromField ?? resolvedShop.logo;
-  const coverImageFromBanner = coverFromField ?? resolvedShop.coverImage;
+  const coverImageFromBanner =
+    coverFromField ?? storeFrontFromField ?? resolvedShop.coverImage;
 
   const inventory = extractInventory(data);
   let offers = inventory.offers.map(offer => ({ ...offer, shopId }));
@@ -675,6 +872,7 @@ export const parseShopDetailResponse = (payload: unknown, fallbackShopId?: strin
       isRecord(shopRecord) ? shopRecord : undefined,
       isRecord(shopRecord) && isRecord(shopRecord.merchantId) ? shopRecord.merchantId : undefined,
       isRecord(shopRecord) && isRecord(shopRecord.merchant) ? shopRecord.merchant : undefined,
+      isRecord(shopRecord) && isRecord(shopRecord.delivery) ? shopRecord.delivery : undefined,
       data,
       isRecord(data.inventory) ? data.inventory : undefined,
     ) ?? resolvedShop.providesDelivery;
@@ -704,6 +902,10 @@ export const parseShopDetailResponse = (payload: unknown, fallbackShopId?: strin
     ...resolvedShop,
     id: shopId,
     logo,
+    hasLogoAsset:
+      resolvedShop.hasLogoAsset ||
+      shopHasLogoAsset(isRecord(shopRecord) ? shopRecord.logo : undefined) ||
+      Boolean(logo),
     coverImage,
     providesDelivery,
     offers,

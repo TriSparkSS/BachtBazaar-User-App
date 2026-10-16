@@ -19,10 +19,8 @@ class MainApplication : Application(), ReactApplication {
         PackageList(this).packages.apply {
           add(SpeechToTextPackage())
         },
-      // Temporarily force embedded bundle so wishlist parser fixes ship in the APK.
-      // Set useDevSupport = BuildConfig.DEBUG when you want live Metro again.
-      useDevSupport = false,
-      jsBundleAssetPath = "index.android.bundle",
+      // Load JS from Metro in debug so cart/delivery edits apply without a stale APK bundle.
+      useDevSupport = BuildConfig.DEBUG,
     )
   }
 

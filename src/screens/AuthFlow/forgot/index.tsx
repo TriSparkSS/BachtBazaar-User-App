@@ -4,7 +4,6 @@ import ForgotPasswordScreenView from './ForgotPasswordScreenView';
 import { userAuthApi } from '../../../services/userAuthApi';
 import { showAppAlert } from '../../../services/appAlert';
 import { useAppContext } from '../../../context/AppContext';
-import { getFcmToken } from '../../../services/fcmToken';
 
 const isPasswordValid = (value: string) =>
   value.length >= 8 && /[A-Z]/.test(value) && /[!@#$%]/.test(value);
@@ -12,13 +11,11 @@ const isPasswordValid = (value: string) =>
 const ForgotPassword = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  const { authToken, currentUser } = useAppContext();
+  const { authToken, setSession } = useAppContext();
   // @ts-ignore
   const userId = route.params?.userId;
   // @ts-ignore
   const flow = route.params?.flow;
-  // @ts-ignore
-  const firebaseToken = route.params?.firebaseToken;
   // @ts-ignore
   const phoneNumber = route.params?.phoneNumber;
   // @ts-ignore
@@ -71,7 +68,7 @@ const ForgotPassword = () => {
       }
 
       if (flow === 'forgot-password') {
-        if (!firebaseToken) {
+        if (!sessionToken || !userId) {
           showAppAlert(
             'Unavailable',
             'Verification session expired. Please verify your number again.',
@@ -79,20 +76,14 @@ const ForgotPassword = () => {
           return;
         }
 
-        await userAuthApi.forgotPassword(firebaseToken, password.trim());
+        await userAuthApi.setPassword(password.trim(), sessionToken);
         showAppAlert('Success', 'Password reset successfully', [
           { text: 'OK', onPress: () => navigation.dispatch(StackActions.replace('Login')) },
         ]);
         return;
       }
 
-      const resolvedUserId = userId ?? currentUser?._id;
       const resolvedToken = sessionToken ?? authToken ?? undefined;
-
-      if (!resolvedUserId) {
-        showAppAlert('Unavailable', 'User ID not found. Please verify your number again.');
-        return;
-      }
 
       if (!resolvedToken) {
         showAppAlert('Session expired', 'Please verify your number again.');
@@ -100,28 +91,22 @@ const ForgotPassword = () => {
       }
 
       if (flow === 'signup-password') {
-        const fcmToken = await getFcmToken();
-        await userAuthApi.createAuth(
-          resolvedUserId,
-          password.trim(),
-          resolvedToken,
-          {
-            fcmToken,
-            referralCode: referralCode?.trim() || undefined,
-          },
-        );
+        await userAuthApi.setPassword(password.trim(), resolvedToken);
         const { deepLinkStorage } = await import('../../../services/deepLinkStorage');
         await deepLinkStorage.clearPendingReferralCode();
+        if (userId) {
+          await setSession(resolvedToken, {
+            _id: String(userId),
+            phone: phoneNumber ?? '',
+            isVerified: true,
+          });
+        }
         // @ts-ignore
         navigation.dispatch(StackActions.replace('Successfull', { isNewUser: true }));
         return;
       }
 
-      await userAuthApi.setPassword(
-        resolvedUserId,
-        password.trim(),
-        resolvedToken,
-      );
+      await userAuthApi.setPassword(password.trim(), resolvedToken);
 
       showAppAlert('Success', 'Password updated successfully', [
         { text: 'OK', onPress: () => navigation.dispatch(StackActions.replace('Login')) },

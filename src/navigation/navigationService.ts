@@ -43,6 +43,19 @@ export function replace(name: string, params?: any) {
   }
 }
 
+export function resetToMainStack() {
+  if (!navigationRef.isReady()) {
+    return;
+  }
+
+  navigationRef.dispatch(
+    CommonActions.reset({
+      index: 0,
+      routes: [{ name: 'MainStack' }],
+    }),
+  );
+}
+
 export function resetToAuthLogin() {
   if (!navigationRef.isReady()) {
     return;

@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Dimensions,
   Image,
-  Linking,
   ScrollView,
   StyleSheet,
   Text,
@@ -28,6 +27,7 @@ import {
   formatOfferExpiryDate,
 } from '../../../utils/offer';
 import { formatShopAddress, isShopCurrentlyOpen } from '../../../utils/shop';
+import { openStoreDirections } from '../../../utils/openStoreDirections';
 
 const { width } = Dimensions.get('window');
 const BOTTOM_HORIZONTAL_PADDING = 20;
@@ -83,8 +83,12 @@ const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
   const showHeroImage = Boolean(heroImageUri) && !heroError;
 
   const handleGetDirections = () => {
-    const query = encodeURIComponent(shopAddress || merchantName);
-    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
+    void openStoreDirections({
+      latitude: shop.latitude,
+      longitude: shop.longitude,
+      label: merchantName,
+      addressFallback: shopAddress || merchantName,
+    });
   };
 
   const renderMechanicCard = (
@@ -364,6 +368,8 @@ const OfferDetailScreenView: React.FC<OfferDetailScreenViewProps> = ({
                   address={shopAddress}
                   city={shop.city}
                   label={merchantName}
+                  latitude={shop.latitude}
+                  longitude={shop.longitude}
                   onGetDirections={handleGetDirections}
                 />
               </View>

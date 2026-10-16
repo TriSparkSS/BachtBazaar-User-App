@@ -11,7 +11,7 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnimatedScreen from '../../../components/AnimatedScreen';
 import { ScreenScaffold } from '../../../components/ScreenScaffold';
-import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
+import AppLogo from '../../../components/AppLogo';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
 
@@ -70,7 +70,7 @@ const SuccessfullScreenView: React.FC<SuccessfullScreenViewProps> = ({
       <AnimatedScreen style={styles.animatedScreen}>
         <View style={styles.logoContainer}>
           <View style={styles.logoHalo}>
-            <LogoSVG width={72} height={72} />
+            <AppLogo width={72} height={72} />
           </View>
           <View style={styles.badge}>
             <View style={styles.badgeDot} />

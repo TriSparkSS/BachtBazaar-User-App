@@ -17,7 +17,9 @@ import { Camera, CameraType } from 'react-native-camera-kit';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { useAppContext } from '../../context/AppContext';
 import { colors, fonts } from '../../helpers/styles';
+import QRCode from 'react-native-qrcode-svg';
 import {
+  encodeUserOfferQrValue,
   parseQrCodeValue,
   ParsedQrData,
   resolveMerchantIdFromQrPayload,
@@ -28,7 +30,12 @@ import { MainStackParamList } from '../../navigation/types';
 import { showAppAlert } from '../../services/appAlert';
 import { logApiEvent } from '../../services/apiClient';
 import { shopApi } from '../../services/shopApi';
+import { clickApi } from '../../services/clickApi';
 import { decodeQrFromBase64Image } from '../../utils/decodeQrFromImage';
+import {
+  getCurrentDeviceCoordinates,
+  requestLocationPermission,
+} from '../../utils/deviceLocation';
 
 /** Compact scan log — keys + ids only (never dump huge buffers). */
 const logScanPayload = (
@@ -93,6 +100,7 @@ const ScannerScreen = () => {
   const { authToken, currentUser } = useAppContext();
   const expectedOfferId = route.params?.expectedOfferId?.trim() || '';
   const expectedOfferTitle = route.params?.expectedOfferTitle?.trim() || '';
+  const expectedShopId = route.params?.expectedShopId?.trim() || '';
   const requireOfferMatch = Boolean(expectedOfferId);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [isScanning, setIsScanning] = useState(true);
@@ -100,6 +108,7 @@ const ScannerScreen = () => {
   const [isRedeeming, setIsRedeeming] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
   const [scanResult, setScanResult] = useState<ParsedQrData | null>(null);
+  const [redeemedQrValue, setRedeemedQrValue] = useState('');
   const lastScanRef = useRef('');
 
   useEffect(() => {
@@ -117,6 +126,7 @@ const ScannerScreen = () => {
   const resetToScanning = useCallback(() => {
     lastScanRef.current = '';
     setScanResult(null);
+    setRedeemedQrValue('');
     setIsRedeeming(false);
     setIsNavigating(false);
     setIsScanning(true);
@@ -394,9 +404,52 @@ const ScannerScreen = () => {
 
     try {
       setIsRedeeming(true);
-      const response = await shopApi.claimDirectUserOffer(offerId, userId, token);
+      const permitted = await requestLocationPermission();
+      if (!permitted) {
+        throw new Error(
+          'Allow location access so we can verify this in-store redemption.',
+        );
+      }
+
+      const coordinates = await getCurrentDeviceCoordinates();
+      if (!coordinates) {
+        throw new Error(
+          'Could not read your current location. Turn on GPS and try again.',
+        );
+      }
+
+      const response = await shopApi.claimDirectUserOffer(
+        offerId,
+        userId,
+        token,
+        coordinates,
+      );
       if (response.success === false) {
         throw new Error(response.message || 'Could not redeem this offer.');
+      }
+
+      const scannedShopId = resolveShopIdFromQrPayload(scanResult?.payload, {
+        allowGenericId: false,
+        allowMerchantIdFallback: false,
+      });
+      void shopApi
+        .resolveShopIdForOffer(
+          offerId,
+          token,
+          scannedShopId || expectedShopId,
+        )
+        .then(shopId => {
+          clickApi.trackRedeemClick(
+            {
+              offerId,
+              shopId,
+            },
+            token,
+          );
+        });
+
+      if (userId) {
+        setRedeemedQrValue(encodeUserOfferQrValue(offerId, userId));
       }
 
       const successMessage =
@@ -413,10 +466,13 @@ const ScannerScreen = () => {
         },
       ]);
     } catch (error) {
-      showAppAlert(
-        'Redeem failed',
-        error instanceof Error ? error.message : 'Could not redeem this offer.',
-      );
+      const rawMessage =
+        error instanceof Error ? error.message : 'Could not redeem this offer.';
+      const message =
+        /latitude|longitude/i.test(rawMessage) && /undefined|null/i.test(rawMessage)
+          ? 'Could not verify your location. Turn on GPS and try again.'
+          : rawMessage;
+      showAppAlert('Redeem failed', message);
     } finally {
       setIsRedeeming(false);
     }
@@ -425,6 +481,7 @@ const ScannerScreen = () => {
     currentUser?._id,
     expectedOfferId,
     expectedOfferTitle,
+    expectedShopId,
     handleScanAgain,
     navigation,
     requireOfferMatch,
@@ -610,7 +667,21 @@ const ScannerScreen = () => {
               </View>
             ))}
 
-            {canRedeem ? (
+            {redeemedQrValue ? (
+              <View style={styles.redeemedQrWrap}>
+                <QRCode
+                  value={redeemedQrValue}
+                  size={168}
+                  backgroundColor={colors.white}
+                  color="#111827"
+                />
+                <Text style={styles.redeemedQrHint}>
+                  Show this QR to the shopkeeper. It contains your offer id and user id.
+                </Text>
+              </View>
+            ) : null}
+
+            {canRedeem && !redeemedQrValue ? (
               <TouchableOpacity
                 style={[styles.redeemBtn, isRedeeming && styles.redeemBtnDisabled]}
                 onPress={handleRedeem}
@@ -628,15 +699,22 @@ const ScannerScreen = () => {
             ) : null}
 
             <TouchableOpacity
-              style={[styles.scanAgainBtn, canRedeem && styles.scanAgainBtnSecondary]}
+              style={[
+                styles.scanAgainBtn,
+                (canRedeem || redeemedQrValue) && styles.scanAgainBtnSecondary,
+              ]}
               onPress={handleScanAgain}
               activeOpacity={0.9}>
               <MaterialCommunityIcons
                 name="qrcode-scan"
                 size={18}
-                color={canRedeem ? colors.primary : colors.white}
+                color={canRedeem || redeemedQrValue ? colors.primary : colors.white}
               />
-              <Text style={[styles.scanAgainText, canRedeem && styles.scanAgainTextSecondary]}>
+              <Text
+                style={[
+                  styles.scanAgainText,
+                  (canRedeem || redeemedQrValue) && styles.scanAgainTextSecondary,
+                ]}>
                 Scan Another QR
               </Text>
             </TouchableOpacity>
@@ -837,6 +915,21 @@ const styles = StyleSheet.create({
   resultValue: {
     fontSize: 14,
     color: colors.text,
+    fontFamily: fonts.BOLD,
+  },
+  redeemedQrWrap: {
+    marginTop: 16,
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#E8EDF5',
+  },
+  redeemedQrHint: {
+    marginTop: 12,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    color: colors.mutedText,
     fontFamily: fonts.BOLD,
   },
   scanAgainBtn: {

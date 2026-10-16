@@ -3,14 +3,15 @@ import { useNavigation } from '@react-navigation/native';
 import LoginScreenView from './LoginScreenView';
 import { useAppContext } from '../../../context/AppContext';
 import { userAuthApi } from '../../../services/userAuthApi';
-import {
-  normalizePhoneNumber,
-  sendPhoneVerificationOtp,
-  validatePhoneInput,
-} from '../../../services/firebasePhoneAuth';
+import { normalizePhoneNumber, validatePhoneInput } from '../../../services/phoneNumber';
 import { showAppAlert } from '../../../services/appAlert';
 import { getFcmToken } from '../../../services/fcmToken';
-import { signInWithApple, signInWithGoogle } from '../../../services/firebaseSocialAuth';
+import {
+  isAppleSignInAvailable,
+  signInWithApple,
+  signInWithGoogle,
+} from '../../../services/firebaseSocialAuth';
+import { resetToMainStack } from '../../../navigation/navigationService';
 
 const Login = () => {
   const navigation = useNavigation();
@@ -22,13 +23,12 @@ const Login = () => {
     void getFcmToken();
   }, []);
 
-  const navigateToOtp = async (
+  const navigateToOtp = (
     phone: string,
     mode: 'login' | 'signup' | 'forgot-password',
     exists: boolean,
   ) => {
     const normalizedPhone = normalizePhoneNumber(phone);
-    await sendPhoneVerificationOtp(phone);
 
     setPendingAuth({
       phone: phone.replace(/\D/g, ''),
@@ -40,6 +40,12 @@ const Login = () => {
     // @ts-ignore
     navigation.navigate('OTPCode', {
       phoneNumber: normalizedPhone,
+      pendingAuth: {
+        phone: phone.replace(/\D/g, ''),
+        normalizedPhone,
+        exists,
+        mode,
+      },
     });
   };
 
@@ -66,11 +72,7 @@ const Login = () => {
         '../../../services/deepLinkHandler'
       );
       void consumePendingOfferDeepLink();
-      const root = navigation.getParent();
-      if (root) {
-        // @ts-ignore
-        root.navigate('MainStack');
-      }
+      resetToMainStack();
     } catch (error) {
       const message =
         error instanceof Error ? error.message : 'Unable to log in with password.';
@@ -91,14 +93,13 @@ const Login = () => {
 
     try {
       setIsSubmitting(true);
-      const sendOtpResponse = await userAuthApi.sendOtp(phone);
-
-      if (!sendOtpResponse.exists) {
+      if (!(await userAuthApi.isPhoneRegistered(phone))) {
         showAppAlert('Account not found', 'This mobile number is not registered. Please sign up first.');
         return;
       }
 
-      await navigateToOtp(phone, 'login', true);
+      await userAuthApi.sendOtp(phone);
+      navigateToOtp(phone, 'login', true);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to send OTP.';
       showAppAlert('OTP failed', message);
@@ -118,14 +119,13 @@ const Login = () => {
 
     try {
       setIsSubmitting(true);
-      const sendOtpResponse = await userAuthApi.sendOtp(phone);
-
-      if (sendOtpResponse.exists) {
+      if (await userAuthApi.isPhoneRegistered(phone)) {
         showAppAlert('Account already exists', 'This mobile number is already registered. Please log in.');
         return;
       }
 
-      await navigateToOtp(phone, 'signup', false);
+      await userAuthApi.sendOtp(phone);
+      navigateToOtp(phone, 'signup', false);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to send OTP.';
       showAppAlert('OTP failed', message);
@@ -145,14 +145,13 @@ const Login = () => {
 
     try {
       setIsSubmitting(true);
-      const sendOtpResponse = await userAuthApi.sendOtp(phone);
-
-      if (!sendOtpResponse.exists) {
+      if (!(await userAuthApi.isPhoneRegistered(phone))) {
         showAppAlert('Account not found', 'This mobile number is not registered. Please sign up first.');
         return;
       }
 
-      await navigateToOtp(phone, 'forgot-password', true);
+      await userAuthApi.sendOtp(phone);
+      navigateToOtp(phone, 'forgot-password', true);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to start forgot password.';
       showAppAlert('Forgot password failed', message);
@@ -204,7 +203,23 @@ const Login = () => {
     const run = async () => {
       try {
         setIsSubmitting(true);
-        await signInWithApple();
+        const appleSignIn = await signInWithApple();
+        if (!appleSignIn) {
+          return;
+        }
+
+        const response = await userAuthApi.loginWithApple(appleSignIn.firebaseToken, {
+          appleIdToken: appleSignIn.appleIdToken,
+          email: appleSignIn.email,
+          displayName: appleSignIn.displayName,
+        });
+
+        await setSession(response.token, response.user);
+
+        // @ts-ignore
+        navigation.navigate('Successfull', {
+          isNewUser: response.isNewUser ?? true,
+        });
       } catch (error) {
         const message =
           error instanceof Error ? error.message : 'Unable to sign in with Apple.';
@@ -225,6 +240,7 @@ const Login = () => {
       onForgotPassword={handleForgotPassword}
       onGooglePress={handleGooglePress}
       onApplePress={handleApplePress}
+      showAppleLogin={isAppleSignInAvailable()}
       isSubmitting={isSubmitting}
     />
   );

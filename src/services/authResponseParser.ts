@@ -1,4 +1,5 @@
 import { AuthResponse, UserProfile } from '../types/auth';
+import { looksLikeEmail } from './phoneNumber';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -129,9 +130,23 @@ const normalizeUser = (value: unknown, fallbackPhone?: string): UserProfile | un
     return undefined;
   }
 
+  const rawPhone = pickString(value.phone);
+  const rawEmail = pickString(value.email, value.emailId, value.email_id, value.mail);
+  const email = looksLikeEmail(rawEmail)
+    ? rawEmail
+    : looksLikeEmail(rawPhone)
+      ? rawPhone
+      : undefined;
+  const phone = rawPhone && !looksLikeEmail(rawPhone)
+    ? rawPhone
+    : fallbackPhone && !looksLikeEmail(fallbackPhone)
+      ? fallbackPhone
+      : '';
+
   return {
     _id: id,
-    phone: pickString(value.phone, fallbackPhone) ?? '',
+    phone,
+    email,
     name: pickString(value.name),
     gender: normalizeGenderValue(value.gender ?? value.sex),
     address: pickString(value.address),
@@ -276,9 +291,16 @@ export const parseAuthResponse = (
   if (!user) {
     const userId = extractUserId(records);
     if (userId) {
+      const rawPhone = pickString(...records.map(record => record.phone), fallbackPhone);
+      const rawEmail = pickString(...records.map(record => record.email));
       user = {
         _id: userId,
-        phone: pickString(...records.map(record => record.phone), fallbackPhone) ?? '',
+        phone: rawPhone && !looksLikeEmail(rawPhone) ? rawPhone : '',
+        email: looksLikeEmail(rawEmail)
+          ? rawEmail
+          : looksLikeEmail(rawPhone)
+            ? rawPhone
+            : undefined,
         isVerified: Boolean(records.some(record => record.isVerified ?? record.is_verified ?? true)),
       };
     }
@@ -303,12 +325,22 @@ export const parseGoogleAuthResponse = (
   payload: unknown,
   fallbackEmail?: string,
 ): AuthResponse => {
-  const auth = parseAuthResponse(payload, fallbackEmail);
+  const auth = parseAuthResponse(payload);
   const records = collectRecords(payload);
   const isNewUser = extractIsNewUser(records);
+  const email = pickString(
+    auth.user.email,
+    ...records.map(record => record.email),
+    fallbackEmail,
+  );
 
   return {
     ...auth,
+    user: {
+      ...auth.user,
+      email: looksLikeEmail(email) ? email : auth.user.email,
+      phone: looksLikeEmail(auth.user.phone) ? '' : auth.user.phone,
+    },
     isNewUser: isNewUser ?? !auth.user.name?.trim(),
   };
 };
@@ -371,6 +403,7 @@ export const parseUpdateProfileResponse = (
     ...updates,
     _id: parsedUser?._id ?? fallbackUser._id,
     phone: parsedUser?.phone ?? fallbackUser.phone,
+    email: parsedUser?.email ?? fallbackUser.email,
     gender:
       normalizeGenderValue(parsedUser?.gender) ??
       normalizeGenderValue(updates.gender) ??
@@ -391,7 +424,13 @@ const extractProfileFields = (
 
     for (const source of sources) {
       merged._id = merged._id ?? pickString(source._id, source.id, source.userId);
-      merged.phone = merged.phone ?? pickString(source.phone, fallbackPhone);
+      const sourcePhone = pickString(source.phone, fallbackPhone);
+      merged.phone =
+        merged.phone ??
+        (sourcePhone && !looksLikeEmail(sourcePhone) ? sourcePhone : undefined);
+      const sourceEmail = pickString(source.email, source.emailId, source.email_id, source.phone);
+      merged.email =
+        merged.email ?? (looksLikeEmail(sourceEmail) ? sourceEmail : undefined);
       merged.name = merged.name ?? pickString(source.name);
       merged.address = merged.address ?? pickString(source.address);
       merged.city = merged.city ?? pickString(source.city);
@@ -439,6 +478,7 @@ export const parseFetchProfileResponse = (
     ...parsedUser,
     _id: parsedUser?._id ?? profileFields._id ?? fallbackUser._id,
     phone: parsedUser?.phone ?? profileFields.phone ?? fallbackUser.phone,
+    email: parsedUser?.email ?? profileFields.email ?? fallbackUser.email,
     name: parsedUser?.name ?? profileFields.name ?? fallbackUser.name,
     address: parsedUser?.address ?? profileFields.address ?? fallbackUser.address,
     city: parsedUser?.city ?? profileFields.city ?? fallbackUser.city,

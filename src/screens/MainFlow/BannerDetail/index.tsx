@@ -29,12 +29,6 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_WIDTH = SCREEN_WIDTH - 32;
 const BANNER_RADIUS = 30;
 
-const DEFAULT_TERMS = [
-  'Valid on selected products only',
-  'Cannot be combined with other offers',
-  'Offer subject to store terms and availability',
-];
-
 const BannerDetail = () => {
   const navigation = useNavigation<StackNavigationProp<MainStackParamList, 'BannerDetail'>>();
   const route = useRoute();
@@ -106,10 +100,6 @@ const BannerDetail = () => {
           isVerified: resolvedShop?.isVerified ?? prev.isVerified,
           shopId: resolvedShop?.id || prev.shopId,
           offerId: resolvedOffer?.id || prev.offerId || prev.id,
-          terms:
-            prev.terms?.length
-              ? prev.terms
-              : resolvedOffer?.redeemSteps?.map(step => step.description || step.title).filter(Boolean),
         }));
       } finally {
         if (!cancelled) {
@@ -131,8 +121,7 @@ const BannerDetail = () => {
   const description =
     banner.description ||
     offerDetail?.description ||
-    `${saleTitle}. Valid on selected products only.`;
-  const terms = banner.terms?.length ? banner.terms : DEFAULT_TERMS;
+    `${saleTitle}.`;
   const validTillLabel = useMemo(() => {
     if (!banner.expiresAt) {
       return 'Limited time';
@@ -346,14 +335,6 @@ const BannerDetail = () => {
                   )}
                 </View>
               </View>
-
-              <Text style={styles.sectionTitle}>Terms & Conditions</Text>
-              {terms.map((term, index) => (
-                <View key={`${term}-${index}`} style={styles.termRow}>
-                  <View style={styles.bullet} />
-                  <Text style={styles.termText}>{term}</Text>
-                </View>
-              ))}
             </ScrollView>
 
             <View style={styles.footer}>
@@ -612,31 +593,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fonts.BOLD,
     color: colors.redOrange,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontFamily: fonts.BOLD,
-    color: colors.text,
-    marginBottom: 10,
-  },
-  termRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 8,
-    gap: 10,
-  },
-  bullet: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: colors.primary,
-    marginTop: 7,
-  },
-  termText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 20,
-    color: colors.mutedText,
   },
   footer: {
     paddingHorizontal: 16,

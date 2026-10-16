@@ -8,6 +8,7 @@ import StoreDetailScreenView from './StoreDetailScreenView';
 import { MainStackParamList } from '../../../navigation/types';
 import { useAppContext } from '../../../context/AppContext';
 import { shopApi } from '../../../services/shopApi';
+import { clickApi } from '../../../services/clickApi';
 import { shopWishlistApi } from '../../../services/shopWishlistApi';
 import { showAppAlert } from '../../../services/appAlert';
 import { colors, fonts } from '../../../helpers/styles';
@@ -108,6 +109,10 @@ const StoreDetail = () => {
     // Seed shop is only used as fallback when API fails; refetch key is shopId + token + retry.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, shopId, reloadToken]);
+
+  useEffect(() => {
+    clickApi.trackShopClick(shopId, authToken);
+  }, [authToken, shopId]);
 
   useEffect(() => {
     let cancelled = false;

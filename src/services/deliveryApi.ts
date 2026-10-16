@@ -1,15 +1,29 @@
 import { API_ENDPOINTS, DELIVERY_API_BASE_URL } from '../config/api';
 import { apiRequest } from './apiClient';
 
+export type CreateDeliveryOrderItem = {
+  productId: string;
+  quantity: number;
+};
+
 export type CreateDeliveryOrderPayload = {
   merchantId: string;
-  productId: string;
-  customItemName: string;
-  quantity: number | string;
-  itemPrice: number | string;
+  /** One or more products in a single delivery request. */
+  items?: CreateDeliveryOrderItem[];
+  productId?: string;
+  customItemName?: string;
+  quantity?: number | string;
+  itemPrice?: number | string;
   note?: string;
   deliveryAddress: string;
   phone: string;
+  city?: string;
+  street?: string;
+  state?: string;
+  zipCode?: string;
+  latitude?: number;
+  longitude?: number;
+  estimatedMinutes?: number;
 };
 
 export type DeliveryOrderData = {
@@ -34,6 +48,17 @@ export type CancelDeliveryOrderResponse = {
   success?: boolean;
   message?: string;
   data?: DeliveryOrderData | null;
+};
+
+export type DeliveryFeeEstimate = {
+  shopId: string;
+  shopName?: string;
+  distanceKm?: number;
+  /** Merchant delivery fee only — never includes platform fee. */
+  deliveryFee: number;
+  isDeliverable: boolean;
+  tierApplied?: string;
+  tierReason?: string;
 };
 
 export type DeliveryOrderListItem = {
@@ -171,10 +196,8 @@ export type DeliveryOrderDetail = DeliveryOrderListItem & {
   merchantPhone?: string;
   merchantLogo?: string;
   merchantAddress?: string;
-  platformFee?: string;
   itemPriceRaw?: number;
   deliveryFeeRaw?: number;
-  platformFeeRaw?: number;
   totalAmountRaw?: number;
   cancelReason?: string;
   eta?: string;
@@ -204,19 +227,6 @@ export type DeliveryOrderDetailResponse = {
   data?: unknown;
   order?: unknown;
   deliveryOrder?: unknown;
-};
-
-/**
- * Build application/x-www-form-urlencoded body as a plain string.
- * RN fetch historically drops URLSearchParams instances; a string body is reliable.
- */
-const encodeFormBody = (fields: Record<string, string>) => {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(fields)) {
-    // Always append literal keys — including empty strings — so Express sees the field names.
-    params.append(key, value);
-  }
-  return params.toString();
 };
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -684,9 +694,6 @@ export const parseDeliveryOrderDetail = (
   const deliveryFeeRaw =
     parseMoneyNumber(raw.deliveryFee ?? raw.deliveryCharge ?? raw.shippingFee) ??
     parseMoneyNumber(base.deliveryFee);
-  const platformFeeRaw = parseMoneyNumber(
-    raw.platformFee ?? raw.serviceFee ?? raw.appFee ?? raw.convenienceFee,
-  );
   const totalAmountRaw =
     parseMoneyNumber(raw.totalAmount ?? raw.total ?? raw.grandTotal ?? raw.amount) ??
     parseMoneyNumber(base.totalAmount);
@@ -752,13 +759,9 @@ export const parseDeliveryOrderDetail = (
       pickImagePath(merchant, ['logo', 'avatar', 'image', 'thumbnail', 'photo']) ||
       pickImagePath(raw, ['merchantLogo', 'shopLogo', 'storeLogo']),
     merchantAddress,
-    platformFee: formatMoney(
-      raw.platformFee ?? raw.serviceFee ?? raw.appFee ?? raw.convenienceFee,
-    ),
     itemPrice: formatMoney(itemPriceRaw) || base.itemPrice,
     itemPriceRaw,
     deliveryFeeRaw,
-    platformFeeRaw,
     totalAmountRaw,
     cancelReason: pickString(raw, ['cancelReason', 'cancellationReason', 'reason']),
     eta,
@@ -819,55 +822,214 @@ export const extractDeliveryOrderId = (
   return undefined;
 };
 
+const parseBooleanFlag = (...values: unknown[]): boolean | undefined => {
+  for (const value of values) {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value !== 0;
+    }
+    if (typeof value === 'string' && value.trim()) {
+      const normalized = value.trim().toLowerCase();
+      if (['true', '1', 'yes', 'y'].includes(normalized)) {
+        return true;
+      }
+      if (['false', '0', 'no', 'n'].includes(normalized)) {
+        return false;
+      }
+    }
+  }
+  return undefined;
+};
+
+export const parseDeliveryFeeEstimate = (
+  payload: unknown,
+  fallbackShopId?: string,
+): DeliveryFeeEstimate => {
+  const root = asRecord(payload);
+  const data = asRecord(root?.data) ?? root;
+  if (!data) {
+    throw new Error('Delivery fee estimate was empty.');
+  }
+
+  const deliveryFee = parseMoneyNumber(
+    data.deliveryFee ?? data.delivery_fee ?? data.deliveryCharge ?? data.delivery_charge,
+  );
+  if (deliveryFee == null || !Number.isFinite(deliveryFee)) {
+    throw new Error('Delivery fee was missing from the estimate.');
+  }
+
+  const isDeliverable =
+    parseBooleanFlag(
+      root?.isDeliverable,
+      root?.is_deliverable,
+      data.isDeliverable,
+      data.is_deliverable,
+    ) ?? true;
+
+  return {
+    shopId: pickString(data, ['shopId', 'shop_id']) || fallbackShopId || '',
+    shopName: pickString(data, ['shopName', 'shop_name']),
+    distanceKm: parseMoneyNumber(data.distanceKm ?? data.distance_km),
+    deliveryFee: Math.max(0, deliveryFee),
+    isDeliverable,
+    tierApplied: pickString(data, ['tierApplied', 'tier_applied']),
+    tierReason: pickString(data, ['tierReason', 'tier_reason']),
+  };
+};
+
+const parseAddressParts = (
+  fullAddress: string,
+  hints?: {
+    city?: string;
+    street?: string;
+    state?: string;
+    zipCode?: string;
+  },
+) => {
+  const parts = fullAddress
+    .split(',')
+    .map(part => part.trim())
+    .filter(Boolean);
+  const zipFromAddress = fullAddress.match(/\b(\d{6})\b/)?.[1];
+  const stateFromAddress =
+    parts.find(part =>
+      /punjab|haryana|delhi|rajasthan|himachal|chandigarh|uttar|karnataka|maharashtra/i.test(
+        part,
+      ),
+    ) || hints?.state;
+  const city =
+    hints?.city?.trim() ||
+    parts
+      .slice()
+      .reverse()
+      .find(
+        part =>
+          part.length >= 2 &&
+          !/india/i.test(part) &&
+          !/\d{6}/.test(part) &&
+          part !== stateFromAddress,
+      ) ||
+    '';
+  const street = hints?.street?.trim() || parts.slice(0, 2).join(', ') || fullAddress;
+
+  return {
+    street,
+    city,
+    state: stateFromAddress?.replace(/\s+\d{6}$/, '').trim() || 'Punjab',
+    zipCode: hints?.zipCode?.trim() || zipFromAddress || '',
+  };
+};
+
+const normalizeOrderItems = (
+  payload: CreateDeliveryOrderPayload,
+): CreateDeliveryOrderItem[] => {
+  const fromList = (payload.items ?? [])
+    .map(item => ({
+      productId: String(item.productId ?? '').trim(),
+      quantity: Math.max(1, Math.floor(Number(item.quantity) || 1)),
+    }))
+    .filter(item => item.productId);
+
+  if (fromList.length) {
+    return fromList;
+  }
+
+  const productId = String(payload.productId ?? '').trim();
+  if (!productId) {
+    return [];
+  }
+
+  return [
+    {
+      productId,
+      quantity: Math.max(1, Math.floor(Number(payload.quantity) || 1)),
+    },
+  ];
+};
+
+const isRetryableCreateError = (error: unknown) =>
+  error instanceof Error &&
+  /not found|404|415|productid is required|product id is required/i.test(
+    error.message,
+  );
+
 export const deliveryApi = {
-  createOrder(
+  async createOrder(
     payload: CreateDeliveryOrderPayload,
     token: string,
   ): Promise<CreateDeliveryOrderResponse> {
     const deliveryAddress = String(payload.deliveryAddress ?? '').trim();
+    const merchantId = String(payload.merchantId ?? '').trim();
+    const contactPhone = String(payload.phone ?? '').replace(/\D/g, '').slice(-10);
+    const items = normalizeOrderItems(payload);
 
+    if (!merchantId) {
+      return Promise.reject(new Error('Merchant is required.'));
+    }
+    if (!items.length) {
+      return Promise.reject(new Error('At least one product is required.'));
+    }
     if (!deliveryAddress) {
       return Promise.reject(new Error('Delivery address is required.'));
     }
+    if (contactPhone.length < 10) {
+      return Promise.reject(new Error('A valid mobile number is required.'));
+    }
 
-    const fields: Record<string, string> = {
-      merchantId: String(payload.merchantId).trim(),
-      productId: String(payload.productId).trim(),
-      customItemName: String(payload.customItemName).trim(),
-      quantity: String(payload.quantity),
-      itemPrice: String(payload.itemPrice),
-      note: payload.note?.trim() || '',
-      street: 'Sahibzada Ajit Singh Nagar',
-      city: 'mohali',
-      deliveryAddress,
-      phone: String(payload.phone).trim(),
+    const addressParts = parseAddressParts(deliveryAddress, {
+      city: payload.city,
+      street: payload.street,
+      state: payload.state,
+      zipCode: payload.zipCode,
+    });
+    const estimatedMinutes =
+      typeof payload.estimatedMinutes === 'number' && Number.isFinite(payload.estimatedMinutes)
+        ? Math.max(1, Math.round(payload.estimatedMinutes))
+        : 30;
+
+    const body = {
+      merchantId,
+      items,
+      deliveryAddress: {
+        street: addressParts.street,
+        city: addressParts.city,
+        state: addressParts.state,
+        zipCode: addressParts.zipCode,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+      },
+      contactPhone,
+      estimatedMinutes,
+      note: payload.note?.trim() || undefined,
     };
 
-    console.log('[API] delivery-orders body', {
-      street: fields.street,
-      city: fields.city,
-      deliveryAddress: fields.deliveryAddress,
-      merchantId: fields.merchantId,
-      productId: fields.productId,
-      customItemName: fields.customItemName,
-      quantity: fields.quantity,
-      itemPrice: fields.itemPrice,
-      note: fields.note ? '[set]' : '',
-      phone: fields.phone ? `[len=${fields.phone.length}]` : '',
-      keys: Object.keys(fields),
+    console.log('[API] create delivery order once', {
+      merchantId,
+      itemCount: items.length,
+      productIds: items.map(item => item.productId),
     });
 
-    const body = encodeFormBody(fields);
+    const request = (path: string) =>
+      apiRequest<CreateDeliveryOrderResponse>(path, {
+        method: 'POST',
+        token,
+        baseUrl: DELIVERY_API_BASE_URL,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body,
+      });
 
-    return apiRequest<CreateDeliveryOrderResponse>(API_ENDPOINTS.createDeliveryOrder, {
-      method: 'POST',
-      token,
-      baseUrl: DELIVERY_API_BASE_URL,
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-      },
-      body,
-    });
+    try {
+      return await request(API_ENDPOINTS.createDeliveryOrder);
+    } catch (error) {
+      if (!isRetryableCreateError(error)) {
+        throw error;
+      }
+      return request(API_ENDPOINTS.createDeliveryOrderBatch);
+    }
   },
 
   cancelOrder(
@@ -945,5 +1107,28 @@ export const deliveryApi = {
     }
 
     return parseDeliveryOrderDetail(raw);
+  },
+
+  /**
+   * GET /api/delivery/estimate-fee?shopId=
+   * Uses the logged-in user's location. Returns merchant deliveryFee only.
+   */
+  async estimateFee(shopId: string, token: string): Promise<DeliveryFeeEstimate> {
+    const trimmedId = shopId.trim();
+    const trimmedToken = token.trim();
+    if (!trimmedId) {
+      return Promise.reject(new Error('Shop id is required to estimate delivery.'));
+    }
+    if (!trimmedToken) {
+      return Promise.reject(new Error('Login required to estimate delivery.'));
+    }
+
+    const payload = await apiRequest<unknown>(API_ENDPOINTS.estimateDeliveryFee(trimmedId), {
+      method: 'GET',
+      token: trimmedToken,
+      baseUrl: DELIVERY_API_BASE_URL,
+    });
+
+    return parseDeliveryFeeEstimate(payload, trimmedId);
   },
 };

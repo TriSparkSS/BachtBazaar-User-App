@@ -14,20 +14,32 @@ export const requestLocationPermission = async (): Promise<boolean> => {
   return granted === PermissionsAndroid.RESULTS.GRANTED;
 };
 
+const readCoordinate = (value: unknown): number | null => {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
 export const getCurrentDeviceCoordinates = async (): Promise<GeoCoordinates | null> =>
   new Promise(resolve => {
-    Geolocation.getCurrentPosition(
-      position => {
-        resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-        });
-      },
-      () => resolve(null),
-      {
-        enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 10000,
-      },
-    );
+    try {
+      Geolocation.getCurrentPosition(
+        position => {
+          const latitude = readCoordinate(position?.coords?.latitude);
+          const longitude = readCoordinate(position?.coords?.longitude);
+          if (latitude == null || longitude == null) {
+            resolve(null);
+            return;
+          }
+          resolve({ latitude, longitude });
+        },
+        () => resolve(null),
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 10000,
+        },
+      );
+    } catch {
+      resolve(null);
+    }
   });

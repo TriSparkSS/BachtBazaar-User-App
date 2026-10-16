@@ -43,7 +43,6 @@ export type PendingDeliveryRequest = {
   note?: string;
   itemPrice?: number;
   deliveryFee?: number;
-  platformFee?: number;
   totalAmount?: number;
 };
 
@@ -203,7 +202,6 @@ const buildPendingFromTrackableOrders = (
     totalAmount:
       parseMoney(primary?.totalAmount) ??
       (overlapsPrevious ? previous?.totalAmount : undefined),
-    platformFee: overlapsPrevious ? previous?.platformFee : undefined,
   };
 };
 

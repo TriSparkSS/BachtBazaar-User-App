@@ -80,7 +80,6 @@ const RequestDeliverySent = () => {
       note: params.note,
       itemPrice: params.itemPrice,
       deliveryFee: params.deliveryFee,
-      platformFee: params.platformFee,
       totalAmount: params.totalAmount,
     });
     void refreshPendingFromApi();
@@ -91,7 +90,6 @@ const RequestDeliverySent = () => {
     params.mobile,
     params.note,
     params.orderIds,
-    params.platformFee,
     params.product,
     params.requestId,
     params.shop,

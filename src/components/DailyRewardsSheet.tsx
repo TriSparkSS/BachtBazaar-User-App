@@ -17,7 +17,7 @@ import QRCode from 'react-native-qrcode-svg';
 import ScratchToReveal from './ScratchToReveal';
 import { useAppContext } from '../context/AppContext';
 import { colors, fonts } from '../helpers/styles';
-import { resolveOfferQrValue } from '../helpers/offerQrCode';
+import { encodeUserOfferQrValue } from '../helpers/offerQrCode';
 import { DailyCalendarDay, DailyRewardEntry, DailyRewardsCalendar } from '../types/dailyRewards';
 import { showAppAlert } from '../services/appAlert';
 
@@ -107,14 +107,19 @@ const buildFullMonthDays = (anchorDate: string): DailyCalendarDay[] => {
 const QR_SIZE = 168;
 const QR_FRAME = 188;
 
-const RewardQrVisual = ({ value, framed = true }: { value: string; framed?: boolean }) =>
-  framed ? (
+const RewardQrVisual = ({ value, framed = true }: { value: string; framed?: boolean }) => {
+  if (!value.trim()) {
+    return <RewardQrPlaceholder />;
+  }
+
+  return framed ? (
     <View style={styles.qrOuter}>
       <QRCode value={value} size={QR_SIZE} backgroundColor={colors.white} color="#111827" />
     </View>
   ) : (
     <QRCode value={value} size={QR_SIZE} backgroundColor={colors.white} color="#111827" />
   );
+};
 
 const RewardQrPlaceholder = () => (
   <View style={styles.qrPlaceholder}>
@@ -209,27 +214,12 @@ const RewardClaimModal = ({
   }
 
   const rewardImage = resolveImageUrl(reward.image) ?? reward.image;
-  const qrValue = resolveOfferQrValue(
-    {
-      id: reward.offerId || reward.id,
-      offerId: reward.offerId || reward.id,
-      userId,
-      merchantId: reward.merchantId,
-      shopId: reward.shopId,
-      title: reward.title,
-      description: reward.description,
-      discountBadge: reward.discountBadge,
-      minimumPurchaseAmount: reward.minimumPurchaseAmount,
-      startDate: reward.startDate,
-      endDate: reward.endDate,
-      thumbnail: reward.image,
-      offerType: reward.offerType || reward.displayType || 'offer',
-      displayType: reward.displayType,
-      shopName: reward.shopName,
-      isActive: true,
-    },
-    reward.qrValue,
-  );
+  const offerIdForQr = reward.offerId?.trim() || reward.id?.trim() || '';
+  const userIdForQr = userId?.trim() || '';
+  const qrValue =
+    offerIdForQr && userIdForQr
+      ? encodeUserOfferQrValue(offerIdForQr, userIdForQr)
+      : '';
 
   const showScratch = phase === 'scratch';
   const showQr = phase === 'revealed' || showScratch;

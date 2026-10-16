@@ -23,20 +23,50 @@ import {
   formatCartPrice,
 } from '../../../services/cartApi';
 import {
+  DeliveryFeeEstimate,
   deliveryApi,
   extractDeliveryOrderId,
 } from '../../../services/deliveryApi';
 import { shopApi } from '../../../services/shopApi';
+import { cartProductCache } from '../../../services/cartProductCache';
 import { showAppAlert } from '../../../services/appAlert';
 import { colors, fonts } from '../../../helpers/styles';
 import { cartItemToDeliveryTarget } from '../../../utils/cartDelivery';
 import {
-  REQUEST_DELIVERY_FEE,
-  REQUEST_PLATFORM_FEE,
-} from '../../../utils/shopDelivery';
+  deliveryEstimateTierLabel,
+  estimateDeliveryFeeForShop,
+  formatEstimateMeta,
+} from '../../../utils/estimateDeliveryFee';
+import {
+  formatRupeeAmount,
+  matchShopProduct,
+  quoteFromShopProduct,
+} from '../../../utils/productPrice';
+import { loadCartShopProducts } from '../../../utils/resolveCartShop';
+import { extractCityFromAddress } from '../../../utils/location';
+import { ShopProduct } from '../../../types/shop';
 
 const PRODUCT_PLACEHOLDER =
   'https://images.pexels.com/photos/4110251/pexels-photo-4110251.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=200';
+
+const withLiveProductPrice = (item: CartItem, products: ShopProduct[]): CartItem => {
+  const product = matchShopProduct(products, item);
+  if (!product) {
+    return item;
+  }
+  const live = quoteFromShopProduct(product);
+  return {
+    ...item,
+    productId: item.productId || product.id,
+    shopId: item.shopId || product.shopId,
+    shopName: item.shopName || product.shopName || item.merchantName,
+    unitPrice: live.saleAmount,
+    originalUnitPrice: live.originalAmount,
+    itemTotal: live.saleAmount * item.quantity,
+    itemDiscount: live.discountAmount * item.quantity,
+    price: formatRupeeAmount(live.saleAmount),
+  };
+};
 
 const EMPTY_SUMMARY: CartSummary = {
   subtotal: 0,
@@ -57,6 +87,10 @@ const Cart = () => {
   const [mutatingItemId, setMutatingItemId] = useState<string | null>(null);
   const [isClearing, setIsClearing] = useState(false);
   const [isProceeding, setIsProceeding] = useState(false);
+  const [shopDeliveryFee, setShopDeliveryFee] = useState<number | undefined>();
+  const [feeEstimate, setFeeEstimate] = useState<DeliveryFeeEstimate | null>(null);
+  const [isEstimatingFee, setIsEstimatingFee] = useState(false);
+  const [liveProducts, setLiveProducts] = useState<ShopProduct[]>([]);
 
   const loadCart = useCallback(
     async (opts?: { refresh?: boolean }) => {
@@ -77,7 +111,29 @@ const Cart = () => {
           setIsLoading(true);
         }
         const result = await cartApi.fetchCart(token);
-        setItems(result.items);
+        const cached = await cartProductCache.readAll();
+        const hydrated = result.items.map(item => {
+          const hit = cartProductCache.find(cached, item);
+          if (!hit) {
+            return item;
+          }
+          return {
+            ...item,
+            productId: item.productId || hit.productId,
+            shopId: item.shopId || hit.shopId,
+            merchantId: item.merchantId || hit.merchantId,
+            shopName: item.shopName || hit.shopName || item.merchantName,
+            unitPrice: hit.saleAmount,
+            originalUnitPrice: hit.originalAmount,
+            itemTotal: hit.saleAmount * item.quantity,
+            itemDiscount:
+              hit.originalAmount != null
+                ? Math.max(0, hit.originalAmount - hit.saleAmount) * item.quantity
+                : item.itemDiscount,
+            price: formatRupeeAmount(hit.saleAmount),
+          };
+        });
+        setItems(hydrated);
         setSummary(result.summary);
       } catch (error) {
         showAppAlert(
@@ -97,6 +153,108 @@ const Cart = () => {
   useEffect(() => {
     loadCart();
   }, [loadCart]);
+
+  const firstItem = items[0];
+  const firstShopId = firstItem?.shopId?.trim();
+  const firstMerchantId = firstItem?.merchantId?.trim();
+  const firstShopName = firstItem?.shopName || firstItem?.merchantName;
+  const productIdsKey = items.map(item => item.productId || '').join('|');
+
+  useEffect(() => {
+    const token = authToken?.trim();
+    if (!token || items.length === 0) {
+      setFeeEstimate(null);
+      setShopDeliveryFee(undefined);
+      setLiveProducts([]);
+      setIsEstimatingFee(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsEstimatingFee(true);
+
+    const loadQuoteAndPrices = async () => {
+      const shopRef = {
+        shopId: firstShopId,
+        merchantId: firstMerchantId,
+        shopName: firstShopName,
+        city: currentUser?.city || extractCityFromAddress(currentUser?.address),
+        productId: firstItem?.productId,
+        productName: firstItem?.productName,
+      };
+
+      const catalog = await loadCartShopProducts(shopRef, token);
+      if (cancelled) {
+        return;
+      }
+      if (catalog.products.length) {
+        setLiveProducts(catalog.products);
+        for (const item of items) {
+          const product = matchShopProduct(catalog.products, item);
+          if (product) {
+            void cartProductCache.rememberFromShop(product, {
+              id: catalog.shopId || product.shopId || '',
+              name: firstShopName || product.shopName || 'Store',
+              merchantId: firstMerchantId,
+              offers: [],
+            });
+          }
+        }
+      }
+
+      try {
+        const estimate = await estimateDeliveryFeeForShop(
+          {
+            ...shopRef,
+            shopId: catalog.shopId || firstShopId,
+          },
+          token,
+        );
+        if (cancelled) {
+          return;
+        }
+        setFeeEstimate(estimate);
+        setShopDeliveryFee(estimate.deliveryFee);
+
+        const estimateShopId = estimate.shopId?.trim();
+        if (estimateShopId && estimateShopId !== catalog.shopId) {
+          try {
+            const shop = await shopApi.fetchShopByIdWithOffers(estimateShopId, token);
+            if (!cancelled && shop.products?.length) {
+              setLiveProducts(shop.products);
+            }
+          } catch {
+            // Keep the catalog already loaded above.
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setFeeEstimate(null);
+          setShopDeliveryFee(undefined);
+        }
+      }
+
+      if (!cancelled) {
+        setIsEstimatingFee(false);
+      }
+    };
+
+    void loadQuoteAndPrices();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authToken,
+    currentUser?.city,
+    firstItem?.productId,
+    firstItem?.productName,
+    firstMerchantId,
+    firstShopId,
+    firstShopName,
+    items.length,
+    productIdsKey,
+  ]);
 
   const requireToken = () => {
     const token = authToken?.trim();
@@ -199,34 +357,37 @@ const Cart = () => {
     ]);
   };
 
+  const pricedItems = useMemo(
+    () => items.map(item => withLiveProductPrice(item, liveProducts)),
+    [items, liveProducts],
+  );
+
   const itemCountLabel =
     summary.totalItemsCount === 1
       ? '1 item'
       : `${summary.totalItemsCount} items`;
+  const deliveryTierLabel = deliveryEstimateTierLabel(feeEstimate);
+  const deliveryMeta = formatEstimateMeta(feeEstimate);
 
   const paymentDetails = useMemo(() => {
-    const subtotal =
-      summary.subtotal > 0
-        ? summary.subtotal
-        : items.reduce(
-            (sum, item) =>
-              sum + (item.itemTotal ?? (item.unitPrice ?? 0) * item.quantity),
-            0,
-          );
-    const discount = Math.max(0, summary.totalDiscount);
-    // Prefer cart API fees when present; otherwise mirror Request Delivery demo fees.
-    const deliveryFee =
-      summary.deliveryFee != null ? summary.deliveryFee : REQUEST_DELIVERY_FEE;
-    const platformFee =
-      summary.platformFee != null ? summary.platformFee : REQUEST_PLATFORM_FEE;
-    const itemsTotal =
-      summary.totalAmount > 0
-        ? summary.totalAmount
-        : Math.max(0, subtotal - discount);
-    // Cart API totals are item-only; add client-side (or parsed) fees for payable total.
-    const totalPayable = itemsTotal + deliveryFee + platformFee;
-    return { subtotal, discount, deliveryFee, platformFee, totalPayable };
-  }, [items, summary]);
+    const saleTotal = pricedItems.reduce(
+      (sum, item) => sum + (item.unitPrice ?? 0) * item.quantity,
+      0,
+    );
+    const originalTotal = pricedItems.reduce((sum, item) => {
+      const unit = item.originalUnitPrice ?? item.unitPrice ?? 0;
+      return sum + unit * item.quantity;
+    }, 0);
+    const discount = Math.max(0, originalTotal - saleTotal);
+    const deliveryFee = feeEstimate?.deliveryFee ?? shopDeliveryFee;
+    return {
+      itemPrice: saleTotal,
+      originalPrice: originalTotal > saleTotal ? originalTotal : undefined,
+      discount,
+      deliveryFee,
+      totalPayable: saleTotal + (deliveryFee ?? 0),
+    };
+  }, [feeEstimate, pricedItems, shopDeliveryFee]);
 
   const handleProceed = async () => {
     if (isProceeding || mutatingItemId || isClearing || items.length === 0) {
@@ -238,7 +399,7 @@ const Cart = () => {
       return;
     }
 
-    const targets = items
+    const targets = pricedItems
       .map(cartItemToDeliveryTarget)
       .filter((target): target is NonNullable<typeof target> => Boolean(target));
 
@@ -271,72 +432,62 @@ const Cart = () => {
       return;
     }
 
+    const merchantIds = Array.from(
+      new Set(targets.map(target => target.merchantId).filter(Boolean)),
+    );
+    if (merchantIds.length > 1) {
+      showAppAlert(
+        'Different stores',
+        'Cart has items from more than one store. Please keep items from one store and try again.',
+      );
+      return;
+    }
+
     try {
       setIsProceeding(true);
 
-      const orderIds: string[] = [];
-      let lastError: Error | null = null;
-
-      for (let index = 0; index < targets.length; index += 1) {
-        const target = targets[index];
-        const extraNote =
-          targets.length > 1
-            ? `Cart checkout item ${index + 1} of ${targets.length}`
-            : '';
-        try {
-          const response = await deliveryApi.createOrder(
-            {
-              merchantId: target.merchantId,
-              productId: target.productId,
-              customItemName: target.product.title?.trim() || 'Item',
-              quantity: target.quantity,
-              itemPrice: target.itemPrice,
-              note: extraNote,
-              deliveryAddress,
-              phone: normalizedMobile,
-            },
-            token,
-          );
-
-          if (response.success === false) {
-            throw new Error(response.message || 'Could not send delivery request.');
-          }
-
-          const orderId = extractDeliveryOrderId(response);
-          if (orderId) {
-            orderIds.push(orderId);
-          } else {
-            orderIds.push(target.productId);
-          }
-        } catch (error) {
-          lastError =
-            error instanceof Error
-              ? error
-              : new Error('Could not send delivery request.');
-        }
-      }
-
-      if (orderIds.length === 0) {
-        throw lastError || new Error('Could not send your delivery request.');
-      }
-
       const primary = targets[0];
-      const requestId = orderIds[0];
-      const itemPrice = primary.itemPrice;
-      const deliveryFee = REQUEST_DELIVERY_FEE;
-      const platformFee = REQUEST_PLATFORM_FEE;
-      const totalAmount = itemPrice + deliveryFee + platformFee;
+      const checkoutItems = targets.map(target => ({
+        productId: target.productId,
+        quantity: target.quantity,
+      }));
+      console.log('[API] cart checkout single request', {
+        merchantId: primary.merchantId,
+        itemCount: checkoutItems.length,
+        items: checkoutItems,
+      });
+      const response = await deliveryApi.createOrder(
+        {
+          merchantId: primary.merchantId,
+          items: checkoutItems,
+          deliveryAddress,
+          phone: normalizedMobile,
+          city: currentUser?.city || extractCityFromAddress(deliveryAddress),
+          latitude: currentUser?.latitude,
+          longitude: currentUser?.longitude,
+          estimatedMinutes: 30,
+        },
+        token,
+      );
+
+      if (response.success === false) {
+        throw new Error(response.message || 'Could not send delivery request.');
+      }
+
+      const orderId = extractDeliveryOrderId(response) || primary.productId;
+      const orderIds = [orderId];
+      const itemPrice = paymentDetails.itemPrice;
+      const deliveryFee = feeEstimate?.deliveryFee ?? shopDeliveryFee ?? 0;
+      const totalAmount = itemPrice + deliveryFee;
       const sentParams = {
         shop: primary.shop,
         product: primary.product,
-        requestId,
+        requestId: orderId,
         orderIds,
         address: deliveryAddress,
         mobile: normalizedMobile,
-        note: targets.length > 1 ? `Cart checkout (${orderIds.length} orders)` : undefined,
         itemPrice,
         deliveryFee,
-        platformFee,
         totalAmount,
       };
 
@@ -368,13 +519,13 @@ const Cart = () => {
   const renderItem = (item: CartItem) => {
     const imageUri = shopApi.resolveImageUrl(item.image) ?? PRODUCT_PLACEHOLDER;
     const merchantLabel = item.merchantName || item.shopName;
-    const lineTotal =
-      formatCartPrice(item.itemTotal) ??
-      formatCartPrice(
-        item.unitPrice != null ? item.unitPrice * item.quantity : undefined,
-      ) ??
-      item.price;
-    const unitLabel = item.price ?? formatCartPrice(item.unitPrice);
+    const saleUnit = item.unitPrice ?? 0;
+    const lineTotal = formatCartPrice(saleUnit * item.quantity);
+    const unitLabel = formatCartPrice(saleUnit) ?? item.price;
+    const originalLabel =
+      item.originalUnitPrice != null && item.originalUnitPrice > saleUnit
+        ? formatCartPrice(item.originalUnitPrice)
+        : undefined;
     const busy = mutatingItemId === item.id || isClearing;
 
     return (
@@ -396,7 +547,12 @@ const Cart = () => {
           ) : null}
           <View style={styles.itemMetaRow}>
             {unitLabel ? (
-              <Text style={styles.unitPrice}>{unitLabel}</Text>
+              <View style={styles.pricePair}>
+                <Text style={styles.unitPrice}>{unitLabel}</Text>
+                {originalLabel ? (
+                  <Text style={styles.originalUnitPrice}>{originalLabel}</Text>
+                ) : null}
+              </View>
             ) : (
               <View />
             )}
@@ -529,7 +685,7 @@ const Cart = () => {
                   colors={[colors.primary]}
                 />
               }>
-              {items.map(renderItem)}
+              {pricedItems.map(renderItem)}
             </ScrollView>
 
             <SafeAreaView edges={['bottom']} style={styles.summarySafe}>
@@ -537,10 +693,17 @@ const Cart = () => {
                 <Text style={styles.chargesTitle}>Payment Details</Text>
                 <View style={styles.chargesCard}>
                   <View style={styles.chargeRow}>
-                    <Text style={styles.chargeLabel}>Subtotal</Text>
-                    <Text style={styles.chargeValue}>
-                      {formatCartPrice(paymentDetails.subtotal) ?? '₹0'}
-                    </Text>
+                    <Text style={styles.chargeLabel}>Item Price</Text>
+                    <View style={styles.pricePair}>
+                      <Text style={styles.chargeValue}>
+                        {formatCartPrice(paymentDetails.itemPrice) ?? '₹0'}
+                      </Text>
+                      {paymentDetails.originalPrice != null ? (
+                        <Text style={styles.originalUnitPrice}>
+                          {formatCartPrice(paymentDetails.originalPrice)}
+                        </Text>
+                      ) : null}
+                    </View>
                   </View>
                   {paymentDetails.discount > 0 ? (
                     <View style={styles.chargeRow}>
@@ -551,17 +714,18 @@ const Cart = () => {
                     </View>
                   ) : null}
                   <View style={styles.chargeRow}>
-                    <Text style={styles.chargeLabel}>Delivery Fee</Text>
-                    <Text style={styles.chargeValue}>
-                      {formatCartPrice(paymentDetails.deliveryFee) ?? '₹0'}
+                    <Text style={styles.chargeLabel}>
+                      {deliveryTierLabel ? `Delivery Fee (${deliveryTierLabel})` : 'Delivery Fee'}
                     </Text>
+                    {isEstimatingFee && paymentDetails.deliveryFee == null ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <Text style={styles.chargeValue}>
+                        {formatCartPrice(paymentDetails.deliveryFee) ?? '₹0'}
+                      </Text>
+                    )}
                   </View>
-                  <View style={styles.chargeRow}>
-                    <Text style={styles.chargeLabel}>Platform Fee</Text>
-                    <Text style={styles.chargeValue}>
-                      {formatCartPrice(paymentDetails.platformFee) ?? '₹0'}
-                    </Text>
-                  </View>
+                  {deliveryMeta ? <Text style={styles.chargeHint}>{deliveryMeta}</Text> : null}
                   <View style={styles.totalDivider} />
                   <View style={styles.chargeRowLast}>
                     <Text style={styles.totalLabel}>Total Payable</Text>
@@ -749,6 +913,18 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: fonts.BOLD,
   },
+  pricePair: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+  },
+  originalUnitPrice: {
+    fontSize: 12,
+    color: colors.lighterGray,
+    fontFamily: fonts.BOLD,
+    textDecorationLine: 'line-through',
+  },
   qtyStepper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -836,6 +1012,13 @@ const styles = StyleSheet.create({
   chargeValue: {
     fontSize: 14,
     color: colors.text,
+    fontFamily: fonts.BOLD,
+  },
+  chargeHint: {
+    marginTop: -6,
+    marginBottom: 12,
+    fontSize: 12,
+    color: colors.mutedText,
     fontFamily: fonts.BOLD,
   },
   discountValue: {

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Linking,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -11,11 +10,14 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import AppGoogleMap from '../../../components/AppGoogleMap';
 import { colors, fonts } from '../../../helpers/styles';
 import { geocodeAddress } from '../../../utils/location';
+import { hasValidCoordinates, openStoreDirections } from '../../../utils/openStoreDirections';
 
 type OfferLocationMapProps = {
   address?: string;
   city?: string;
   label: string;
+  latitude?: number;
+  longitude?: number;
   onGetDirections?: () => void;
 };
 
@@ -23,17 +25,34 @@ const OfferLocationMap: React.FC<OfferLocationMapProps> = ({
   address,
   city,
   label,
+  latitude,
+  longitude,
   onGetDirections,
 }) => {
-  const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(null);
-  const [isLoading, setIsLoading] = useState(Boolean(address?.trim() || city?.trim()));
+  const [coordinates, setCoordinates] = useState<{ latitude: number; longitude: number } | null>(
+    () =>
+      hasValidCoordinates(latitude, longitude)
+        ? { latitude: latitude as number, longitude: longitude as number }
+        : null,
+  );
+  const [isLoading, setIsLoading] = useState(
+    !hasValidCoordinates(latitude, longitude) && Boolean(address?.trim() || city?.trim()),
+  );
   const [hasError, setHasError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     const resolveCoordinates = async () => {
+      if (hasValidCoordinates(latitude, longitude)) {
+        setCoordinates({ latitude: latitude as number, longitude: longitude as number });
+        setIsLoading(false);
+        setHasError(false);
+        return;
+      }
+
       if (!address?.trim() && !city?.trim()) {
+        setCoordinates(null);
         setIsLoading(false);
         setHasError(true);
         return;
@@ -67,7 +86,7 @@ const OfferLocationMap: React.FC<OfferLocationMapProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [address, city, label]);
+  }, [address, city, label, latitude, longitude]);
 
   const openExternalMap = () => {
     if (onGetDirections) {
@@ -75,9 +94,12 @@ const OfferLocationMap: React.FC<OfferLocationMapProps> = ({
       return;
     }
 
-    const parts = [label, address, city].filter(Boolean).join(', ');
-    const query = encodeURIComponent(parts || label);
-    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
+    void openStoreDirections({
+      latitude: coordinates?.latitude ?? latitude,
+      longitude: coordinates?.longitude ?? longitude,
+      label,
+      addressFallback: [address, city].filter(Boolean).join(', '),
+    });
   };
 
   return (

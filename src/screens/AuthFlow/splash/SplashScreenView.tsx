@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import AnimatedScreen from '../../../components/AnimatedScreen';
-import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
+import AppLogo from '../../../components/AppLogo';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
 
@@ -13,7 +13,7 @@ const SplashScreenView = () => {
       </View>
 
       <AnimatedScreen style={styles.content}>
-        <LogoSVG width={120} height={120} />
+        <AppLogo width={120} height={120} />
         <View style={styles.titleRow}>
           <Text style={styles.titleBachat}>Bachat</Text>
           <Text style={styles.titleBazaar}> Bazaar</Text>

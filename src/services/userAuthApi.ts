@@ -1,5 +1,16 @@
-import { API_BASE_URL, API_ENDPOINTS, resolveProfileImageUrl } from '../config/api';
-import { AuthResponse, SendOtpResponse, UserProfile } from '../types/auth';
+import {
+  API_BASE_URL,
+  API_ENDPOINTS,
+  OTP_API_BASE_URL,
+  resolveProfileImageUrl,
+} from '../config/api';
+import {
+  AuthResponse,
+  OtpRetryType,
+  ResendOtpResponse,
+  SendOtpResponse,
+  UserProfile,
+} from '../types/auth';
 import { apiRequest, logApiEvent } from './apiClient';
 import {
   parseAuthResponse,
@@ -7,7 +18,6 @@ import {
   parseGoogleAuthResponse,
   parseProfileImagePath,
   parseUpdateProfileResponse,
-  parseVerifyOtpResponse,
 } from './authResponseParser';
 
 const bytesToBase64 = (bytes: Uint8Array): string => {
@@ -42,41 +52,87 @@ const formatApiPhone = (phone: string) => {
   return digits;
 };
 
+const toFormBody = (fields: Record<string, string | undefined>) =>
+  Object.entries(fields)
+    .filter(([, value]) => value != null && value !== '')
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value as string)}`)
+    .join('&');
+
+const USER_NOT_FOUND_PATTERN = /user not found|not registered|no user|does not exist/i;
+const USER_EXISTS_PATTERN = /password|credential/i;
+
 export const userAuthApi = {
+  /**
+   * Checks registration without sending an SMS. The backend has no dedicated
+   * check endpoint, so this relies on login-password answering "User not found"
+   * for unknown numbers and a password error for registered ones.
+   */
+  async isPhoneRegistered(phone: string): Promise<boolean> {
+    try {
+      await apiRequest<unknown>(API_ENDPOINTS.loginPassword, {
+        method: 'POST',
+        body: { phone: formatApiPhone(phone), password: `__check_${Date.now()}__` },
+      });
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (USER_NOT_FOUND_PATTERN.test(message)) {
+        return false;
+      }
+      if (USER_EXISTS_PATTERN.test(message)) {
+        return true;
+      }
+      throw error;
+    }
+  },
+
   sendOtp(phone: string) {
     return apiRequest<SendOtpResponse>(API_ENDPOINTS.sendOtp, {
       method: 'POST',
-      body: { phone: formatApiPhone(phone) },
+      baseUrl: OTP_API_BASE_URL,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+      body: toFormBody({ phone: formatApiPhone(phone) }),
     });
   },
 
-  verifyOtp(firebaseToken: string, phone?: string, fcmToken?: string) {
-    return apiRequest<unknown>(API_ENDPOINTS.verifyOtp, {
+  /** Verifies the SMS/voice OTP and returns the app session (token + user). */
+  async verifyOtp(phone: string, otp: string): Promise<AuthResponse> {
+    const apiPhone = formatApiPhone(phone);
+    const payload = await apiRequest<unknown>(API_ENDPOINTS.verifyOtp, {
       method: 'POST',
-      body: {
-        token: firebaseToken,
-        firebaseToken,
-        ...(fcmToken?.trim() ? { fcmToken: fcmToken.trim() } : {}),
-      },
-    }).then(payload => parseVerifyOtpResponse(payload, phone));
-  },
-
-  forgotPassword(token: string, newPassword: string) {
-    return apiRequest<{ success: boolean }>(API_ENDPOINTS.forgotPassword, {
-      method: 'POST',
-      body: { token, newPassword },
+      baseUrl: OTP_API_BASE_URL,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+      body: toFormBody({ phone: apiPhone, otp }),
     });
+
+    if (payload && typeof payload === 'object' && (payload as { success?: unknown }).success === false) {
+      throw new Error(String((payload as { message?: unknown }).message ?? 'Invalid OTP.'));
+    }
+
+    const auth = parseAuthResponse(payload, apiPhone);
+    const record =
+      payload && typeof payload === 'object'
+        ? (payload as { isNewUser?: unknown; message?: unknown; nextStep?: unknown })
+        : undefined;
+
+    return {
+      ...auth,
+      isNewUser: typeof record?.isNewUser === 'boolean' ? record.isNewUser : undefined,
+      message: typeof record?.message === 'string' ? record.message : undefined,
+      nextStep: typeof record?.nextStep === 'string' ? record.nextStep : undefined,
+    };
   },
 
-  loginWithOtp(firebaseToken: string, phone?: string, fcmToken?: string) {
-    return apiRequest<unknown>(API_ENDPOINTS.loginOtp, {
+  resendOtp(phone: string, retryType?: OtpRetryType) {
+    return apiRequest<ResendOtpResponse>(API_ENDPOINTS.resendOtp, {
       method: 'POST',
-      body: {
-        token: firebaseToken,
-        firebaseToken,
-        ...(fcmToken?.trim() ? { fcmToken: fcmToken.trim() } : {}),
-      },
-    }).then(payload => parseAuthResponse(payload, phone));
+      baseUrl: OTP_API_BASE_URL,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+      body: toFormBody({
+        phone: formatApiPhone(phone),
+        retryType: retryType === 'Voice' ? 'Voice' : undefined,
+      }),
+    });
   },
 
   loginWithPassword(phone: string, password: string, fcmToken?: string) {
@@ -120,6 +176,7 @@ export const userAuthApi = {
       const enrichedUser = await this.enrichUserWithProfileImage(response.token, {
         ...response.user,
         name: response.user.name ?? profile?.displayName ?? undefined,
+        email: response.user.email ?? profile?.email ?? undefined,
         profileImage: response.user.profileImage ?? profile?.photoUrl ?? undefined,
       });
 
@@ -147,6 +204,7 @@ export const userAuthApi = {
       const fallbackUser: UserProfile = {
         _id: profile.uid,
         phone: '',
+        email: profile.email ?? undefined,
         name: profile.displayName ?? undefined,
         profileImage: profile.photoUrl ?? undefined,
         isVerified: true,
@@ -159,6 +217,36 @@ export const userAuthApi = {
         isNewUser: true,
       };
     }
+  },
+
+  async loginWithApple(
+    firebaseToken: string,
+    profile?: {
+      appleIdToken?: string;
+      email?: string | null;
+      displayName?: string | null;
+    },
+  ): Promise<AuthResponse> {
+    const payload = await apiRequest<unknown>(API_ENDPOINTS.loginGoogle, {
+      method: 'POST',
+      body: {
+        token: firebaseToken,
+        firebaseToken,
+        idToken: profile?.appleIdToken ?? firebaseToken,
+        email: profile?.email ?? undefined,
+        name: profile?.displayName ?? undefined,
+        provider: 'apple',
+      },
+    });
+
+    const response = parseGoogleAuthResponse(payload, profile?.email ?? undefined);
+    const enrichedUser = await this.enrichUserWithProfileImage(response.token, {
+      ...response.user,
+      name: response.user.name ?? profile?.displayName ?? undefined,
+      email: response.user.email ?? profile?.email ?? undefined,
+    });
+
+    return { ...response, user: enrichedUser };
   },
 
   /**
@@ -184,14 +272,14 @@ export const userAuthApi = {
     });
   },
 
-  setPassword(userId: string, password: string, token?: string) {
+  setPassword(password: string, token?: string) {
     return apiRequest<{ success: boolean }>(API_ENDPOINTS.setPassword, {
       method: 'POST',
       token,
-      body: {
-        userId,
-        password,
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
       },
+      body: toFormBody({ password }),
     });
   },
 
@@ -303,7 +391,7 @@ export const userAuthApi = {
       url,
       path,
       method: 'GET',
-      headers: { Accept: 'application/json, image/*', Authorization: '[REDACTED]' },
+      headers: { Accept: 'application/json, image/*', Authorization: `Bearer ${token}` },
     });
 
     const response = await fetch(url, {

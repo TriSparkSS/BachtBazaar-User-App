@@ -516,10 +516,8 @@ export const parsePriceAmount = (value?: string | null): number => {
 
 
 
-/** Fees used for Request Delivery charge breakdown (mockup defaults). */
+/** Delivery fee used for Request Delivery charge breakdown (mockup default). */
 
 export const REQUEST_DELIVERY_FEE = 40;
-
-export const REQUEST_PLATFORM_FEE = 10;
 
 

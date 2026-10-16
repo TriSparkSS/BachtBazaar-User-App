@@ -14,7 +14,7 @@ import {
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import AnimatedScreen from '../../../components/AnimatedScreen';
 import { ScreenScaffold } from '../../../components/ScreenScaffold';
-import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
+import AppLogo from '../../../components/AppLogo';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
 
@@ -25,10 +25,12 @@ interface OTPCodeScreenViewProps {
   setOtp: (otp: string[]) => void;
   onVerify: () => void;
   onResend: () => void;
+  onResendViaCall: () => void;
   onBack: () => void;
   phoneNumber?: string;
   isVerifying?: boolean;
-  isResending?: boolean;
+  resendingType?: 'text' | 'Voice' | null;
+  resendCooldown?: number;
 }
 
 const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({
@@ -36,11 +38,14 @@ const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({
   setOtp,
   onVerify,
   onResend,
+  onResendViaCall,
   onBack,
   phoneNumber,
   isVerifying = false,
-  isResending = false,
+  resendingType = null,
+  resendCooldown = 0,
 }) => {
+  const resendLocked = resendCooldown > 0 || resendingType !== null;
   const inputRefs = useRef<Array<TextInput | null>>([]);
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const codeComplete = useMemo(() => otp.every(Boolean), [otp]);
@@ -108,11 +113,11 @@ const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({
       <AnimatedScreen style={styles.animatedScreen}>
             <View style={styles.logoContainer}>
               <View style={styles.logoHalo}>
-                <LogoSVG width={82} height={82} />
+                <AppLogo width={82} height={82} />
               </View>
               <Text style={styles.title}>Check your phone</Text>
               <Text style={styles.subtitle}>
-                We sent a 6-digit code to confirm it is really you.
+                We sent a {otp.length}-digit code to confirm it is really you.
               </Text>
             </View>
 
@@ -157,7 +162,7 @@ const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({
                         keyboardType="number-pad"
                         textContentType="oneTimeCode"
                         autoComplete="sms-otp"
-                        maxLength={6}
+                        maxLength={otp.length}
                         value={digit}
                         onChangeText={value => handleOtpChange(value, index)}
                         onKeyPress={event => handleKeyPress(event, index)}
@@ -188,7 +193,7 @@ const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({
                   (!codeComplete || isVerifying) && styles.actionButtonMuted,
                 ]}
                 onPress={onVerify}
-                disabled={isVerifying}
+                disabled={!codeComplete || isVerifying}
                 activeOpacity={0.86}
                 accessibilityRole="button">
                 {isVerifying ? (
@@ -199,17 +204,49 @@ const OTPCodeScreenView: React.FC<OTPCodeScreenViewProps> = ({
               </TouchableOpacity>
 
               <View style={styles.resendContainer}>
-                <Text style={styles.resendText}>Did not receive the code?</Text>
+                <Text style={styles.resendText}>
+                  {resendCooldown > 0
+                    ? `Resend code in 0:${String(resendCooldown).padStart(2, '0')}`
+                    : 'Did not receive the code?'}
+                </Text>
+              </View>
+              <View style={styles.resendActions}>
                 <TouchableOpacity
-                  style={styles.resendButton}
+                  style={[styles.resendButton, resendLocked && styles.resendButtonDisabled]}
                   onPress={onResend}
-                  disabled={isResending}
+                  disabled={resendLocked}
                   activeOpacity={0.76}
                   accessibilityRole="button">
-                  {isResending ? (
+                  {resendingType === 'text' ? (
                     <ActivityIndicator size="small" color={colors.primary} />
                   ) : (
-                    <Text style={styles.resendLink}>Resend OTP</Text>
+                    <View style={styles.resendButtonContent}>
+                      <MaterialCommunityIcons
+                        name="message-text-outline"
+                        size={15}
+                        color={colors.primaryDark}
+                      />
+                      <Text style={styles.resendLink}>Resend SMS</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.resendButton, resendLocked && styles.resendButtonDisabled]}
+                  onPress={onResendViaCall}
+                  disabled={resendLocked}
+                  activeOpacity={0.76}
+                  accessibilityRole="button">
+                  {resendingType === 'Voice' ? (
+                    <ActivityIndicator size="small" color={colors.primary} />
+                  ) : (
+                    <View style={styles.resendButtonContent}>
+                      <MaterialCommunityIcons
+                        name="phone-in-talk-outline"
+                        size={15}
+                        color={colors.primaryDark}
+                      />
+                      <Text style={styles.resendLink}>Get OTP on call</Text>
+                    </View>
                   )}
                 </TouchableOpacity>
               </View>
@@ -494,14 +531,28 @@ const styles = StyleSheet.create({
     fontFamily: fonts.BOLD,
     marginRight: 5,
   },
+  resendActions: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    marginTop: 10,
+  },
   resendButton: {
-    minHeight: 32,
-    minWidth: 78,
-    borderRadius: 16,
-    paddingHorizontal: 10,
+    minHeight: 36,
+    minWidth: 120,
+    borderRadius: 18,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.primarySoft,
+  },
+  resendButtonDisabled: {
+    opacity: 0.5,
+  },
+  resendButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   resendLink: {
     fontSize: 12.5,

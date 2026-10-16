@@ -177,6 +177,14 @@ Known config from `src/config/api.ts`:
 - Local offers, sponsored cards, banner/search sections, and scrolling/card spacing were iterated.
 - Offer detail screen was updated to show a map view with a pinned location.
 - API request/response logging was added.
+- Change Area Radius (sidebar, 1–1000 km, default 5) drives `GET /api/users/shop/all?radius=N`.
+- Firebase phone OTP was removed. Phone OTP now uses backend MSG91 APIs
+  (`OTP_API_BASE_URL` = `/api/users`, form-urlencoded): `auth/send-otp`,
+  `auth/verify-otp` (returns app token + user + isNewUser, 4-digit OTP),
+  `auth/resend-otp` (`retryType=Voice` for call). Forgot password uses the
+  verify token with `/api/user/auth/set-password`. Social login: Google on
+  Android, Google + Apple on iOS (Apple → Firebase → `/auth/login-google` with
+  `provider: 'apple'`).
 
 ## Files Known To Have Active Changes
 

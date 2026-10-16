@@ -8,10 +8,12 @@ export const PRODUCT_QR_TYPE = 'bachatbazaar_product';
 
 export type OfferQrPayload = {
   type: typeof OFFER_QR_TYPE;
+  v: 1;
   version: 1;
+  id: string;
+  offerId: string;
   userId: string;
   merchantId: string;
-  offerId: string;
   offerType: string;
   shopId?: string;
   title: string;
@@ -298,10 +300,12 @@ export const buildOfferQrPayload = (offer: OfferQrSource): OfferQrPayload => {
 
   return {
     type: OFFER_QR_TYPE,
+    v: 1,
     version: 1,
+    id: offerId,
+    offerId,
     userId,
     merchantId,
-    offerId,
     offerType,
     shopId,
     title: pickString(offer.title) || 'Untitled Offer',
@@ -326,6 +330,22 @@ export const buildOfferQrPayload = (offer: OfferQrSource): OfferQrPayload => {
 
 export const encodeOfferQrValue = (offer: OfferQrSource) =>
   JSON.stringify(buildOfferQrPayload(offer));
+
+/** Compact offer QR stored for merchant scan: offerId + userId only. */
+export const encodeUserOfferQrValue = (offerId: string, userId: string) => {
+  const normalizedOfferId = offerId.trim();
+  const normalizedUserId = userId.trim();
+  const payload = {
+    type: OFFER_QR_TYPE,
+    v: 1,
+    id: normalizedOfferId,
+    offerId: normalizedOfferId,
+    userId: normalizedUserId,
+  };
+  const encoded = JSON.stringify(payload);
+  logApiEvent('QR encode offer', { payload, raw: encoded });
+  return encoded;
+};
 
 /**
  * Builds offer QR JSON with required ids. Explicit `offer` fields win;

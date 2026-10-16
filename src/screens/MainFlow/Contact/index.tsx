@@ -10,10 +10,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import {
-  openChatWithNumber,
-  openPhoneDialer,
-} from '../../../helpers/contactActions';
+import { openChatWithNumber } from '../../../helpers/contactActions';
 import { colors, fonts } from '../../../helpers/styles';
 import { MainStackParamList } from '../../../navigation/types';
 import { showAppAlert } from '../../../services/appAlert';
@@ -56,15 +53,9 @@ const ContactScreen = () => {
     }
   }, []);
 
-  const openCall = useCallback(async () => {
-    try {
-      await openPhoneDialer(SUPPORT_PHONE);
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Could not open phone dialer.';
-      showAppAlert('Call unavailable', message);
-    }
-  }, []);
+  const openCall = useCallback(() => {
+    navigation.navigate('RequestCallback');
+  }, [navigation]);
 
   const rows: ContactRow[] = [
     {
@@ -88,7 +79,7 @@ const ContactScreen = () => {
     {
       key: 'call',
       title: 'Call Support',
-      subtitle: SUPPORT_PHONE,
+      subtitle: 'Request a callback from our team',
       icon: 'phone-outline',
       iconBg: '#FFF3E8',
       iconColor: '#D97706',
@@ -127,7 +118,7 @@ const ContactScreen = () => {
           <View style={styles.introTextWrap}>
             <Text style={styles.introTitle}>How can we help you?</Text>
             <Text style={styles.introSub}>
-              Email, WhatsApp, or call our support team for account and order
+              Email, WhatsApp, or request a callback for account and order
               help.
             </Text>
           </View>

@@ -17,7 +17,7 @@ import ProfileLocationMap from '../../../components/ProfileLocationMap';
 import type { MapLocationSelection } from '../../../components/FullScreenLocationMapModal';
 import { ScreenScaffold } from '../../../components/ScreenScaffold';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
+import AppLogo from '../../../components/AppLogo';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
 import { parseCoordinateInput } from '../../../utils/googleGeocoding';
@@ -125,7 +125,7 @@ const ProfileSetupScreenView: React.FC<ProfileSetupScreenViewProps> = ({
       <AnimatedScreen style={styles.contentWrap}>
         <View style={styles.headerBlock}>
           <View style={styles.logoHalo}>
-            <LogoSVG width={64} height={64} />
+            <AppLogo width={64} height={64} />
           </View>
           <Text style={styles.title}>
             {isNewUser ? 'Complete your profile' : 'Update your profile'}

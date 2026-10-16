@@ -6,6 +6,7 @@ import OfferDetailScreenView from './OfferDetailScreenView';
 import { MainStackParamList } from '../../../navigation/types';
 import { useAppContext } from '../../../context/AppContext';
 import { shopApi } from '../../../services/shopApi';
+import { clickApi } from '../../../services/clickApi';
 import { offerWishlistApi } from '../../../services/offerWishlistApi';
 import { showAppAlert } from '../../../services/appAlert';
 import { normalizeRedemptionStatusLabel } from '../../../services/dailyRewardsParser';
@@ -114,6 +115,10 @@ const OfferDetail = () => {
       cancelled = true;
     };
   }, [authToken, resolvedOfferId, resolvedShopId]);
+
+  useEffect(() => {
+    clickApi.trackOfferClick(resolvedOfferId, authToken);
+  }, [authToken, resolvedOfferId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -275,6 +280,7 @@ const OfferDetail = () => {
         navigation.navigate('ScannerScreen', {
           expectedOfferId: offer.id?.trim() || resolvedOfferId,
           expectedOfferTitle: offer.title,
+          expectedShopId: offer.shopId?.trim() || resolvedShopId,
         })
       }
       onShareToCircle={() =>

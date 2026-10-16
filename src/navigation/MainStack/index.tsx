@@ -33,9 +33,13 @@ import FAQ from '../../screens/MainFlow/FAQ';
 import VideoGuide from '../../screens/MainFlow/VideoGuide';
 import HelpArticles from '../../screens/MainFlow/HelpArticles';
 import Contact from '../../screens/MainFlow/Contact';
+import RequestCallback from '../../screens/MainFlow/Contact/RequestCallback';
 import InviteEarn from '../../screens/MainFlow/InviteEarn';
 import Notifications from '../../screens/MainFlow/Notifications';
 import Language from '../../screens/MainFlow/Language';
+import ChangeAreaRadius from '../../screens/MainFlow/ChangeAreaRadius';
+import ChangeLocation from '../../screens/MainFlow/ChangeLocation';
+import LocalOffers from '../../screens/MainFlow/LocalOffers';
 import BachatCircleLanding from '../../screens/MainFlow/BachatCircle/LandingScreen';
 import BachatCircleCreate from '../../screens/MainFlow/BachatCircle/CreateCircleScreen';
 import BachatCircleAddMembers from '../../screens/MainFlow/BachatCircle/AddMembersScreen';
@@ -121,12 +125,25 @@ export const MainStack = () => {
                       name={'HelpArticles'}
                     />
                     <MainStackNav.Screen component={Contact} name={'Contact'} />
+                    <MainStackNav.Screen
+                      component={RequestCallback}
+                      name={'RequestCallback'}
+                    />
                     <MainStackNav.Screen component={InviteEarn} name={'InviteEarn'} />
                     <MainStackNav.Screen component={Notifications} name={'Notifications'} />
                     <MainStackNav.Screen component={Language} name={'Language'} />
                     <MainStackNav.Screen
-                      component={BachatCircleLanding}
-                      name={'BachatCircle'}
+                        component={ChangeAreaRadius}
+                        name={'ChangeAreaRadius'}
+                    />
+                    <MainStackNav.Screen
+                        component={ChangeLocation}
+                        name={'ChangeLocation'}
+                    />
+                    <MainStackNav.Screen component={LocalOffers} name={'LocalOffers'} />
+                    <MainStackNav.Screen
+                        component={BachatCircleLanding}
+                        name={'BachatCircle'}
                     />
                     <MainStackNav.Screen
                       component={BachatCircleCreate}

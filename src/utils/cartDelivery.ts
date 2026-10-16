@@ -1,6 +1,6 @@
 import { CartItem } from '../services/cartApi';
 import { ShopProduct, ShopWithOffers } from '../types/shop';
-import { parsePriceAmount } from './shopDelivery';
+import { formatRupeeAmount, resolveProductPriceQuote } from './productPrice';
 
 export type CartDeliveryTarget = {
   shop: ShopWithOffers;
@@ -20,18 +20,18 @@ export const cartItemToDeliveryTarget = (item: CartItem): CartDeliveryTarget | n
   }
 
   const shopName = item.merchantName?.trim() || item.shopName?.trim() || 'Merchant';
-  const unit =
-    item.unitPrice != null && Number.isFinite(item.unitPrice)
-      ? item.unitPrice
-      : parsePriceAmount(item.price);
+  const shopId = item.shopId?.trim() || merchantId;
+  const quote = resolveProductPriceQuote({
+    discountedPrice: item.unitPrice,
+    saleAmount: item.unitPrice,
+    originalAmount: item.originalUnitPrice,
+    originalPrice: item.originalUnitPrice,
+  });
   const quantity = Math.max(1, item.quantity || 1);
-  const itemPrice =
-    item.itemTotal != null && Number.isFinite(item.itemTotal)
-      ? item.itemTotal
-      : unit * quantity;
+  const itemPrice = quote.saleAmount * quantity;
 
   const shop: ShopWithOffers = {
-    id: merchantId,
+    id: shopId,
     name: shopName,
     merchantId,
     merchantName: shopName,
@@ -40,11 +40,13 @@ export const cartItemToDeliveryTarget = (item: CartItem): CartDeliveryTarget | n
 
   const product: ShopProduct = {
     id: productId,
-    shopId: merchantId,
+    shopId,
     title: item.productName?.trim() || 'Item',
-    price:
-      item.price?.trim() ||
-      (Number.isFinite(unit) ? `₹${Math.round(unit).toLocaleString('en-IN')}` : undefined),
+    price: formatRupeeAmount(quote.saleAmount),
+    originalPrice:
+      quote.originalAmount != null ? formatRupeeAmount(quote.originalAmount) : undefined,
+    priceAmount: quote.saleAmount,
+    originalPriceAmount: quote.originalAmount,
     image: item.image,
     shopName,
   };

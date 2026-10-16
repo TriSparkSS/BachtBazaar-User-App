@@ -10,10 +10,15 @@ const normalizeStoredUser = (user: UserProfile): UserProfile => {
     gender === 'female' || gender === 'male' || gender === 'other'
       ? gender
       : undefined;
+  const phone = user.phone?.trim() ?? '';
+  const email =
+    user.email?.trim() || (phone.includes('@') ? phone : undefined);
 
   return {
     ...user,
     gender: normalizedGender,
+    email,
+    phone: phone.includes('@') ? '' : phone,
   };
 };
 
@@ -53,6 +58,6 @@ export const authStorage = {
   },
 
   async clearSession() {
-    await AsyncStorage.multiRemove([AUTH_TOKEN_KEY, AUTH_USER_KEY]);
+    await AsyncStorage.clear();
   },
 };

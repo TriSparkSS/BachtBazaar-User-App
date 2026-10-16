@@ -68,9 +68,9 @@ const RootNavigator = () => {
 
   return (
     <RootStackNav.Navigator
-      key={isAuthenticated ? 'authenticated' : 'guest'}
       screenOptions={{
         headerShown: false,
+        animationEnabled: false,
       }}
       initialRouteName={isAuthenticated ? 'MainStack' : 'AuthFlow'}>
       <RootStackNav.Screen component={AuthFlowNavigator} name="AuthFlow" />

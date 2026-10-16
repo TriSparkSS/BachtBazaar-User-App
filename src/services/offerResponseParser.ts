@@ -167,15 +167,28 @@ export const parseOfferDetailResponse = (
       }
     : undefined;
 
+  const nestedShop = isRecord(data.shop) ? data.shop : undefined;
+  const nestedStore = isRecord(data.store) ? data.store : undefined;
+  const resolvedShopId =
+    pickString(
+      data.shopId,
+      data.shop_id,
+      shopId,
+      nestedShop?._id,
+      nestedShop?.id,
+      nestedStore?._id,
+      nestedStore?.id,
+    ) || '';
+
   const linkedProducts = Array.isArray(data.linkedProducts)
     ? data.linkedProducts
-        .map(item => normalizeProduct(item, shopId))
+        .map(item => normalizeProduct(item, resolvedShopId))
         .filter((product): product is ShopProduct => Boolean(product))
     : [];
 
   return {
     id,
-    shopId,
+    shopId: resolvedShopId,
     title,
     description: pickString(data.description),
     code: pickString(data.code),

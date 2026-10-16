@@ -13,7 +13,7 @@ import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityI
 import AnimatedScreen from '../../../components/AnimatedScreen';
 import { AppTextInput } from '../../../components/AppTextInput';
 import { ScreenScaffold } from '../../../components/ScreenScaffold';
-import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
+import AppLogo from '../../../components/AppLogo';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import { colors, fonts } from '../../../helpers/styles';
 import { deepLinkStorage } from '../../../services/deepLinkStorage';
@@ -218,7 +218,7 @@ const ForgotPasswordScreenView: React.FC<ForgotPasswordScreenViewProps> = ({
       <AnimatedScreen style={styles.animatedScreen}>
             <View style={styles.logoContainer}>
               <View style={styles.logoHalo}>
-                <LogoSVG width={86} height={86} />
+                <AppLogo width={86} height={86} />
               </View>
               <View style={styles.badge}>
                 <View style={styles.badgeDot} />

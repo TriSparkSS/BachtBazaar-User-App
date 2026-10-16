@@ -1,4 +1,10 @@
-import { Shop, ShopOpeningDay, ShopOpeningHours, ShopProduct } from '../types/shop';
+import {
+  Shop,
+  ShopManualOverride,
+  ShopOpeningDay,
+  ShopOpeningHours,
+  ShopProduct,
+} from '../types/shop';
 
 const DAY_KEYS = [
   'sunday',
@@ -104,14 +110,88 @@ export const isShopOpenNow = (openingHours?: ShopOpeningHours): boolean | undefi
   return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
 };
 
+const CLOSED_OVERRIDE_STATUSES = new Set([
+  'force_closed',
+  'closed',
+  'force_close',
+  'manually_closed',
+]);
+
+const OPEN_OVERRIDE_STATUSES = new Set([
+  'force_open',
+  'open',
+  'force_opened',
+  'manually_open',
+]);
+
+const INACTIVE_OVERRIDE_STATUSES = new Set([
+  'normal',
+  'none',
+  'auto',
+  'default',
+  'scheduled',
+  'clear',
+]);
+
+const normalizeOverrideStatus = (status?: string): string =>
+  status?.trim().toLowerCase().replace(/[\s-]+/g, '_') ?? '';
+
+const isOverrideWindowActive = (override?: ShopManualOverride | null): boolean => {
+  if (!override?.closedUntil?.trim()) {
+    return true;
+  }
+  const until = Date.parse(override.closedUntil);
+  if (!Number.isFinite(until)) {
+    return true;
+  }
+  return Date.now() < until;
+};
+
+/** Active FORCE_CLOSED / FORCE_OPEN after weekly hours. */
+export const getManualOverrideEffect = (
+  override?: ShopManualOverride | null,
+): boolean | undefined => {
+  const status = normalizeOverrideStatus(override?.status);
+  if (!status || INACTIVE_OVERRIDE_STATUSES.has(status)) {
+    return undefined;
+  }
+  if (!isOverrideWindowActive(override)) {
+    return undefined;
+  }
+  if (CLOSED_OVERRIDE_STATUSES.has(status)) {
+    return false;
+  }
+  if (OPEN_OVERRIDE_STATUSES.has(status)) {
+    return true;
+  }
+  return undefined;
+};
+
 export const isShopCurrentlyOpen = (
-  shop: Pick<Shop, 'openingHours' | 'isOpen'>,
+  shop: Pick<Shop, 'openingHours' | 'isOpen' | 'manualOverride'>,
 ): boolean | undefined => {
   const fromHours = isShopOpenNow(shop.openingHours);
+  const overrideEffect = getManualOverrideEffect(shop.manualOverride);
+  if (overrideEffect !== undefined) {
+    return overrideEffect;
+  }
   if (fromHours !== undefined) {
     return fromHours;
   }
   return shop.isOpen;
+};
+
+export const getShopClosedReason = (
+  shop: Pick<Shop, 'openingHours' | 'isOpen' | 'manualOverride'>,
+): string | undefined => {
+  if (isShopCurrentlyOpen(shop) !== false) {
+    return undefined;
+  }
+  if (getManualOverrideEffect(shop.manualOverride) !== false) {
+    return undefined;
+  }
+  const reason = shop.manualOverride?.reason?.trim();
+  return reason || undefined;
 };
 
 export const formatTodayOpeningHours = (openingHours?: ShopOpeningHours): string | undefined => {

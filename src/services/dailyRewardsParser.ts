@@ -4,7 +4,7 @@ import {
   DailyRewardHistoryItem,
   DailyRewardsCalendar,
 } from '../types/dailyRewards';
-import { encodeOfferQrValue } from '../helpers/offerQrCode';
+import { encodeUserOfferQrValue } from '../helpers/offerQrCode';
 import { resolveShopMediaFromApiValue } from './shopResponseParser';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -121,6 +121,7 @@ const normalizeRewardEntry = (
   value: unknown,
   selectedDate: string,
   index: number,
+  userId = '',
 ): DailyRewardEntry | null => {
   if (!isRecord(value)) {
     return null;
@@ -221,32 +222,12 @@ const normalizeRewardEntry = (
     value.shopName,
     value.shop_name,
   );
-  const apiQrValue = pickString(
-    value.qrValue,
-    value.qr_value,
-    value.code,
-    value.offerCode,
-    value.offer_code,
-  );
-  // Prefer a structured client payload so merchantId / offerId / offerType are never dropped.
-  // userId is injected at display time from the logged-in session.
-  const qrPayload = encodeOfferQrValue({
-    id: offerId,
-    offerId,
-    merchantId,
-    shopId,
-    title,
-    description,
-    discountBadge,
-    minimumPurchaseAmount,
-    startDate,
-    endDate,
-    thumbnail: image,
-    offerType,
-    displayType,
-    shopName,
-    isActive: !isClaimed,
-  });
+  const resolvedUserId =
+    pickString(userId, value.userId, value.user_id) || '';
+  const qrValue =
+    offerId && resolvedUserId
+      ? encodeUserOfferQrValue(offerId, resolvedUserId)
+      : undefined;
 
   return {
     id: pickString(value._id, value.id, value.offerId, value.offer_id, `${entryDate}-${index}`)!,
@@ -265,7 +246,7 @@ const normalizeRewardEntry = (
     subtitle,
     description,
     image,
-    qrValue: apiQrValue || qrPayload,
+    qrValue,
     qrImage: pickString(value.qrImage, value.qr_image),
     isClaimed,
     isToday,
@@ -436,12 +417,13 @@ const unwrapEntryList = (payload: unknown): unknown[] => {
 export const parseDailyRewardsCalendarResponse = (
   payload: unknown,
   selectedDate: string,
+  userId = '',
 ): DailyRewardsCalendar => {
   const root = isRecord(payload) && isRecord(payload.data) ? payload.data : payload;
   // Dedicated calender endpoint — keep API items for the date; range-filter when start/end exist.
   // Offer cards come only from calender `data` — never invent cards from redemption history.
   const entries = unwrapEntryList(root)
-    .map((item, index) => normalizeRewardEntry(item, selectedDate, index))
+    .map((item, index) => normalizeRewardEntry(item, selectedDate, index, userId))
     .filter((entry): entry is DailyRewardEntry => Boolean(entry))
     .filter(entry => entryActiveOnSelectedDate(entry, selectedDate));
 

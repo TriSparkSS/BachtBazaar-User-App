@@ -1,5 +1,6 @@
 import { SearchResults } from '../types/search';
 import { ShopOffer, ShopProduct, ShopWithOffers } from '../types/shop';
+import { parseMoneyAmount } from '../utils/productPrice';
 import { pickProvidesDeliveryFlag } from '../utils/shopDelivery';
 import { resolveShopMediaFromApiValue } from './shopResponseParser';
 
@@ -52,8 +53,8 @@ const normalizeSearchProduct = (value: unknown): ShopProduct | undefined => {
     return undefined;
   }
 
-  const price = pickNumber(value.price);
-  const discountedPrice = pickNumber(value.discounted_price, value.discountedPrice);
+  const price = parseMoneyAmount(value.price);
+  const discountedPrice = parseMoneyAmount(value.discounted_price, value.discountedPrice);
 
   return {
     id,
@@ -70,7 +71,13 @@ const normalizeSearchProduct = (value: unknown): ShopProduct | undefined => {
     description: pickString(value.description),
     image: pickString(value.thumbnail, value.image, value.imageUrl, value.image_url),
     price: formatPrice(discountedPrice ?? price),
-    originalPrice: discountedPrice != null && price != null ? formatPrice(price) : undefined,
+    originalPrice:
+      discountedPrice != null && price != null && price > discountedPrice
+        ? formatPrice(price)
+        : undefined,
+    priceAmount: discountedPrice ?? price,
+    originalPriceAmount:
+      discountedPrice != null && price != null && price > discountedPrice ? price : undefined,
     stock: pickNumber(value.stock),
     isFeatured: Boolean(value.is_featured ?? value.isFeatured),
     shopName: pickString(

@@ -18,7 +18,7 @@ import AnimatedScreen from '../../../components/AnimatedScreen';
 import AppIcon from '../../../components/AppIcon';
 import { AppTextInput } from '../../../components/AppTextInput';
 import { ScreenScaffold } from '../../../components/ScreenScaffold';
-import LogoSVG from '../../../assets/image/BachatBazaarLogo.svg';
+import AppLogo from '../../../components/AppLogo';
 import VectorSVG from '../../../assets/image/Vector.svg';
 import {
   countries,
@@ -47,6 +47,7 @@ interface LoginScreenViewProps {
   onForgotPassword: (phone: string) => void | Promise<void>;
   onGooglePress: () => void;
   onApplePress: () => void;
+  showAppleLogin?: boolean;
   isSubmitting?: boolean;
 }
 
@@ -57,6 +58,7 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
   onForgotPassword,
   onGooglePress,
   onApplePress,
+  showAppleLogin = Platform.OS === 'ios',
   isSubmitting = false,
 }) => {
   const phoneInputRef = useRef<TextInput>(null);
@@ -254,7 +256,7 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
         <View style={styles.animatedContent}>
           <View style={styles.logoContainer}>
                 <View style={styles.logoHalo}>
-                  <LogoSVG width={86} height={86} />
+                  <AppLogo width={86} height={86} />
                 </View>
                 <Text style={styles.title}>
                   {isSigningUp ? 'Join Bachat Bazaar' : 'Welcome back'}
@@ -450,15 +452,17 @@ const LoginScreenView: React.FC<LoginScreenViewProps> = ({
                 </View>
 
                 <View style={styles.socialContainer}>
-                  <TouchableOpacity
-                    style={styles.socialButton}
-                    onPress={onApplePress}
-                    activeOpacity={0.75}
-                    accessibilityRole="button"
-                    accessibilityLabel="Continue with Apple">
-                    <Image source={socialIcons.apple} style={styles.socialIcon} />
-                    <Text style={styles.socialText}>Apple</Text>
-                  </TouchableOpacity>
+                  {Platform.OS === 'ios' && showAppleLogin && (
+                    <TouchableOpacity
+                      style={styles.socialButton}
+                      onPress={onApplePress}
+                      activeOpacity={0.75}
+                      accessibilityRole="button"
+                      accessibilityLabel="Continue with Apple">
+                      <Image source={socialIcons.apple} style={styles.socialIcon} />
+                      <Text style={styles.socialText}>Apple</Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity
                     style={styles.socialButton}
                     onPress={onGooglePress}

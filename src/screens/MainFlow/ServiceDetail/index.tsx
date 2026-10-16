@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import {
   Dimensions,
   Image,
-  Linking,
   ScrollView,
   Share,
   StyleSheet,
@@ -21,8 +20,10 @@ import { MainStackParamList } from '../../../navigation/types';
 import { shopApi } from '../../../services/shopApi';
 import { colors, fonts } from '../../../helpers/styles';
 import { formatShopAddress, isShopCurrentlyOpen } from '../../../utils/shop';
+import { openStoreDirections } from '../../../utils/openStoreDirections';
 import { openChatWithNumber, openPhoneDialer } from '../../../helpers/contactActions';
 import { showAppAlert } from '../../../services/appAlert';
+import AppLogo from '../../../components/AppLogo';
 
 const { width } = Dimensions.get('window');
 
@@ -41,6 +42,7 @@ const ServiceDetail = () => {
   const route = useRoute();
   const { shop, service } = route.params as MainStackParamList['ServiceDetail'];
   const [heroError, setHeroError] = useState(false);
+  const [providerImageError, setProviderImageError] = useState(false);
 
   const heroImageUri = useMemo(() => {
     const resolved = usableImage(shopApi.resolveImageUrl(service.image));
@@ -62,6 +64,15 @@ const ServiceDetail = () => {
         : service.pricingType;
 
   const chips = [service.duration, service.gender, pricingLabel].filter(Boolean) as string[];
+  const provider = service.provider;
+  const providerImageUri = usableImage(shopApi.resolveImageUrl(provider?.profileImage));
+  const showProviderImage = Boolean(providerImageUri) && !providerImageError;
+  const experienceLabel =
+    provider?.experienceYears == null
+      ? undefined
+      : provider.experienceYears <= 0
+        ? 'New'
+        : `${provider.experienceYears} yr${provider.experienceYears === 1 ? '' : 's'}`;
   const description =
     service.description?.trim() ||
     `${service.title} is available at ${shop.name}. Call the store to book a slot and confirm the final price.`;
@@ -103,8 +114,12 @@ const ServiceDetail = () => {
   };
 
   const handleGetDirections = () => {
-    const query = encodeURIComponent(shopAddress || shop.name);
-    Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${query}`);
+    void openStoreDirections({
+      latitude: shop.latitude,
+      longitude: shop.longitude,
+      label: shop.name,
+      addressFallback: shopAddress || shop.name,
+    });
   };
 
   return (
@@ -188,6 +203,90 @@ const ServiceDetail = () => {
             </View>
           ) : null}
 
+          {provider ? (
+            <View style={styles.providerCard}>
+              <View style={styles.providerPhotoWrap}>
+                {showProviderImage ? (
+                  <Image
+                    source={{ uri: providerImageUri ?? '' }}
+                    style={styles.providerPhoto}
+                    resizeMode="cover"
+                    onError={() => setProviderImageError(true)}
+                  />
+                ) : (
+                  <LinearGradient
+                    colors={['#4F86F7', '#6BA3FF']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.providerPhoto}
+                  >
+                    <Text style={styles.providerPhotoInitial}>
+                      {provider.name.charAt(0).toUpperCase()}
+                    </Text>
+                  </LinearGradient>
+                )}
+                <View style={styles.providerLogoBadge}>
+                  <AppLogo width={18} height={18} />
+                </View>
+              </View>
+
+              <View style={styles.providerBody}>
+                <Text style={styles.providerEyebrow}>Service provider</Text>
+                <Text style={styles.providerName} numberOfLines={1}>
+                  {provider.name}
+                </Text>
+                {provider.designation ? (
+                  <Text style={styles.providerRole} numberOfLines={1}>
+                    {provider.designation}
+                  </Text>
+                ) : null}
+
+                <View style={styles.providerMetaRow}>
+                  {experienceLabel ? (
+                    <View style={styles.providerMetaChip}>
+                      <MaterialCommunityIcons
+                        name="briefcase-outline"
+                        size={12}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.providerMetaText}>{experienceLabel} exp</Text>
+                    </View>
+                  ) : null}
+                  {service.price ? (
+                    <View style={styles.providerMetaChip}>
+                      <MaterialCommunityIcons
+                        name="tag-outline"
+                        size={12}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.providerMetaText}>{service.price}</Text>
+                    </View>
+                  ) : null}
+                  {pricingLabel ? (
+                    <View style={styles.providerMetaChip}>
+                      <MaterialCommunityIcons
+                        name="clock-outline"
+                        size={12}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.providerMetaText}>{pricingLabel}</Text>
+                    </View>
+                  ) : null}
+                  {provider.gender ? (
+                    <View style={styles.providerMetaChip}>
+                      <MaterialCommunityIcons
+                        name="account-outline"
+                        size={12}
+                        color={colors.primary}
+                      />
+                      <Text style={styles.providerMetaText}>{provider.gender}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            </View>
+          ) : null}
+
           <TouchableOpacity
             style={styles.storeCard}
             activeOpacity={0.88}
@@ -248,6 +347,8 @@ const ServiceDetail = () => {
               address={shopAddress}
               city={shop.city}
               label={shop.name}
+              latitude={shop.latitude}
+              longitude={shop.longitude}
               onGetDirections={handleGetDirections}
             />
           </View>
@@ -407,6 +508,91 @@ const styles = StyleSheet.create({
   ratingText: {
     fontSize: 12,
     color: '#8A5A00',
+    fontFamily: fonts.BOLD,
+  },
+  providerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7F9FE',
+    borderRadius: 18,
+    padding: 10,
+    marginBottom: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+  },
+  providerPhotoWrap: {
+    width: 72,
+    height: 72,
+  },
+  providerPhoto: {
+    width: 72,
+    height: 72,
+    borderRadius: 16,
+    backgroundColor: '#D8E2F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  providerLogoBadge: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 24,
+    height: 24,
+    borderRadius: 8,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E8EDF5',
+  },
+  providerPhotoInitial: {
+    fontSize: 24,
+    color: colors.white,
+    fontFamily: fonts.BOLD,
+  },
+  providerBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  providerEyebrow: {
+    fontSize: 10,
+    color: colors.primary,
+    fontFamily: fonts.BOLD,
+    letterSpacing: 0.3,
+    marginBottom: 2,
+  },
+  providerName: {
+    fontSize: 16,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+  },
+  providerRole: {
+    marginTop: 2,
+    fontSize: 12,
+    color: colors.mutedText,
+    fontFamily: fonts.BOLD,
+  },
+  providerMetaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  providerMetaChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.white,
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: '#E8EDF5',
+  },
+  providerMetaText: {
+    fontSize: 11,
+    color: colors.text,
     fontFamily: fonts.BOLD,
   },
   storeCard: {

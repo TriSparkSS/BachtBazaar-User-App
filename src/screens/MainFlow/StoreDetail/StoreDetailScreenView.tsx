@@ -22,6 +22,7 @@ import {
   formatShopAddress,
   formatTodayOpeningHours,
   getFeaturedProducts,
+  getShopClosedReason,
   isShopCurrentlyOpen,
   STORE_TABS,
   StoreTab,
@@ -79,6 +80,8 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
   const shopAddress = formatShopAddress(shop);
   const shopLogoUri = resolveImageUrl(shop.logo);
   const openNow = isShopCurrentlyOpen(shop);
+  const isClosed = openNow === false;
+  const closedReason = getShopClosedReason(shop);
   const todayHours = formatTodayOpeningHours(shop.openingHours);
   const featuredProducts = useMemo(() => getFeaturedProducts(products), [products]);
   const services = shop.services ?? [];
@@ -395,12 +398,14 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
             <Text style={styles.infoText}>{shop.phone}</Text>
           </View>
         ) : null}
-        {todayHours ? (
+        {todayHours || closedReason ? (
           <View style={[styles.infoRow, !shop.merchantName && styles.infoRowLast]}>
             <View style={styles.infoIconWrap}>
               <MaterialCommunityIcons name="clock-outline" size={16} color={colors.primary} />
             </View>
-            <Text style={styles.infoText}>{todayHours}</Text>
+            <Text style={styles.infoText}>
+              {closedReason ? `${closedReason}${todayHours ? ` · ${todayHours}` : ''}` : todayHours}
+            </Text>
           </View>
         ) : null}
         {shop.merchantName ? (
@@ -580,12 +585,12 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
 
   return (
     <View style={styles.root}>
-      <View style={styles.heroSection}>
+      <View style={[styles.heroSection, isClosed && styles.heroSectionClosed]}>
         {showHeroImage ? (
           <Image
             key={heroImageUri}
             source={{ uri: heroImageUri }}
-            style={styles.heroImage}
+            style={[styles.heroImage, isClosed && styles.heroImageClosed]}
             resizeMode="contain"
             onError={() => setHeroError(true)}
           />
@@ -594,15 +599,24 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
             colors={['#4F86F7', '#6BA3FF', '#A8C8FF']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-            style={styles.heroGradient}
+            style={[styles.heroGradient, isClosed && styles.heroImageClosed]}
           >
             <MaterialCommunityIcons name="storefront-outline" size={56} color="rgba(255,255,255,0.35)" />
           </LinearGradient>
         )}
         <LinearGradient
-          colors={['rgba(22,32,51,0.05)', 'rgba(22,32,51,0.45)']}
+          colors={
+            isClosed
+              ? ['rgba(22,32,51,0.28)', 'rgba(22,32,51,0.62)']
+              : ['rgba(22,32,51,0.05)', 'rgba(22,32,51,0.45)']
+          }
           style={styles.heroOverlay}
         />
+        {isClosed ? (
+          <View style={styles.heroClosedBadge} pointerEvents="none">
+            <Text style={styles.heroClosedBadgeText}>Closed</Text>
+          </View>
+        ) : null}
 
         <SafeAreaView edges={['top']} style={styles.heroActions}>
           <TouchableOpacity style={styles.heroIconButton} onPress={onBack} activeOpacity={0.85}>
@@ -639,8 +653,8 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
         showsVerticalScrollIndicator={false}
         bounces={false}
       >
-        <AnimatedScreen style={styles.sheet}>
-          <View style={styles.avatarWrap}>
+        <AnimatedScreen style={[styles.sheet, isClosed && styles.sheetClosed]}>
+          <View style={[styles.avatarWrap, isClosed && styles.avatarWrapClosed]}>
             <LinearGradient colors={['#EEF4FF', '#FFFFFF']} style={styles.avatarRing}>
               <View style={styles.avatarCircle}>
                 {shopLogoUri && !logoError ? (
@@ -653,6 +667,7 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
                 ) : (
                   <Text style={styles.avatarInitial}>{getShopInitial(shop.name)}</Text>
                 )}
+                {isClosed ? <View style={styles.avatarClosedWash} /> : null}
               </View>
             </LinearGradient>
           </View>
@@ -687,6 +702,9 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
                 </View>
               ) : null}
             </View>
+            {closedReason ? (
+              <Text style={styles.closedReasonText}>{closedReason}</Text>
+            ) : null}
 
             <View style={styles.statsRow}>
               {shop.productCount
@@ -727,7 +745,9 @@ const StoreDetailScreenView: React.FC<StoreDetailScreenViewProps> = ({
             })}
           </ScrollView>
 
-          <View style={styles.tabContent}>{renderTabContent()}</View>
+          <View style={[styles.tabContent, isClosed && styles.tabContentClosed]}>
+            {renderTabContent()}
+          </View>
         </AnimatedScreen>
       </ScrollView>
     </View>
@@ -747,9 +767,30 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  heroSectionClosed: {
+    backgroundColor: '#C5CDD6',
+  },
   heroImage: {
     width: '100%',
     height: '100%',
+  },
+  heroImageClosed: {
+    opacity: 0.42,
+  },
+  heroClosedBadge: {
+    position: 'absolute',
+    bottom: 28,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(216,75,75,0.92)',
+    borderRadius: 100,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  heroClosedBadgeText: {
+    color: colors.white,
+    fontSize: 12,
+    fontFamily: fonts.BOLD,
+    letterSpacing: 0.3,
   },
   heroGradient: {
     width: '100%',
@@ -800,10 +841,28 @@ const styles = StyleSheet.create({
     paddingBottom: 36,
     minHeight: 520,
   },
+  sheetClosed: {
+    backgroundColor: '#F7F8FA',
+  },
   avatarWrap: {
     alignSelf: 'center',
     marginTop: 4,
     marginBottom: 16,
+  },
+  avatarWrapClosed: {
+    opacity: 0.62,
+  },
+  avatarClosedWash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(244,246,248,0.42)',
+  },
+  closedReasonText: {
+    marginTop: 8,
+    fontSize: 12,
+    color: '#D84B4B',
+    fontFamily: fonts.BOLD,
+    textAlign: 'center',
+    paddingHorizontal: 16,
   },
   avatarRing: {
     width: 78,
@@ -973,6 +1032,9 @@ const styles = StyleSheet.create({
   },
   tabContent: {
     paddingBottom: 12,
+  },
+  tabContentClosed: {
+    opacity: 0.68,
   },
   infoCard: {
     backgroundColor: '#FAFBFE',

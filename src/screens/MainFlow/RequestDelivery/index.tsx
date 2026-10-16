@@ -21,15 +21,20 @@ import { MainStackParamList } from '../../../navigation/types';
 import { showAppAlert } from '../../../services/appAlert';
 import { cartApi } from '../../../services/cartApi';
 import {
+  DeliveryFeeEstimate,
   deliveryApi,
   extractDeliveryOrderId,
 } from '../../../services/deliveryApi';
+import { shopDeliveryFeeOrFallback } from '../../../utils/shopDeliveryQuote';
+import { formatRupeeAmount, resolveProductPriceQuote } from '../../../utils/productPrice';
 import {
-  REQUEST_DELIVERY_FEE,
-  REQUEST_PLATFORM_FEE,
-  parsePriceAmount,
-} from '../../../utils/shopDelivery';
+  deliveryEstimateTierLabel,
+  estimateDeliveryFeeForShop,
+  formatEstimateMeta,
+} from '../../../utils/estimateDeliveryFee';
 import { extractCityFromAddress } from '../../../utils/location';
+import { shopApi } from '../../../services/shopApi';
+import { ShopWithOffers } from '../../../types/shop';
 
 const formatRupee = (amount: number) => `₹${Math.max(0, Math.round(amount)).toLocaleString('en-IN')}`;
 
@@ -52,16 +57,34 @@ const RequestDelivery = () => {
   const { setPendingRequest, refreshPendingFromApi } = usePendingDeliveryRequest();
 
   // Capture once from initial mount params so later address-only merges never drop product/shop.
-  const [shop] = useState(() => params?.shop);
-  const [product] = useState(() => params?.product);
+  const [shop, setShop] = useState<ShopWithOffers | undefined>(() => params?.shop);
+  const [product, setProduct] = useState(() => params?.product);
 
-  const itemPrice = useMemo(
-    () => parsePriceAmount(product?.price),
-    [product?.price],
+  const priceQuote = useMemo(
+    () =>
+      resolveProductPriceQuote({
+        saleAmount: product?.priceAmount,
+        originalAmount: product?.originalPriceAmount,
+        price: product?.price,
+        originalPrice: product?.originalPrice,
+      }),
+    [
+      product?.originalPrice,
+      product?.originalPriceAmount,
+      product?.price,
+      product?.priceAmount,
+    ],
   );
-  const deliveryFee = REQUEST_DELIVERY_FEE;
-  const platformFee = REQUEST_PLATFORM_FEE;
-  const totalAmount = itemPrice + deliveryFee + platformFee;
+  const itemPrice = priceQuote.saleAmount;
+  const itemOriginalPrice = priceQuote.originalAmount;
+  const itemDiscount = priceQuote.discountAmount;
+  const [feeEstimate, setFeeEstimate] = useState<DeliveryFeeEstimate | null>(null);
+  const [isEstimatingFee, setIsEstimatingFee] = useState(false);
+  const deliveryFee = feeEstimate?.deliveryFee ?? shopDeliveryFeeOrFallback(shop);
+  const deliveryTierLabel =
+    deliveryEstimateTierLabel(feeEstimate) || undefined;
+  const deliveryMeta = formatEstimateMeta(feeEstimate);
+  const totalAmount = itemPrice + deliveryFee;
 
   const initialAddress = currentUser?.address?.trim() || 'Add delivery address';
   const [address, setAddress] = useState(initialAddress);
@@ -100,6 +123,92 @@ const RequestDelivery = () => {
       ]);
     }
   }, [navigation, product, shop]);
+
+  useEffect(() => {
+    const token = authToken?.trim();
+    const seed = params?.shop;
+    if (!token || !seed?.id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadLiveShop = async () => {
+      try {
+        let detail: ShopWithOffers | null = null;
+        try {
+          detail = await shopApi.fetchShopByIdWithOffers(seed.id, token);
+        } catch {
+          const merchantId = seed.merchantId?.trim();
+          if (!merchantId) {
+            return;
+          }
+          const resolvedId = await shopApi.resolveShopIdByMerchantId(
+            { merchantId, shopName: seed.name },
+            token,
+          );
+          if (!resolvedId) {
+            return;
+          }
+          detail = await shopApi.fetchShopByIdWithOffers(resolvedId, token);
+        }
+
+        if (!cancelled && detail) {
+          setShop(prev => ({ ...(prev || seed), ...detail }));
+          const liveProduct = detail.products?.find(
+            candidate => candidate.id === (params?.product?.id || product?.id),
+          );
+          if (liveProduct) {
+            setProduct(prev => ({ ...(prev || liveProduct), ...liveProduct }));
+          }
+        }
+      } catch {
+        // Keep the route shop if the live quote cannot be refreshed.
+      }
+    };
+
+    void loadLiveShop();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, params?.shop, params?.selectedAddress]);
+
+  useEffect(() => {
+    const token = authToken?.trim();
+    const shopId = shop?.id?.trim();
+    const merchantId = shop?.merchantId?.trim();
+    if (!token || (!shopId && !merchantId)) {
+      return;
+    }
+
+    let cancelled = false;
+    setIsEstimatingFee(true);
+
+    estimateDeliveryFeeForShop(
+      { shopId, merchantId, shopName: shop?.name },
+      token,
+    )
+      .then(estimate => {
+        if (!cancelled) {
+          setFeeEstimate(estimate);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFeeEstimate(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsEstimatingFee(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authToken, shop?.id, shop?.merchantId, shop?.name, params?.selectedAddress]);
 
   const handleChangeAddress = useCallback(() => {
     const current =
@@ -163,13 +272,14 @@ const RequestDelivery = () => {
       const response = await deliveryApi.createOrder(
         {
           merchantId,
-          productId,
-          customItemName: product.title?.trim() || 'Item',
-          quantity: 1,
-          itemPrice,
+          items: [{ productId, quantity: 1 }],
           note: note.trim(),
           deliveryAddress,
           phone: normalizedMobile,
+          city,
+          latitude: currentUser?.latitude,
+          longitude: currentUser?.longitude,
+          estimatedMinutes: 30,
         },
         authToken,
       );
@@ -190,7 +300,6 @@ const RequestDelivery = () => {
         note: note.trim() || undefined,
         itemPrice,
         deliveryFee,
-        platformFee,
         totalAmount,
       };
       setPendingRequest({
@@ -219,12 +328,14 @@ const RequestDelivery = () => {
   }, [
     address,
     authToken,
+    city,
+    currentUser?.latitude,
+    currentUser?.longitude,
     deliveryFee,
     itemPrice,
     mobile,
     navigation,
     note,
-    platformFee,
     product,
     refreshPendingFromApi,
     setPendingRequest,
@@ -331,16 +442,35 @@ const RequestDelivery = () => {
           <View style={styles.chargesCard}>
             <View style={styles.chargeRow}>
               <Text style={styles.chargeLabel}>Item Price</Text>
-              <Text style={styles.chargeValue}>{formatRupee(itemPrice)}</Text>
+              <View style={styles.pricePair}>
+                <Text style={styles.chargeValue}>{formatRupeeAmount(itemPrice)}</Text>
+                {itemOriginalPrice != null ? (
+                  <Text style={styles.chargeOriginal}>{formatRupeeAmount(itemOriginalPrice)}</Text>
+                ) : null}
+              </View>
             </View>
+            {itemDiscount > 0 ? (
+              <View style={styles.chargeRow}>
+                <Text style={styles.chargeLabel}>Discount</Text>
+                <Text style={styles.chargeDiscount}>-{formatRupeeAmount(itemDiscount)}</Text>
+              </View>
+            ) : null}
             <View style={styles.chargeRow}>
-              <Text style={styles.chargeLabel}>Delivery Fee</Text>
-              <Text style={styles.chargeValue}>{formatRupee(deliveryFee)}</Text>
+              <Text style={styles.chargeLabel}>
+                {deliveryTierLabel ? `Delivery Fee (${deliveryTierLabel})` : 'Delivery Fee'}
+              </Text>
+              {isEstimatingFee && feeEstimate == null ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Text style={styles.chargeValue}>{formatRupee(deliveryFee)}</Text>
+              )}
             </View>
-            <View style={styles.chargeRow}>
-              <Text style={styles.chargeLabel}>Platform Fee</Text>
-              <Text style={styles.chargeValue}>{formatRupee(platformFee)}</Text>
-            </View>
+            {deliveryMeta ? (
+              <Text style={styles.chargeHint}>{deliveryMeta}</Text>
+            ) : null}
+            {feeEstimate && !feeEstimate.isDeliverable ? (
+              <Text style={styles.chargeWarn}>This store may not deliver to your location.</Text>
+            ) : null}
             <View style={styles.totalDivider} />
             <View style={styles.chargeRow}>
               <Text style={styles.totalLabel}>Total Amount</Text>
@@ -526,6 +656,36 @@ const styles = StyleSheet.create({
   chargeValue: {
     fontSize: 14,
     color: colors.text,
+    fontFamily: fonts.BOLD,
+  },
+  pricePair: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chargeOriginal: {
+    fontSize: 13,
+    color: colors.lighterGray,
+    fontFamily: fonts.BOLD,
+    textDecorationLine: 'line-through',
+  },
+  chargeDiscount: {
+    fontSize: 14,
+    color: colors.darkgreen,
+    fontFamily: fonts.BOLD,
+  },
+  chargeHint: {
+    marginTop: -6,
+    marginBottom: 12,
+    fontSize: 12,
+    color: colors.mutedText,
+    fontFamily: fonts.BOLD,
+  },
+  chargeWarn: {
+    marginTop: -4,
+    marginBottom: 12,
+    fontSize: 12,
+    color: '#D84B4B',
     fontFamily: fonts.BOLD,
   },
   totalDivider: {

@@ -19,4 +19,6 @@ export interface OfferBanner {
   terms?: string[];
   /** True when banner comes from admin active-feed (no store). */
   isAdminBanner?: boolean;
+  /** When false, home slider shows only the image. */
+  isTextShown?: boolean;
 }

@@ -63,7 +63,6 @@ export type MainStackParamList = {
     note?: string;
     itemPrice: number;
     deliveryFee: number;
-    platformFee: number;
     totalAmount: number;
   };
   RequestDeliveryAccepted: {
@@ -97,6 +96,7 @@ export type MainStackParamList = {
     | {
         expectedOfferId?: string;
         expectedOfferTitle?: string;
+        expectedShopId?: string;
       }
     | undefined;
   MyQrScreen: undefined;
@@ -126,9 +126,18 @@ export type MainStackParamList = {
   VideoGuide: undefined;
   HelpArticles: undefined;
   Contact: undefined;
+  RequestCallback: undefined;
   InviteEarn: undefined;
   Notifications: undefined;
   Language: undefined;
+  ChangeAreaRadius: undefined;
+  ChangeLocation: undefined;
+  LocalOffers:
+    | {
+        categoryId?: string;
+        filter?: 'all' | 'distance' | 'offer' | 'price';
+      }
+    | undefined;
   BachatCircle: undefined;
   BachatCircleCreate: undefined;
   BachatCircleAddMembers: {

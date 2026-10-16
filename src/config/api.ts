@@ -27,9 +27,17 @@ export const BACHAT_CIRCLE_API_BASE_URL = 'https://bachatbazaar.tech/api';
 /** In-app notifications live under /api. */
 export const NOTIFY_API_BASE_URL = 'https://bachatbazaar.tech/api';
 
+/** Phone OTP (send / verify / resend) lives under /api/users, form-urlencoded. */
+export const OTP_API_BASE_URL = 'https://bachatbazaar.tech/api/users';
+
+/** Sent as `account-id` on GET/PATCH /api/user/radius. */
+export const USER_RADIUS_ACCOUNT_ID =
+  '5d8e43cab19f/00986b9f-d7cb-4973-a18a-9b6ebc3ba6ec';
+
 export const API_ENDPOINTS = {
   sendOtp: '/auth/send-otp',
   verifyOtp: '/auth/verify-otp',
+  resendOtp: '/auth/resend-otp',
   forgotPassword: '/auth/forgot-password',
   /** Signup account creation — password + optional fcmToken / referralCode. */
   createAuth: '/auth/create',
@@ -42,6 +50,8 @@ export const API_ENDPOINTS = {
   deleteAccount: '/auth/delete-account',
   updateProfile: '/profile',
   getProfile: '/profile',
+  /** GET and PATCH discovery radius. Body for PATCH is form-urlencoded `radius`. */
+  discoveryRadius: '/radius',
   profileImage: '/profile-image',
   shopsByCity: (city: string, categoryId?: string) =>
     `/shop?city=${encodeURIComponent(city)}${
@@ -50,9 +60,21 @@ export const API_ENDPOINTS = {
         : ''
     }`,
   shops: '/shop',
-  shopsAll: '/shop/all',
-  shopsAllByCategory: (categoryId: string) =>
-    `/shop/all?category=${encodeURIComponent(categoryId.trim())}`,
+  shopsAll: (radiusKm?: number) => {
+    const radius =
+      typeof radiusKm === 'number' && Number.isFinite(radiusKm)
+        ? Math.max(1, Math.round(radiusKm))
+        : undefined;
+    return radius != null ? `/shop/all?radius=${radius}` : '/shop/all';
+  },
+  shopsAllByCategory: (categoryId: string, radiusKm?: number) => {
+    const params = new URLSearchParams();
+    params.set('category', categoryId.trim());
+    if (typeof radiusKm === 'number' && Number.isFinite(radiusKm)) {
+      params.set('radius', String(Math.max(1, Math.round(radiusKm))));
+    }
+    return `/shop/all?${params.toString()}`;
+  },
   shopSearch: (query: string, offerTypeId?: string) => {
     const base = `/shop/search?q=${encodeURIComponent(query.trim())}`;
     const normalizedType = offerTypeId?.trim();
@@ -118,8 +140,13 @@ export const API_ENDPOINTS = {
   /** Merchant delivery capability — under /api (ADMIN_API_BASE_URL), not /api/user. */
   merchantDeliveryStatus: (merchantId: string) =>
     `/merchants/${encodeURIComponent(merchantId.trim())}/delivery-status`,
+  /** Live delivery quote — under /api (DELIVERY_API_BASE_URL). */
+  estimateDeliveryFee: (shopId: string) =>
+    `/delivery/estimate-fee?shopId=${encodeURIComponent(shopId.trim())}`,
   /** User delivery order create — under /api (DELIVERY_API_BASE_URL). */
   createDeliveryOrder: '/delivery/user/delivery-orders',
+  /** Multi-item create — same host, JSON body with items[]. */
+  createDeliveryOrderBatch: '/delivery-orders/create',
   /** User delivery orders list (GET) — under /api (DELIVERY_API_BASE_URL). */
   listDeliveryOrders: '/delivery/user/delivery-orders',
   /**
@@ -136,6 +163,8 @@ export const API_ENDPOINTS = {
   cartAdd: '/cart/add',
   cartItem: (itemId: string) => `/cart/item/${encodeURIComponent(itemId.trim())}`,
   cartClear: '/cart/clear',
+  /** Request a support callback — under /api (HELP_API_BASE_URL). */
+  userCallback: '/callback/user',
   /** Help & Support — under /api (HELP_API_BASE_URL). */
   helpCreateTicket: '/help/user/tickets',
   helpMyTickets: (status?: string) =>
@@ -176,6 +205,10 @@ export const API_ENDPOINTS = {
   notificationsReadAll: '/notify/read-all',
   notificationDelete: (notificationId: string) =>
     `/notify/${encodeURIComponent(notificationId.trim())}`,
+  /** Click tracking — under /api (ADMIN_API_BASE_URL). */
+  clickShop: (shopId: string) => `/click/shop/${encodeURIComponent(shopId.trim())}`,
+  clickOffer: (offerId: string) => `/click/offer/${encodeURIComponent(offerId.trim())}`,
+  clickUserRedeem: '/click/user/redeem',
 } as const;
 
 export const getShopLogoUrl = (shopId: string) =>

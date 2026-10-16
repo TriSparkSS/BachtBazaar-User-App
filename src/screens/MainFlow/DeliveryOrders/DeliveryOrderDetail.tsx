@@ -370,21 +370,15 @@ const DeliveryOrderDetail = () => {
     formatRupee(product?.price);
   const deliveryFee =
     formatRupee(order?.deliveryFeeRaw) || formatRupee(order?.deliveryFee);
-  const platformFee =
-    formatRupee(order?.platformFeeRaw) || formatRupee(order?.platformFee);
   const totalAmount =
-    formatRupee(order?.totalAmountRaw) ||
-    formatRupee(order?.totalAmount) ||
     (() => {
-      const parts = [
-        order?.itemPriceRaw,
-        order?.deliveryFeeRaw,
-        order?.platformFeeRaw,
-      ].filter((n): n is number => typeof n === 'number' && Number.isFinite(n));
-      if (parts.length === 0) {
-        return undefined;
+      const parts = [order?.itemPriceRaw, order?.deliveryFeeRaw].filter(
+        (n): n is number => typeof n === 'number' && Number.isFinite(n),
+      );
+      if (parts.length > 0) {
+        return formatRupee(parts.reduce((sum, n) => sum + n, 0));
       }
-      return formatRupee(parts.reduce((sum, n) => sum + n, 0));
+      return formatRupee(order?.totalAmountRaw) || formatRupee(order?.totalAmount);
     })();
 
   const displayOrderNumber = order?.orderNumber || order?.id;
@@ -807,7 +801,7 @@ const DeliveryOrderDetail = () => {
                 ) : null}
               </View>
 
-              {(itemPrice || deliveryFee || platformFee || totalAmount) && (
+              {(itemPrice || deliveryFee || totalAmount) && (
                 <View style={styles.card}>
                   <Text style={styles.cardTitle}>Charges</Text>
                   {itemPrice ? (
@@ -820,12 +814,6 @@ const DeliveryOrderDetail = () => {
                     <View style={styles.chargeRow}>
                       <Text style={styles.chargeLabel}>Delivery Fee</Text>
                       <Text style={styles.chargeValue}>{deliveryFee}</Text>
-                    </View>
-                  ) : null}
-                  {platformFee ? (
-                    <View style={styles.chargeRow}>
-                      <Text style={styles.chargeLabel}>Platform Fee</Text>
-                      <Text style={styles.chargeValue}>{platformFee}</Text>
                     </View>
                   ) : null}
                   {totalAmount ? (

@@ -33,27 +33,46 @@ import { SearchResults } from '../../../../types/search';
 import { MainStackParamList } from '../../../../navigation/types';
 import { resetToAuthLogin } from '../../../../navigation/navigationService';
 import { shopApi } from '../../../../services/shopApi';
+import {
+  areaRadiusStorage,
+  DEFAULT_AREA_RADIUS_KM,
+} from '../../../../services/areaRadiusStorage';
+import { radiusApi } from '../../../../services/radiusApi';
 import { mergeRedemptionHistoryIntoCalendar } from '../../../../services/dailyRewardsParser';
 import { offerWishlistApi } from '../../../../services/offerWishlistApi';
 import { shopWishlistApi } from '../../../../services/shopWishlistApi';
+import { cartApi } from '../../../../services/cartApi';
 import { categoryApi } from '../../../../services/categoryApi';
 import { Category } from '../../../../types/category';
 import { OfferBanner } from '../../../../types/offerBanner';
 import { reverseGeocodeWithGoogle } from '../../../../utils/googleGeocoding';
 import { getCurrentDeviceCoordinates, requestLocationPermission } from '../../../../utils/deviceLocation';
-import OfferCountdownText from '../../../../components/OfferCountdownText';
+import {
+  formatDisplayPhone,
+  isValidDisplayPhone,
+  looksLikeEmail,
+  nationalPhoneDigits,
+} from '../../../../services/phoneNumber';
 import PromoBannerCarousel from '../../../../components/PromoBannerCarousel';
 import DailyRewardsSheet from '../../../../components/DailyRewardsSheet';
+import LocalOfferStoreCard from '../../../../components/LocalOfferStoreCard';
 import FeatureWalkthrough, {
   WalkthroughTargetRect,
 } from '../../../../components/FeatureWalkthrough';
 import { featureWalkthroughStorage } from '../../../../services/featureWalkthroughStorage';
 import { notifyApi } from '../../../../services/notifyApi';
 import { DailyCalendarDay, DailyRewardEntry, DailyRewardsCalendar } from '../../../../types/dailyRewards';
+import {
+  filterLocalOfferShops,
+  LOCAL_OFFER_FILTERS,
+  LocalOfferFilter,
+} from '../../../../utils/localOfferFilter';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min((width - 48) / 3 - 4, 118);
 const LOCAL_OFFER_CARD_WIDTH = Math.min(width * 0.74, 292);
+const OFFER_GRID_GAP = 12;
+const OFFER_GRID_TILE_WIDTH = (width - 32 - OFFER_GRID_GAP) / 2;
 const DINEOUT_GREEN = '#004B36';
 const DINEOUT_GREEN_LIGHT = '#0F6B4F';
 const HEART_RED = '#E11D48';
@@ -104,9 +123,15 @@ const ALL_CATEGORY_CHIP: CategoryChip = {
 };
 
 const MAX_VISIBLE_CATEGORY_CHIPS = 5;
+const MAX_HOME_LOCAL_SHOPS = 4;
 
 const PLACEHOLDER_SHOP_LOGO =
   'https://images.pexels.com/photos/248077/pexels-photo-248077.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=200';
+
+const resolveHomeShopImage = (shop: { logo?: string; coverImage?: string }) =>
+  shopApi.resolveImageUrl(shop.logo) ??
+  shopApi.resolveImageUrl(shop.coverImage) ??
+  PLACEHOLDER_SHOP_LOGO;
 
 const PLACEHOLDER_OFFER_IMAGE =
   'https://images.pexels.com/photos/1191531/pexels-photo-1191531.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=400';
@@ -156,6 +181,7 @@ const sidebarIconPalette: Record<string, string> = {
   'Edit Profile': '#E7F7D8',
   Notification: '#E8F0FF',
   Language: '#E8F7F4',
+  'Change Radius': '#EAF2FF',
   'Delete account': '#FFE5E5',
   'Create request': '#E0F2FE',
   'Privacy Policy': '#E8EEFF',
@@ -187,6 +213,7 @@ const sidebarIconTint: Record<string, string> = {
   'Edit Profile': '#5E9631',
   Notification: '#4E73D8',
   Language: '#1F8A70',
+  'Change Radius': '#366FE0',
   'Delete account': '#D84B4B',
   'Create request': '#0284C7',
   'Privacy Policy': '#3F5BD8',
@@ -246,6 +273,7 @@ const sidebarMciIcons: Record<AppIconName, string> = {
   'help-articles': 'book-open-page-variant-outline',
   contact: 'email-outline',
   language: 'translate',
+  'area-radius': 'map-marker-radius-outline',
   'bachat-circle': 'account-group-outline',
 };
 
@@ -256,27 +284,13 @@ const sidebarGroups: SidebarGroup[] = [
       { icon: 'overview', label: 'Overview' },
       { icon: 'reward', label: 'Rewards' },
       { icon: 'create-request', label: 'Create request' },
-      { icon: 'shop', label: 'Shop' },
       { icon: 'delivery', label: 'Delivery' },
-      { icon: 'discover-product', label: 'Discover Product' },
-      { icon: 'offers', label: 'Local offers (Today)' },
     ],
   },
   {
-    title: 'Saving & Tools',
-    items: [
-      { icon: 'wallet', label: 'Bacht Wallet' },
-      { icon: 'saving-summary', label: 'Saving Summary' },
-      { icon: 'target', label: 'Bachat Target' },
-    ],
-  },
-  {
-    title: 'Utility & Features',
+    title: 'Saved & Tools',
     items: [
       { icon: 'bachat-circle', label: 'Bachat Circle' },
-      { icon: 'reward', label: 'Rewards' },
-      { icon: 'tips', label: 'Tips & Tricks' },
-      { icon: 'coupons', label: 'My coupons' },
       { icon: 'qr', label: 'My QR' },
       { icon: 'saved-offers', label: 'Saved Offers' },
       { icon: 'saved-stores', label: 'Saved Stores' },
@@ -301,7 +315,7 @@ const sidebarGroups: SidebarGroup[] = [
     ],
   },
   {
-    title: 'Setting',
+    title: 'Settings',
     items: [
       { icon: 'language', label: 'Language' },
       { icon: 'password', label: 'Password' },
@@ -327,6 +341,9 @@ const HomeScreenView = () => {
   const [shops, setShops] = useState<ShopWithOffers[]>([]);
   const [isLoadingShops, setIsLoadingShops] = useState(false);
   const [shopsError, setShopsError] = useState<string | null>(null);
+  const [areaRadiusKm, setAreaRadiusKm] = useState(DEFAULT_AREA_RADIUS_KM);
+  const [localOfferFilter, setLocalOfferFilter] = useState<LocalOfferFilter>('all');
+  const [localOfferFilterVisible, setLocalOfferFilterVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeSearchQuery, setActiveSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResults>(EMPTY_SEARCH_RESULTS);
@@ -344,6 +361,7 @@ const HomeScreenView = () => {
   const [isLoadingDailyRewards, setIsLoadingDailyRewards] = useState(false);
   const [dailyRewardsError, setDailyRewardsError] = useState<string | null>(null);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
+  const [cartItemCount, setCartItemCount] = useState(0);
   const [savedShopIds, setSavedShopIds] = useState<Record<string, true>>({});
   const [savedOfferIds, setSavedOfferIds] = useState<Record<string, true>>({});
   const [togglingShopId, setTogglingShopId] = useState<string | null>(null);
@@ -759,13 +777,6 @@ const HomeScreenView = () => {
       color: '#F2994A',
     },
     {
-      id: 'my-rewards' as const,
-      icon: 'trophy-outline',
-      label: 'Rewards',
-      bgColor: '#EEF4FF',
-      color: colors.primary,
-    },
-    {
       id: 'nearby-coupons' as const,
       icon: 'map-marker-radius-outline',
       label: 'Nearby\nCoupons',
@@ -801,15 +812,31 @@ const HomeScreenView = () => {
     [currentUser?.address],
   );
   const isProfileComplete = Boolean(currentUser?.name?.trim() && currentUser?.address?.trim());
-  const maskedPhone = useMemo(() => {
-    const digits = currentUser?.phone?.replace(/\D/g, '') || '7876876543';
-    if (digits.length <= 4) {
-      return digits;
+  const contactEmail = useMemo(() => {
+    const email = currentUser?.email?.trim();
+    if (looksLikeEmail(email)) {
+      return email;
     }
 
-    return `${digits.slice(0, 4)}${'*'.repeat(Math.max(0, digits.length - 4))}`;
+    const phone = currentUser?.phone?.trim();
+    return looksLikeEmail(phone) ? phone : '';
+  }, [currentUser?.email, currentUser?.phone]);
+  const contactPhone = useMemo(() => {
+    const phone = currentUser?.phone?.trim() ?? '';
+    if (!isValidDisplayPhone(phone)) {
+      return '';
+    }
+
+    return formatDisplayPhone(phone);
   }, [currentUser?.phone]);
-  const displayPhone = currentUser?.phone ? `+91 ${currentUser.phone}` : '+91 786543567';
+  const maskedPhone = useMemo(() => {
+    const digits = nationalPhoneDigits(contactPhone);
+    if (digits.length <= 4) {
+      return contactPhone;
+    }
+
+    return `+91 ${digits.slice(0, 4)}${'*'.repeat(digits.length - 4)}`;
+  }, [contactPhone]);
   const profileActionLabel = isProfileComplete ? 'Edit Profile' : 'Complete Profile';
   const profileImageUri =
     !profileImageLoadError && currentUser?.profileImage
@@ -827,7 +854,11 @@ const HomeScreenView = () => {
       const token = authTokenRef.current ?? undefined;
       const todayKey = formatApiDate(new Date());
       // List source: calender API only. History is status-only (never invents cards).
-      const calendar = await shopApi.fetchDailyRewardsCalendar(date, token);
+      const calendar = await shopApi.fetchDailyRewardsCalendar(
+        date,
+        token,
+        currentUser?._id,
+      );
 
       if (!calendar.entries.length) {
         setDailyRewards(calendar);
@@ -865,7 +896,7 @@ const HomeScreenView = () => {
     } finally {
       setIsLoadingDailyRewards(false);
     }
-  }, []);
+  }, [currentUser?._id]);
 
   const updateDailyRewardWishlist = useCallback(
     (offerId: string, isWishlisted: boolean) => {
@@ -1101,6 +1132,50 @@ const HomeScreenView = () => {
     (navigation as StackNavigationProp<MainStackParamList>).navigate('Language');
   }, [navigation]);
 
+  const openChangeAreaRadius = useCallback(() => {
+    const parentNavigation =
+      navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('ChangeAreaRadius');
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate(
+      'ChangeAreaRadius',
+    );
+  }, [navigation]);
+
+  const openChangeLocation = useCallback(() => {
+    const parentNavigation =
+      navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('ChangeLocation');
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate(
+      'ChangeLocation',
+    );
+  }, [navigation]);
+
+  const openLocalOffers = useCallback(() => {
+    const params = {
+      categoryId: selectedCategory,
+      filter: localOfferFilter,
+    };
+    const parentNavigation =
+      navigation.getParent<StackNavigationProp<MainStackParamList>>();
+    if (parentNavigation) {
+      parentNavigation.navigate('LocalOffers', params);
+      return;
+    }
+
+    (navigation as StackNavigationProp<MainStackParamList>).navigate(
+      'LocalOffers',
+      params,
+    );
+  }, [localOfferFilter, navigation, selectedCategory]);
+
   const openBachatCircle = useCallback(() => {
     const parentNavigation =
       navigation.getParent<StackNavigationProp<MainStackParamList>>();
@@ -1162,6 +1237,20 @@ const HomeScreenView = () => {
     }
   }, []);
 
+  const loadCartItemCount = useCallback(async () => {
+    const token = authTokenRef.current?.trim();
+    if (!token) {
+      setCartItemCount(0);
+      return;
+    }
+    try {
+      const cart = await cartApi.fetchCart(token);
+      setCartItemCount(cart.summary.totalItemsCount || 0);
+    } catch {
+      // Keep last known count on transient failures.
+    }
+  }, []);
+
   useEffect(() => {
     if (!authToken || !currentUser) {
       return;
@@ -1193,9 +1282,21 @@ const HomeScreenView = () => {
     try {
       setIsLoadingShops(true);
       setShopsError(null);
+      let radiusKm = await areaRadiusStorage.getRadiusKm();
+      const token = authTokenRef.current?.trim();
+      if (token) {
+        try {
+          const remote = await radiusApi.getRadius(token);
+          radiusKm = remote.radiusKm;
+        } catch {
+          // Keep the last saved radius when the radius API is unavailable.
+        }
+      }
+      setAreaRadiusKm(radiusKm);
       const result = await shopApi.fetchHomeShops(
         selectedCategory,
         authTokenRef.current ?? undefined,
+        radiusKm,
       );
       setShops(result);
     } catch (error) {
@@ -1206,11 +1307,45 @@ const HomeScreenView = () => {
     } finally {
       setIsLoadingShops(false);
     }
-  }, [selectedCategory]);
+  }, [currentUser?.latitude, currentUser?.longitude, selectedCategory]);
 
   useEffect(() => {
     void loadShops();
   }, [loadShops, authToken]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void (async () => {
+        const radiusKm = await areaRadiusStorage.getRadiusKm();
+        if (radiusKm !== areaRadiusKm) {
+          setAreaRadiusKm(radiusKm);
+        }
+        void loadShops();
+      })();
+    }, [areaRadiusKm, loadShops]),
+  );
+
+  useEffect(() => {
+    if (!sidebarVisible) {
+      return;
+    }
+    const token = authToken?.trim();
+    if (!token) {
+      return;
+    }
+    let active = true;
+    radiusApi
+      .getRadius(token)
+      .then(remote => {
+        if (active) {
+          setAreaRadiusKm(remote.radiusKm);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [authToken, sidebarVisible]);
 
   const runSearch = useCallback(async (query: string) => {
     const trimmed = query.trim();
@@ -1468,6 +1603,16 @@ const HomeScreenView = () => {
   const hasMoreCategories = categoryChips.length > MAX_VISIBLE_CATEGORY_CHIPS;
   const isSearchActive = activeSearchQuery.trim().length > 0;
   const displayedShops = isSearchActive ? searchResults.shops : shops;
+  const visibleLocalShops = useMemo(
+    () => (isSearchActive ? displayedShops : filterLocalOfferShops(shops, localOfferFilter)),
+    [displayedShops, isSearchActive, localOfferFilter, shops],
+  );
+  const homeLocalShops = useMemo(
+    () =>
+      isSearchActive ? visibleLocalShops : visibleLocalShops.slice(0, MAX_HOME_LOCAL_SHOPS),
+    [isSearchActive, visibleLocalShops],
+  );
+  const activeLocalOfferFilter = LOCAL_OFFER_FILTERS.find(item => item.id === localOfferFilter);
   const normalizedActiveQuery = activeSearchQuery.trim().toLowerCase();
   const resultsMatchActiveQuery =
     !normalizedActiveQuery ||
@@ -1518,6 +1663,7 @@ const HomeScreenView = () => {
         loadShops(),
         loadWishlistIds(),
         loadNotificationUnread(),
+        loadCartItemCount(),
       ];
 
       if (dailyRewardsVisible) {
@@ -1534,6 +1680,7 @@ const HomeScreenView = () => {
     loadBanners,
     loadCategories,
     loadDailyRewards,
+    loadCartItemCount,
     loadNotificationUnread,
     loadShops,
     loadWishlistIds,
@@ -1543,12 +1690,14 @@ const HomeScreenView = () => {
 
   useEffect(() => {
     void loadNotificationUnread();
-  }, [loadNotificationUnread, authToken]);
+    void loadCartItemCount();
+  }, [loadNotificationUnread, loadCartItemCount, authToken]);
 
   useFocusEffect(
     useCallback(() => {
       void loadNotificationUnread();
-    }, [loadNotificationUnread]),
+      void loadCartItemCount();
+    }, [loadNotificationUnread, loadCartItemCount]),
   );
 
   useEffect(() => {
@@ -1577,10 +1726,6 @@ const HomeScreenView = () => {
   }, [dailyRewardsVisible, selectedDailyRewardDate, loadDailyRewards]);
 
   useEffect(() => {
-    const fallbackAddress = currentUser?.address?.trim()
-      ? `Work - ${currentUser.address.trim()}`
-      : 'Work - New Delhi, India';
-
     const formatAddress = (address?: string, city?: string) => {
       if (city?.trim()) {
         return `Work - ${city.trim()}`;
@@ -1590,65 +1735,46 @@ const HomeScreenView = () => {
         return `Work - ${address.split(',').slice(0, 2).join(', ')}`;
       }
 
-      return fallbackAddress;
+      return 'Work - Select location';
     };
 
-    const applyFallbackLocation = () => {
-      setHeaderAddress(fallbackAddress);
-    };
+    if (currentUser?.city?.trim() || currentUser?.address?.trim()) {
+      setHeaderAddress(formatAddress(currentUser.address, currentUser.city));
+      return;
+    }
+
+    let cancelled = false;
 
     const loadCurrentLocation = async () => {
       try {
         const permitted = await requestLocationPermission();
-        const coordinates = await getCurrentDeviceCoordinates();
-
-        if (coordinates) {
-          console.log('[Location] Current coordinates', coordinates);
-
-          try {
-            const { latitude, longitude } = coordinates;
-            const reverseGeocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}`;
-            const reverseGeocodeStartedAt = Date.now();
-
-            logApiEvent('GET request', {
-              url: reverseGeocodeUrl,
-              method: 'GET',
-            });
-
-            const result = await reverseGeocodeWithGoogle(latitude, longitude);
-            logApiEvent(result.address || result.city ? 'GET response' : 'GET error-response', {
-              url: reverseGeocodeUrl,
-              method: 'GET',
-              durationMs: Date.now() - reverseGeocodeStartedAt,
-              responseBody: result,
-            });
-            console.log('[Location] Reverse geocode response', result);
-            setHeaderAddress(formatAddress(result.address, result.city));
-          } catch (error) {
-            logApiEvent('GET network-error', {
-              url: 'https://maps.googleapis.com/maps/api/geocode/json',
-              method: 'GET',
-              error: error instanceof Error ? error.message : String(error),
-            });
-            setHeaderAddress(fallbackAddress);
-          }
-
-          return;
-        }
-
         if (!permitted) {
-          applyFallbackLocation();
+          return;
+        }
+        const coordinates = await getCurrentDeviceCoordinates();
+        if (!coordinates || cancelled) {
           return;
         }
 
-        applyFallbackLocation();
+        const result = await reverseGeocodeWithGoogle(
+          coordinates.latitude,
+          coordinates.longitude,
+        );
+        if (!cancelled) {
+          setHeaderAddress(formatAddress(result.address, result.city));
+        }
       } catch {
-        applyFallbackLocation();
+        if (!cancelled) {
+          setHeaderAddress('Work - Select location');
+        }
       }
     };
 
-    loadCurrentLocation();
-  }, [currentUser?.address]);
+    void loadCurrentLocation();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.address, currentUser?.city]);
 
   const openProfileSetup = () => {
     setSidebarVisible(false);
@@ -1896,7 +2022,11 @@ const HomeScreenView = () => {
             if (authToken) {
               await userAuthApi.logout(authToken);
             }
+          } catch {
+            // Still clear this device so the next login starts empty.
+          }
 
+          try {
             await clearSession();
             setSidebarVisible(false);
             resetToAuthLogin();
@@ -2037,6 +2167,12 @@ const HomeScreenView = () => {
       return;
     }
 
+    if (label === 'Change Radius' || label === 'Change Area Radius') {
+      setSidebarVisible(false);
+      openChangeAreaRadius();
+      return;
+    }
+
     if (label === 'Bachat Circle') {
       setSidebarVisible(false);
       openBachatCircle();
@@ -2109,6 +2245,11 @@ const HomeScreenView = () => {
 
     if (actionId === 'saved-offers') {
       openSavedOffers();
+      return;
+    }
+
+    if (actionId === 'nearby-coupons') {
+      openChangeLocation();
       return;
     }
 
@@ -2280,16 +2421,19 @@ const HomeScreenView = () => {
   };
 
   const renderSearchShopRow = (shop: ShopWithOffers) => {
-    const shopLogo = shopApi.resolveImageUrl(shop.logo) ?? PLACEHOLDER_SHOP_LOGO;
+    const shopLogo = resolveHomeShopImage(shop);
+    const shopOpen = isShopCurrentlyOpen(shop);
+    const isClosed = shopOpen === false;
 
     return (
       <TouchableOpacity
         key={`search-shop-${shop.id}`}
-        style={styles.searchShopRow}
+        style={[styles.searchShopRow, isClosed && styles.closedSearchShopRow]}
         activeOpacity={0.88}
         onPress={() => openStoreDetail(shop)}>
         <View style={styles.searchShopLogoWrap}>
           <Image source={{ uri: shopLogo }} style={styles.searchShopLogo} resizeMode="cover" />
+          {isClosed ? <View style={styles.closedLogoWash} /> : null}
         </View>
         <View style={styles.searchShopBody}>
           <Text style={styles.searchResultTitle} numberOfLines={1}>
@@ -2301,7 +2445,17 @@ const HomeScreenView = () => {
             </Text>
           ) : null}
         </View>
-        <MaterialCommunityIcons name="chevron-right" size={20} color="#98A2B3" />
+        {isClosed ? (
+          <View style={styles.closedTag}>
+            <Text style={styles.closedTagText}>Closed</Text>
+          </View>
+        ) : shopOpen ? (
+          <View style={styles.openTag}>
+            <Text style={styles.openTagText}>Open</Text>
+          </View>
+        ) : (
+          <MaterialCommunityIcons name="chevron-right" size={20} color="#98A2B3" />
+        )}
       </TouchableOpacity>
     );
   };
@@ -2318,11 +2472,13 @@ const HomeScreenView = () => {
             onCartPress={openCart}
             onNotificationPress={openNotifications}
             notificationUnreadCount={notificationUnreadCount}
+            cartItemCount={cartItemCount}
             onVoicePress={() => {
               void toggleListening();
             }}
             title="Bacht Bazaar"
             subtitle={headerAddress}
+            onLocationPress={openChangeLocation}
             showSearch
             searchValue={searchQuery}
             onSearchChange={handleSearchChange}
@@ -2553,11 +2709,13 @@ const HomeScreenView = () => {
               onBannerPress={openBannerDetail}
             />
 
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.quickActionsScroll}
-              contentContainerStyle={styles.quickActionsContent}
+            <View
+              style={styles.quickActionsRow}
+              onLayout={() => {
+                if (featureWalkthroughVisible) {
+                  scheduleWalkthroughMeasure();
+                }
+              }}
             >
               {quickActions.map(action => {
                 const isRewards = action.id === 'daily-rewards';
@@ -2566,17 +2724,17 @@ const HomeScreenView = () => {
                     key={action.label}
                     ref={isRewards ? walkthroughRewardsRef : undefined}
                     collapsable={isRewards ? false : undefined}
-                    style={isRewards ? styles.walkthroughRewardsWrap : undefined}
+                    style={styles.quickActionItem}
                   >
                     <TouchableOpacity
-                      style={styles.quickActionItem}
+                      style={styles.quickActionButton}
                       activeOpacity={0.82}
                       onPress={() => handleQuickActionPress(action.id, action.label)}
                     >
                       <View style={[styles.quickActionCircle, { backgroundColor: action.bgColor }]}>
                         <MaterialCommunityIcons
                           name={action.icon}
-                          size={25}
+                          size={18}
                           color={action.color}
                         />
                       </View>
@@ -2587,7 +2745,7 @@ const HomeScreenView = () => {
                   </View>
                 );
               })}
-            </ScrollView>
+            </View>
 
             <View style={styles.categoriesSection}>
               <View style={styles.categoriesHeaderRow}>
@@ -2651,8 +2809,50 @@ const HomeScreenView = () => {
                         ? `${searchResultCount} result${searchResultCount === 1 ? '' : 's'} for "${activeSearchQuery.trim()}"`
                         : `Showing results for "${activeSearchQuery.trim()}"`}
                     </Text>
+                  ) : localOfferFilter !== 'all' ? (
+                    <Text style={styles.searchSummaryText}>
+                      {activeLocalOfferFilter?.hint}
+                    </Text>
                   ) : null}
                 </View>
+                {!isSearchActive ? (
+                  <View style={styles.localOffersHeaderActions}>
+                    <TouchableOpacity
+                      style={[
+                        styles.localOfferFilterButton,
+                        localOfferFilter !== 'all' && styles.localOfferFilterButtonActive,
+                      ]}
+                      activeOpacity={0.85}
+                      onPress={() => setLocalOfferFilterVisible(true)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Filter local offers"
+                    >
+                      <MaterialCommunityIcons
+                        name="filter-variant"
+                        size={15}
+                        color={localOfferFilter === 'all' ? '#6B7280' : colors.white}
+                      />
+                      <Text
+                        style={[
+                          styles.localOfferFilterButtonText,
+                          localOfferFilter !== 'all' && styles.localOfferFilterButtonTextActive,
+                        ]}
+                      >
+                        Filter
+                      </Text>
+                    </TouchableOpacity>
+                    {visibleLocalShops.length > 0 ? (
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={openLocalOffers}
+                        accessibilityRole="button"
+                        accessibilityLabel="View all local offers"
+                      >
+                        <Text style={styles.viewAllCategoriesText}>View all</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                ) : null}
               </View>
               </View>
 
@@ -2698,6 +2898,25 @@ const HomeScreenView = () => {
                   <MaterialCommunityIcons name="store-off-outline" size={28} color="#99A4B8" />
                   <Text style={styles.shopsEmptyTitle}>No shops nearby</Text>
                   <Text style={styles.shopsEmptyText}>Check back soon for local offers.</Text>
+                </View>
+              ) : !isSearchActive && visibleLocalShops.length === 0 ? (
+                <View style={styles.shopsEmptyCard}>
+                  <MaterialCommunityIcons name="filter-off-outline" size={28} color="#99A4B8" />
+                  <Text style={styles.shopsEmptyTitle}>Nothing matches this filter</Text>
+                  <Text style={styles.shopsEmptyText}>
+                    {localOfferFilter === 'offer'
+                      ? 'No stores with offers are in this list.'
+                      : localOfferFilter === 'price'
+                        ? 'No stores with a product price are in this list.'
+                        : 'No stores match the selected filter.'}
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.createRequestEmptyBtn}
+                    activeOpacity={0.88}
+                    onPress={() => setLocalOfferFilter('all')}
+                  >
+                    <Text style={styles.createRequestEmptyBtnText}>Show all stores</Text>
+                  </TouchableOpacity>
                 </View>
               ) : isSearchActive ? (
                 <>
@@ -2794,171 +3013,23 @@ const HomeScreenView = () => {
                 </>
               ) : (
                 <>
-                  {displayedShops.map((shop, shopIndex) => {
-                  const shopLogo = shopApi.resolveImageUrl(shop.logo) ?? PLACEHOLDER_SHOP_LOGO;
-                  const hasOffers = shop.offers.length > 0;
-                  const shopSaved = Boolean(savedShopIds[shop.id]);
-                  const shopToggling = togglingShopId === shop.id;
-                  const isOffersHighlightCard = !isSearchActive && shopIndex === 0;
-
-                  return (
-                    <View
-                      key={shop.id}
-                      ref={isOffersHighlightCard ? walkthroughOffersFirstCardRef : undefined}
-                      collapsable={isOffersHighlightCard ? false : undefined}
-                      style={styles.localOffersFeatureCard}
-                    >
-                      <TouchableOpacity
-                        style={styles.storeHeader}
-                        activeOpacity={0.86}
-                        onPress={() => openStoreDetail(shop)}
-                      >
-                        <View style={styles.storeLogoCircle}>
-                          <Image source={{ uri: shopLogo }} style={styles.storeLogo} />
-                        </View>
-                        <View style={styles.storeInfo}>
-                          <View style={styles.storeNameContainer}>
-                            <Text style={styles.storeName}>{shop.name}</Text>
-                            {shop.isVerified ? (
-                              <MaterialCommunityIcons
-                                name="check-decagram"
-                                size={16}
-                                color={colors.primary}
-                                style={styles.verifiedIcon}
-                              />
-                            ) : null}
-                          </View>
-                          {shop.tagline ? (
-                            <Text style={styles.storeTagline}>{shop.tagline}</Text>
-                          ) : shop.address ? (
-                            <Text style={styles.storeTagline} numberOfLines={1}>
-                              {shop.address}
-                            </Text>
-                          ) : null}
-                        </View>
-                        <View style={styles.storeMeta}>
-                          <TouchableOpacity
-                            style={styles.homeHeartButton}
-                            activeOpacity={0.85}
-                            disabled={shopToggling}
-                            onPress={event => {
-                              event.stopPropagation?.();
-                              handleToggleShopWishlist(shop);
-                            }}
-                          >
-                            {shopToggling ? (
-                              <ActivityIndicator size="small" color={HEART_RED} />
-                            ) : (
-                              <MaterialCommunityIcons
-                                name={shopSaved ? 'heart' : 'heart-outline'}
-                                size={18}
-                                color={shopSaved ? HEART_RED : '#98A2B3'}
-                              />
-                            )}
-                          </TouchableOpacity>
-                          {shop.rating ? (
-                            <View style={styles.ratingRow}>
-                              <MaterialCommunityIcons name="star-outline" size={14} color="#F2A900" />
-                              <Text style={styles.ratingText}>
-                                {shop.rating}
-                                {shop.ratingCount ? (
-                                  <Text style={styles.ratingCount}> ({shop.ratingCount})</Text>
-                                ) : null}
-                              </Text>
-                            </View>
-                          ) : null}
-                          <View style={styles.distanceStatusRow}>
-                            {shop.distance ? (
-                              <>
-                                <MaterialCommunityIcons
-                                  name="map-marker"
-                                  size={13}
-                                  color="#E65A24"
-                                />
-                                <Text style={styles.distanceText}>{shop.distance}</Text>
-                              </>
-                            ) : null}
-                            {isShopCurrentlyOpen(shop) ? (
-                              <View style={styles.openTag}>
-                                <Text style={styles.openTagText}>Open</Text>
-                              </View>
-                            ) : null}
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-
-                      {hasOffers ? (
-                        <ScrollView
-                          horizontal
-                          showsHorizontalScrollIndicator={false}
-                          style={styles.offersScroll}
-                          contentContainerStyle={styles.offersContent}
-                        >
-                          {shop.offers.map(offer => {
-                            const offerImage =
-                              shopApi.resolveImageUrl(offer.image) ?? PLACEHOLDER_OFFER_IMAGE;
-                            const offerSaved = Boolean(savedOfferIds[offer.id]);
-                            const offerToggling = togglingOfferId === offer.id;
-
-                            return (
-                              <TouchableOpacity
-                                key={offer.id}
-                                style={styles.offerCard}
-                                activeOpacity={0.88}
-                                onPress={() => openOfferDetail(shop, offer)}
-                              >
-                                <View style={styles.offerImageContainer}>
-                                  <Image source={{ uri: offerImage }} style={styles.offerImage} />
-                                  {offer.discount ? (
-                                    <View style={styles.offerTag}>
-                                      <Text style={styles.offerTagTextSmall}>{offer.discount}</Text>
-                                    </View>
-                                  ) : null}
-                                  <TouchableOpacity
-                                    style={styles.offerHeartButton}
-                                    activeOpacity={0.85}
-                                    disabled={offerToggling}
-                                    onPress={event => {
-                                      event.stopPropagation?.();
-                                      handleToggleOfferWishlist(offer);
-                                    }}
-                                  >
-                                    {offerToggling ? (
-                                      <ActivityIndicator size="small" color={HEART_RED} />
-                                    ) : (
-                                      <MaterialCommunityIcons
-                                        name={offerSaved ? 'heart' : 'heart-outline'}
-                                        size={16}
-                                        color={offerSaved ? HEART_RED : '#667085'}
-                                      />
-                                    )}
-                                  </TouchableOpacity>
-                                </View>
-                                <View style={styles.offerInfo}>
-                                  <Text style={styles.cardOfferTitle} numberOfLines={1}>
-                                    {offer.title}
-                                  </Text>
-                                  {offer.subtitle ? (
-                                    <Text style={styles.cardOfferSubtitle} numberOfLines={1}>
-                                      {offer.subtitle}
-                                    </Text>
-                                  ) : null}
-                                  <OfferCountdownText
-                                    expiresAt={offer.expiresAt}
-                                    countdown={offer.countdown}
-                                    suffix=" remaining"
-                                    style={styles.cardCountdown}
-                                  />
-                                </View>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </ScrollView>
-                      ) : (
-                        <Text style={styles.noOffersText}>No offers available right now.</Text>
-                      )}
-                    </View>
-                  );
+                  {homeLocalShops.map((shop, shopIndex) => {
+                    const isOffersHighlightCard = !isSearchActive && shopIndex === 0;
+                    return (
+                      <LocalOfferStoreCard
+                        key={shop.id}
+                        shop={shop}
+                        cardRef={isOffersHighlightCard ? walkthroughOffersFirstCardRef : undefined}
+                        shopSaved={Boolean(savedShopIds[shop.id])}
+                        shopToggling={togglingShopId === shop.id}
+                        savedOfferIds={savedOfferIds}
+                        togglingOfferId={togglingOfferId}
+                        onPressStore={() => openStoreDetail(shop)}
+                        onPressOffer={offer => openOfferDetail(shop, offer)}
+                        onToggleShop={() => handleToggleShopWishlist(shop)}
+                        onToggleOffer={handleToggleOfferWishlist}
+                      />
+                    );
                   })}
                 </>
               )}
@@ -3000,6 +3071,75 @@ const HomeScreenView = () => {
       </Modal>
 
       <Modal
+        visible={localOfferFilterVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLocalOfferFilterVisible(false)}
+      >
+        <Pressable
+          style={styles.categoriesModalBackdrop}
+          onPress={() => setLocalOfferFilterVisible(false)}
+        >
+          <Pressable style={styles.filterSheet} onPress={() => undefined}>
+            <View style={styles.categoriesModalHeader}>
+              <Text style={styles.categoriesModalTitle}>Filter local offers</Text>
+              <TouchableOpacity
+                onPress={() => setLocalOfferFilterVisible(false)}
+                style={styles.sidebarCloseButton}
+                accessibilityRole="button"
+                accessibilityLabel="Close filters"
+              >
+                <MaterialCommunityIcons name="close" size={22} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            {LOCAL_OFFER_FILTERS.map(option => {
+              const selected = localOfferFilter === option.id;
+              return (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[styles.filterOption, selected && styles.filterOptionSelected]}
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    setLocalOfferFilter(option.id);
+                    setLocalOfferFilterVisible(false);
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.filterOptionIcon,
+                      selected && styles.filterOptionIconSelected,
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name={option.icon}
+                      size={18}
+                      color={selected ? colors.white : colors.primary}
+                    />
+                  </View>
+                  <View style={styles.filterOptionCopy}>
+                    <Text
+                      style={[
+                        styles.filterOptionLabel,
+                        selected && styles.filterOptionLabelSelected,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    <Text style={styles.filterOptionHint}>{option.hint}</Text>
+                  </View>
+                  <MaterialCommunityIcons
+                    name={selected ? 'check-circle' : 'circle-outline'}
+                    size={20}
+                    color={selected ? colors.primary : '#C5CEDB'}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
         visible={sidebarVisible}
         transparent
         animationType="slide"
@@ -3020,8 +3160,12 @@ const HomeScreenView = () => {
             </View>
 
             <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.sidebarScrollContent}
+              style={styles.sidebarScroll}
+              showsVerticalScrollIndicator
+              contentContainerStyle={[
+                styles.sidebarScrollContent,
+                { paddingBottom: Math.max(insets.bottom, 16) + 28 },
+              ]}
             >
               <View style={styles.sidebarProfileCard}>
                 <View style={styles.sidebarProfileSection}>
@@ -3042,26 +3186,37 @@ const HomeScreenView = () => {
                   </View>
                 </View>
 
-                <View style={styles.contactRow}>
-                  <View style={styles.contactIconBadge}>
-                    <MaterialCommunityIcons name="phone-outline" size={16} color={colors.primary} />
+                {contactPhone ? (
+                  <View style={styles.contactRow}>
+                    <View style={styles.contactIconBadge}>
+                      <MaterialCommunityIcons name="phone-outline" size={16} color={colors.primary} />
+                    </View>
+                    <Text style={styles.contactText}>
+                      {isPhoneVisible ? contactPhone : maskedPhone}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.contactToggleButton}
+                      onPress={() => setIsPhoneVisible(prev => !prev)}
+                      accessibilityRole="button"
+                      accessibilityLabel={isPhoneVisible ? 'Hide phone number' : 'Show phone number'}
+                    >
+                      <MaterialCommunityIcons
+                        name={isPhoneVisible ? 'eye-outline' : 'eye-off-outline'}
+                        size={18}
+                        color={colors.primary}
+                      />
+                    </TouchableOpacity>
                   </View>
-                  <Text style={styles.contactText}>
-                    {isPhoneVisible ? displayPhone : `+91 ${maskedPhone}`}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.contactToggleButton}
-                    onPress={() => setIsPhoneVisible(prev => !prev)}
-                    accessibilityRole="button"
-                    accessibilityLabel={isPhoneVisible ? 'Hide phone number' : 'Show phone number'}
-                  >
-                    <MaterialCommunityIcons
-                      name={isPhoneVisible ? 'eye-outline' : 'eye-off-outline'}
-                      size={18}
-                      color={colors.primary}
-                    />
-                  </TouchableOpacity>
-                </View>
+                ) : contactEmail ? (
+                  <View style={styles.contactRow}>
+                    <View style={styles.contactIconBadge}>
+                      <MaterialCommunityIcons name="email-outline" size={16} color={colors.primary} />
+                    </View>
+                    <Text style={styles.contactText} numberOfLines={1}>
+                      {contactEmail}
+                    </Text>
+                  </View>
+                ) : null}
 
                 <View style={styles.contactRow}>
                   <View style={styles.contactIconBadge}>
@@ -3090,7 +3245,34 @@ const HomeScreenView = () => {
                   </Text>
                 </View>
                 <View style={styles.completeCardAction}>
-                  <Text style={styles.completeCardActionText}>{profileActionLabel}</Text>
+                  <Text style={styles.completeCardActionText} numberOfLines={1}>
+                    {profileActionLabel}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.radiusCard}
+                onPress={() => handleSidebarItemPress('Change Radius')}
+                activeOpacity={0.75}
+                accessibilityRole="button"
+                accessibilityLabel={`Change feed radius, currently ${areaRadiusKm} kilometers`}
+              >
+                <View style={styles.radiusIconWrap}>
+                  <MaterialCommunityIcons
+                    name="map-marker-radius-outline"
+                    size={22}
+                    color={colors.primary}
+                  />
+                </View>
+                <View style={styles.radiusCopy}>
+                  <Text style={styles.radiusTitle}>Change Radius</Text>
+                  <Text style={styles.radiusSubtitle} numberOfLines={1}>
+                    Feed within {areaRadiusKm} km
+                  </Text>
+                </View>
+                <View style={styles.radiusValuePill}>
+                  <Text style={styles.radiusValueText}>{areaRadiusKm} km</Text>
                 </View>
               </TouchableOpacity>
 
@@ -3136,6 +3318,7 @@ const HomeScreenView = () => {
                           />
                         </View>
                         <Text
+                          numberOfLines={1}
                           style={[
                             styles.sidebarItemText,
                             isActive && styles.sidebarItemTextActive,
@@ -3151,7 +3334,7 @@ const HomeScreenView = () => {
               ))}
 
               <TouchableOpacity style={styles.logoutRow} onPress={handleLogout} activeOpacity={0.7}>
-                <MaterialCommunityIcons name="logout" size={20} color="#E45A5A" />
+                <MaterialCommunityIcons name="logout" size={18} color="#E45A5A" />
                 <Text style={styles.logoutText}>Log Out</Text>
               </TouchableOpacity>
             </ScrollView>
@@ -3194,11 +3377,11 @@ export default HomeScreenView;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: colors.bg,
+    backgroundColor: '#FFFFFF',
   },
   safeArea: {
     flex: 1,
-    paddingTop: 6,
+    paddingTop: 2,
   },
   searchHeaderWrap: {
     zIndex: 30,
@@ -3306,19 +3489,13 @@ const styles = StyleSheet.create({
     color: '#667085',
   },
   bgAccent: {
-    position: 'absolute',
-    top: -70,
-    right: -50,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: colors.primarySoft,
+    display: 'none',
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 4,
+    paddingTop: 0,
   },
   shopsLoadingCard: {
     marginHorizontal: 16,
@@ -3619,51 +3796,44 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     opacity: 0.9,
   },
-  quickActionsScroll: {
-    marginBottom: 8,
-  },
-  quickActionsContent: {
+  quickActionsRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 4,
-    gap: 10,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    marginBottom: 18,
+    gap: 4,
   },
   quickActionItem: {
+    flex: 1,
+    minWidth: 0,
     alignItems: 'center',
-    width: 76,
-    backgroundColor: colors.white,
-    borderRadius: 18,
-    paddingTop: 10,
-    paddingBottom: 9,
-    borderWidth: 1,
-    borderColor: '#E9EDF5',
-    shadowColor: '#1B2430',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    elevation: 2,
+  },
+  quickActionButton: {
+    alignItems: 'center',
+    width: '100%',
+    paddingHorizontal: 2,
   },
   quickActionCircle: {
-    width: 46,
-    height: 46,
-    borderRadius: 15,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 6,
   },
   quickActionLabel: {
-    fontSize: 11,
-    color: colors.text,
+    fontSize: 9,
+    color: '#4B5563',
     textAlign: 'center',
     fontFamily: fonts.BOLD,
-    marginTop: 4,
-    lineHeight: 13,
-    minHeight: 26,
+    lineHeight: 11,
   },
   categoriesSection: {
-    marginTop: 12,
-    marginBottom: 10,
-    paddingBottom: 2,
+    marginTop: 4,
+    marginBottom: 16,
+    paddingBottom: 0,
   },
   walkthroughCategoriesWrap: {
     borderRadius: 18,
@@ -3679,16 +3849,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    marginBottom: 2,
+    marginBottom: 10,
   },
   categoriesTitle: {
-    fontSize: 15,
-    color: colors.text,
+    fontSize: 16,
+    color: '#111827',
     fontFamily: fonts.BOLD,
   },
   viewAllCategoriesText: {
     fontSize: 13,
-    color: colors.primary,
+    color: '#6B7280',
     fontFamily: fonts.BOLD,
   },
   categoriesModalBackdrop: {
@@ -3731,8 +3901,8 @@ const styles = StyleSheet.create({
   categoriesContent: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 12,
+    paddingTop: 6,
+    paddingBottom: 8,
     gap: 10,
   },
   categoryPill: {
@@ -3783,20 +3953,140 @@ const styles = StyleSheet.create({
   },
   localOffersSection: {
     paddingHorizontal: 16,
-    marginTop: 2,
+    marginTop: 8,
   },
   localOffersHeader: {
+    paddingHorizontal: 0,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  localOffersHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  localOfferFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    height: 32,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    backgroundColor: '#F3F4F6',
+    borderWidth: 0,
+  },
+  localOfferFilterButtonActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  localOfferFilterButtonText: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontFamily: fonts.BOLD,
+  },
+  localOfferFilterButtonTextActive: {
+    color: colors.white,
+  },
+  filterSheet: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: colors.white,
+    borderRadius: 22,
     paddingHorizontal: 16,
-    marginBottom: 10,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  filterOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    marginBottom: 6,
+  },
+  filterOptionSelected: {
+    backgroundColor: '#F4F8FF',
+  },
+  filterOptionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    backgroundColor: '#EAF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterOptionIconSelected: {
+    backgroundColor: colors.primary,
+  },
+  filterOptionCopy: {
+    flex: 1,
+  },
+  filterOptionLabel: {
+    fontSize: 14,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+  },
+  filterOptionLabelSelected: {
+    color: colors.primary,
+  },
+  filterOptionHint: {
+    marginTop: 2,
+    fontSize: 12,
+    color: '#667085',
+    fontFamily: fonts.BOLD,
   },
   localOffersTitleWrap: {
     flex: 1,
   },
   localOffersTitle: {
-    fontSize: 19,
+    fontSize: 16,
     fontFamily: fonts.BOLD,
-    color: colors.text,
-    letterSpacing: -0.4,
+    color: '#111827',
+    letterSpacing: -0.3,
+  },
+  offerGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: OFFER_GRID_GAP,
+  },
+  offerGridTile: {
+    width: OFFER_GRID_TILE_WIDTH,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  offerGridImageWrap: {
+    width: 112,
+    height: 112,
+    borderRadius: 56,
+    overflow: 'hidden',
+    backgroundColor: '#F3F4F6',
+    marginBottom: 8,
+  },
+  offerGridImage: {
+    width: '100%',
+    height: '100%',
+  },
+  offerGridTitle: {
+    fontSize: 13,
+    lineHeight: 16,
+    color: '#111827',
+    fontFamily: fonts.BOLD,
+    textAlign: 'center',
+  },
+  offerGridPrice: {
+    marginTop: 4,
+    fontSize: 13,
+    color: '#111827',
+    fontFamily: fonts.BOLD,
+  },
+  offerGridOriginalPrice: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    fontFamily: fonts.BOLD,
+    textDecorationLine: 'line-through',
   },
   searchSummaryText: {
     marginTop: 3,
@@ -3959,10 +4249,10 @@ const styles = StyleSheet.create({
   },
   localOffersFeatureCard: {
     backgroundColor: colors.white,
-    borderRadius: 22,
-    paddingTop: 16,
-    paddingBottom: 16,
-    marginBottom: 16,
+    borderRadius: 18,
+    paddingTop: 12,
+    paddingBottom: 12,
+    marginBottom: 12,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#E7ECF5',
@@ -3971,6 +4261,33 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 18,
     elevation: 5,
+  },
+  closedStoreCard: {
+    opacity: 0.58,
+    backgroundColor: '#F4F6F8',
+    borderColor: '#E2E6ED',
+    shadowOpacity: 0.03,
+    elevation: 1,
+  },
+  closedSearchShopRow: {
+    opacity: 0.58,
+    backgroundColor: '#F4F6F8',
+  },
+  closedLogoWash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(244,246,248,0.45)',
+  },
+  closedTag: {
+    marginLeft: 4,
+    backgroundColor: '#FDEEEE',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  closedTagText: {
+    color: '#D84B4B',
+    fontSize: 10,
+    fontFamily: fonts.BOLD,
   },
   localOfferGlowTop: {
     position: 'absolute',
@@ -4332,11 +4649,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   storeLogoCircle: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     overflow: 'hidden',
-    marginRight: 12,
+    marginRight: 10,
     borderWidth: 2,
     borderColor: '#E7ECF5',
   },
@@ -4510,8 +4827,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   sidebarCard: {
-    width: width * 0.82,
-    maxWidth: 340,
+    width: Math.min(width * 0.78, 320),
+    flexGrow: 0,
+    flexShrink: 0,
+    height: '100%',
     backgroundColor: colors.white,
     marginTop: 0,
     marginBottom: 0,
@@ -4529,6 +4848,9 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 16,
     overflow: 'hidden',
+  },
+  sidebarScroll: {
+    flex: 1,
   },
   sidebarPatternTop: {
     position: 'absolute',
@@ -4707,6 +5029,54 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontFamily: fonts.BOLD,
   },
+  radiusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7F9FF',
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E3EAF8',
+    gap: 10,
+  },
+  radiusIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: '#EAF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radiusCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  radiusTitle: {
+    fontSize: 14,
+    color: colors.text,
+    fontFamily: fonts.BOLD,
+  },
+  radiusSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    color: colors.lighterGray,
+    fontFamily: fonts.BOLD,
+  },
+  radiusValuePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.primaryBorder,
+  },
+  radiusValueText: {
+    fontSize: 12,
+    color: colors.primary,
+    fontFamily: fonts.BOLD,
+  },
   sidebarGroup: {
     marginBottom: 14,
   },
@@ -4757,13 +5127,17 @@ const styles = StyleSheet.create({
   logoutRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 9,
     marginTop: 8,
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: '#FFF4F4',
+    borderWidth: 1,
+    borderColor: '#FFD6D6',
   },
   logoutText: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#E45A5A',
     fontFamily: fonts.BOLD,
   },
