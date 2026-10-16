@@ -28,6 +28,7 @@ class MainApplication : Application(), ReactApplication {
     super.onCreate()
     ensureDefaultNotificationChannel()
     loadReactNative(this)
+
   }
 
   private fun ensureDefaultNotificationChannel() {
